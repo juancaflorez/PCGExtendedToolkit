@@ -1,17 +1,17 @@
 {
   "FileVersion": 3,
   "Version": 1,
-  "VersionName": "0.66",
+  "VersionName": "0.43",
   "FriendlyName": "PCGExtendedToolkit",
   "Description": "A rather large toolset that expand on existing PCG capabilities in unique ways.",
   "Category": "PCG",
   "CreatedBy": "Timothé Lapetite",
   "CreatedByURL": "https://github.com/Nebukam/PCGExtendedToolkit",
-  "DocsURL": "https://pcgex.gitbook.io/pcgex",
-  "FabURL": "com.epicgames.launcher://ue/Fab/product/a5061972-6875-4052-a7fd-7c33f6531ec3",
+  "DocsURL": "https://nebukam.github.io/PCGExtendedToolkit/",
+  "FabURL" : "com.epicgames.launcher://ue/Fab/product/a5061972-6875-4052-a7fd-7c33f6531ec3",
   "SupportURL": "https://discord.gg/mde2vC5gbE",
   "CanContainContent": true,
-  "EngineVersion": "5.6.0",
+  "EngineVersion": "5.4.0",
   "IsBetaVersion": true,
   "IsExperimentalVersion": false,
   "Installed": false,
@@ -19,28 +19,12 @@
     {
       "Name": "PCGExtendedToolkit",
       "Type": "Runtime",
-      "LoadingPhase": "Default",
-      "PlatformAllowList": [
-        "Win64",
-        "Mac",
-        "IOS",
-        "Android",
-        "Linux",
-        "LinuxArm64"
-      ]
+      "LoadingPhase": "Default"
     },
     {
       "Name": "PCGExtendedToolkitEditor",
       "Type": "Editor",
-      "LoadingPhase": "Default",
-      "PlatformAllowList": [
-        "Win64",
-        "Mac",
-        "IOS",
-        "Android",
-        "Linux",
-        "LinuxArm64"
-      ]
+      "LoadingPhase": "Default"
     }
   ],
   "Plugins": [
