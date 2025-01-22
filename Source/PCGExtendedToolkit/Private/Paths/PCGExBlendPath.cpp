@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExBlendPath.h"
@@ -116,15 +116,19 @@ namespace PCGExBlendPath
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
-		if (Index == 0 || Index == MaxIndex) { return; }
+		if ((Index == 0 && !Settings->bBlendFirstPoint) ||
+			(Index == MaxIndex && !Settings->bBlendLastPoint))
+		{
+			return;
+		}
 
 		double Alpha = 0.5;
 		const PCGExData::FPointRef Current = PointDataFacade->Source->GetOutPointRef(Index);

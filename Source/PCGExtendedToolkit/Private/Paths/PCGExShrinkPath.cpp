@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExShrinkPath.h"
@@ -179,7 +179,7 @@ namespace PCGExShrinkPath
 		const int32 LastPointIndex = InPoints.Num() - 1;
 		const int32 NumPoints = InPoints.Num();
 
-		FilterScope(0, NumPoints);
+		FilterScope(PCGExMT::FScope(0, NumPoints));
 
 		int32 StartOffset = 0;
 		int32 EndOffset = 1;
@@ -227,7 +227,8 @@ namespace PCGExShrinkPath
 				return false;
 			}
 
-			PointIO->InitializeOutput(PCGExData::EIOInit::Duplicate);
+			PCGEX_INIT_IO(PointIO, PCGExData::EIOInit::Duplicate)
+
 			TArray<FPCGPoint>& MutablePoints = PointIO->GetOut()->GetMutablePoints();
 
 			auto ShrinkOnce = [&](const int32 Direction)
@@ -296,7 +297,8 @@ namespace PCGExShrinkPath
 				return false;
 			}
 
-			PointIO->InitializeOutput(PCGExData::EIOInit::Duplicate);
+			PCGEX_INIT_IO(PointIO, PCGExData::EIOInit::Duplicate)
+
 			TArray<FPCGPoint>& MutablePoints = PointIO->GetOut()->GetMutablePoints();
 
 			if ((StartAmount < 0 || EndAmount < 0) && NumPoints >= 2)

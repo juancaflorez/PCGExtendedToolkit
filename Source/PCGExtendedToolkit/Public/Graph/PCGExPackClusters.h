@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -64,20 +64,26 @@ protected:
 	virtual bool ExecuteInternal(FPCGContext* InContext) const override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPackClusterTask final : public PCGExMT::FPCGExTask
+namespace PCGExPackClusters
 {
-public:
-	FPCGExPackClusterTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-	                      const TSharedPtr<PCGExData::FPointIO>& InInEdges,
-	                      const TMap<uint32, int32>& InEndpointsLookup) :
-		FPCGExTask(InPointIO),
-		InEdges(InInEdges),
-		EndpointsLookup(InEndpointsLookup)
+	class FProcessor final : public PCGExClusterMT::TProcessor<FPCGExPackClustersContext, UPCGExPackClustersSettings>
 	{
-	}
+	protected:
+		TSharedPtr<TArray<int32>> ReducedVtxIndex;
+		TSharedPtr<PCGExData::FPointIO> PackedIO;
+		TSharedPtr<PCGExData::FFacade> PackedIOFacade;
+		TSharedPtr<PCGEx::FAttributesInfos> VtxAttributes;
 
-	TSharedPtr<PCGExData::FPointIO> InEdges;
-	TMap<uint32, int32> EndpointsLookup;
+		int32 VtxStartIndex = -1;
+		int32 NumIndices = -1;
 
-	virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
-};
+	public:
+		FProcessor(const TSharedRef<PCGExData::FFacade>& InVtxDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade):
+			TProcessor(InVtxDataFacade, InEdgeDataFacade)
+		{
+		}
+
+		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual void CompleteWork() override;
+	};
+}

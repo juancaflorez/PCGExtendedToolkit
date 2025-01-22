@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExPathSplineMesh.h"
@@ -33,13 +33,13 @@ bool FPCGExPathSplineMeshElement::Boot(FPCGExContext* InContext) const
 
 	if (Settings->bApplyCustomTangents)
 	{
-		PCGEX_VALIDATE_NAME(Settings->ArriveTangentAttribute)
-		PCGEX_VALIDATE_NAME(Settings->LeaveTangentAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->ArriveTangentAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->LeaveTangentAttribute)
 	}
 
 	if (Settings->CollectionSource == EPCGExCollectionSource::Asset)
 	{
-		Context->MainCollection = Settings->AssetCollection.LoadSynchronous();
+		Context->MainCollection = PCGExHelpers::LoadBlocking_AnyThread(Settings->AssetCollection);
 		if (!Context->MainCollection)
 		{
 			PCGE_LOG(Error, GraphAndLog, FTEXT("Missing asset collection."));
@@ -56,12 +56,12 @@ bool FPCGExPathSplineMeshElement::Boot(FPCGExContext* InContext) const
 		}
 	}
 
+	PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->AssetPathAttributeName)
 
-	PCGEX_VALIDATE_NAME(Settings->AssetPathAttributeName)
-
-	if (Settings->WeightToAttribute == EPCGExWeightOutputMode::Raw || Settings->WeightToAttribute == EPCGExWeightOutputMode::Normalized)
+	if (Settings->WeightToAttribute == EPCGExWeightOutputMode::Raw ||
+		Settings->WeightToAttribute == EPCGExWeightOutputMode::Normalized)
 	{
-		PCGEX_VALIDATE_NAME(Settings->WeightAttributeName)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->WeightAttributeName)
 	}
 
 	return true;
@@ -73,7 +73,7 @@ void FPCGExPathSplineMeshContext::RegisterAssetDependencies()
 
 	PCGEX_SETTINGS_LOCAL(PathSplineMesh)
 
-	MainCollection->GetAssetPaths(RequiredAssets, PCGExAssetCollection::ELoadingFlags::Recursive);
+	MainCollection->GetAssetPaths(GetRequiredAssets(), PCGExAssetCollection::ELoadingFlags::Recursive);
 }
 
 void FPCGExPathSplineMeshElement::PostLoadAssetsDependencies(FPCGExContext* InContext) const
@@ -231,20 +231,20 @@ namespace PCGExPathSplineMesh
 		PathWriter = PointDataFacade->GetWritable<FString>(Settings->AssetPathAttributeName, PCGExData::EBufferInit::New);
 #endif
 
-		DataTags = PointDataFacade->Source->Tags->ToFNameList();
+		DataTags = PointDataFacade->Source->Tags->FlattenToArrayOfNames();
 
 		StartParallelLoopForPoints();
 
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		auto InvalidPoint = [&]()
 		{
@@ -379,10 +379,13 @@ namespace PCGExPathSplineMesh
 			const PCGExPaths::FSplineMeshSegment& Segment = Segments[i];
 			if (!Segment.MeshEntry) { continue; }
 
-			const FString ComponentName = TEXT("PCGSplineMeshComponent_") + Segment.MeshEntry->Staging.Path.GetAssetName();
 			const EObjectFlags ObjectFlags = (bIsPreviewMode ? RF_Transient : RF_NoFlags);
-			USplineMeshComponent* SplineMeshComponent = NewObject<USplineMeshComponent>(TargetActor, MakeUniqueObjectName(TargetActor, USplineMeshComponent::StaticClass(), FName(ComponentName)), ObjectFlags);
+			USplineMeshComponent* SplineMeshComponent = NewObject<USplineMeshComponent>(
+				TargetActor, MakeUniqueObjectName(
+					TargetActor, USplineMeshComponent::StaticClass(),
+					Context->UniqueNameGenerator->Get(TEXT("PCGSplineMeshComponent_") + Segment.MeshEntry->Staging.Path.GetAssetName())), ObjectFlags);
 
+			/*
 			SplineMeshComponent->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
 			SplineMeshComponent->SetMobility(EComponentMobility::Static);
 			SplineMeshComponent->SetSimulatePhysics(false);
@@ -392,8 +395,12 @@ namespace PCGExPathSplineMesh
 			SplineMeshComponent->bUseDefaultCollision = false;
 			SplineMeshComponent->bNavigationRelevant = false;
 			SplineMeshComponent->SetbNeverNeedsCookedCollisionData(true);
+			*/
 
 			Segment.ApplySettings(SplineMeshComponent); // Init Component
+
+			if (Settings->bForceDefaultDescriptor || Settings->CollectionSource == EPCGExCollectionSource::AttributeSet) { Settings->DefaultDescriptor.InitComponent(SplineMeshComponent); }
+			else { Segment.MeshEntry->SMDescriptor.InitComponent(SplineMeshComponent); }
 
 			if (!Segment.ApplyMesh(SplineMeshComponent))
 			{
@@ -403,9 +410,6 @@ namespace PCGExPathSplineMesh
 
 			if (Settings->TaggingDetails.bForwardInputDataTags) { SplineMeshComponent->ComponentTags.Append(DataTags); }
 			if (!Segment.Tags.IsEmpty()) { SplineMeshComponent->ComponentTags.Append(Segment.Tags.Array()); }
-
-			if (Settings->bForceDefaultDescriptor) { Settings->DefaultDescriptor.InitComponent(SplineMeshComponent); }
-			else { Segment.MeshEntry->SMDescriptor.InitComponent(SplineMeshComponent); }
 
 			Context->AttachManagedComponent(
 				TargetActor, SplineMeshComponent,

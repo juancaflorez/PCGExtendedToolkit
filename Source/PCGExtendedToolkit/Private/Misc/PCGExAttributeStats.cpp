@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -117,8 +117,8 @@ bool FPCGExAttributeStatsElement::Boot(FPCGExContext* InContext) const
 
 		for (int i = 0; i < NumRows; i++) { Context->Rows.Add(NewParamData->Metadata->AddEntry()); }
 
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue) -> void
+		PCGEx::ExecuteWithRightType(
+			Identity.UnderlyingType, [&](auto DummyValue)
 			{
 				using T = decltype(DummyValue);
 				PCGEX_FOREACH_STAT(PCGEX_STAT_DECL, T)
@@ -192,11 +192,11 @@ namespace PCGExAttributeStats
 
 			if (Settings->bOutputPerUniqueValuesStats) { PerAttributeStatMap.Add(Identity.Name, i); }
 
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+			PCGEx::ExecuteWithRightType(
+				Identity.UnderlyingType, [&](auto DummyValue)
 				{
 					using RawT = decltype(DummyValue);
-					TSharedPtr<TAttributeStats<RawT>> S = MakeShared<TAttributeStats<RawT>>(Identity, Key);
+					PCGEX_MAKE_SHARED(S, TAttributeStats<RawT>, Identity, Key)
 					Stats.Add(StaticCastSharedPtr<FAttributeStatsBase>(S));
 				});
 		}
@@ -204,15 +204,13 @@ namespace PCGExAttributeStats
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FilterScope)
 
-		TWeakPtr<FProcessor> WeakPtr = SharedThis(this);
-		FilterScope->OnSubLoopStartCallback = [WeakPtr](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-		{
-			if (const TSharedPtr<FProcessor> This = WeakPtr.Pin())
+		FilterScope->OnSubLoopStartCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				This->PointDataFacade->Fetch(StartIndex, Count);
-				This->FilterScope(StartIndex, Count);
-			}
-		};
+				PCGEX_ASYNC_THIS
+				This->PointDataFacade->Fetch(Scope);
+				This->FilterScope(Scope);
+			};
 
 		FilterScope->StartSubLoops(PointDataFacade->GetNum(), GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());
 
@@ -222,15 +220,11 @@ namespace PCGExAttributeStats
 	void FProcessor::CompleteWork()
 	{
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, AttributeStatProcessing)
-
 		AttributeStatProcessing->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				if (const TSharedPtr<FProcessor> This = WeakThis.Pin())
-				{
-					This->Stats[StartIndex]->Process(This->PointDataFacade, This->Context, This->Settings, This->PointFilterCache);
-				}
+				PCGEX_ASYNC_THIS
+				This->Stats[Scope.Start]->Process(This->PointDataFacade, This->Context, This->Settings, This->PointFilterCache);
 			};
 
 		AttributeStatProcessing->StartSubLoops(Stats.Num(), 1);

@@ -1,22 +1,31 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Sampling/PCGExSampleSurfaceGuided.h"
+
+#include "Kismet/GameplayStatics.h"
+#include "PhysicsEngine/PhysicsSettings.h"
+#include "Sampling/PCGExTexParamFactoryProvider.h"
 
 
 #define LOCTEXT_NAMESPACE "PCGExSampleSurfaceGuidedElement"
 #define PCGEX_NAMESPACE SampleSurfaceGuided
 
+UPCGExSampleSurfaceGuidedSettings::UPCGExSampleSurfaceGuidedSettings(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	Origin.Update(TEXT("$Position"));
+}
+
 TArray<FPCGPinProperties> UPCGExSampleSurfaceGuidedSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 	if (SurfaceSource == EPCGExSurfaceSource::ActorReferences) { PCGEX_PIN_POINT(PCGExSampling::SourceActorReferencesLabel, "Points with actor reference paths.", Required, {}) }
+	if (bWriteRenderMat && bExtractTextureParameters) { PCGEX_PIN_FACTORIES(PCGExTexture::SourceTexLabel, "External texture params definitions.", Required, {}) }
 	return PinProperties;
 }
 
 PCGExData::EIOInit UPCGExSampleSurfaceGuidedSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
-int32 UPCGExSampleSurfaceGuidedSettings::GetPreferredChunkSize() const { return PCGExMT::GAsyncLoop_L; }
 
 PCGEX_INITIALIZE_ELEMENT(SampleSurfaceGuided)
 
@@ -28,10 +37,18 @@ bool FPCGExSampleSurfaceGuidedElement::Boot(FPCGExContext* InContext) const
 
 	PCGEX_FOREACH_FIELD_SURFACEGUIDED(PCGEX_OUTPUT_VALIDATE_NAME)
 
+	if (Settings->bWriteRenderMat && Settings->bExtractTextureParameters)
+	{
+		Context->bExtractTextureParams = true;
+
+		if (!PCGExFactories::GetInputFactories(InContext, PCGExTexture::SourceTexLabel, Context->TexParamsFactories, {PCGExFactories::EType::TexParam}, true)) { return false; }
+		for (const TObjectPtr<const UPCGExTexParamFactoryData>& Factory : Context->TexParamsFactories) { PCGEX_VALIDATE_NAME_C(InContext, Factory->Config.TextureIDAttributeName) }
+	}
+
 	Context->bUseInclude = Settings->SurfaceSource == EPCGExSurfaceSource::ActorReferences;
 	if (Context->bUseInclude)
 	{
-		PCGEX_VALIDATE_NAME(Settings->ActorReference)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->ActorReference)
 		Context->ActorReferenceDataFacade = PCGExData::TryGetSingleFacade(Context, PCGExSampling::SourceActorReferencesLabel, true);
 		if (!Context->ActorReferenceDataFacade) { return false; }
 
@@ -41,6 +58,16 @@ bool FPCGExSampleSurfaceGuidedElement::Boot(FPCGExContext* InContext) const
 		{
 			return false;
 		}
+	}
+
+	Context->bSupportsUVQuery = UPhysicsSettings::Get()->bSupportUVFromHitResults;
+	if (Settings->bWriteUVCoords && !Context->bSupportsUVQuery)
+	{
+		if (!Settings->bQuietUVSettingsWarning)
+		{
+			PCGE_LOG(Warning, GraphAndLog, FTEXT("`Project Settings->Physics->Support UV From Hit Results' must set to true for UV Query to work."));
+		}
+		Context->bWriteUVCoords = false;
 	}
 
 	Context->CollisionSettings = Settings->CollisionSettings;
@@ -94,6 +121,14 @@ namespace PCGExSampleSurfaceGuided
 
 		SampleState.SetNumUninitialized(PointDataFacade->GetNum());
 
+		OriginGetter = PointDataFacade->GetScopedBroadcaster<FVector>(Settings->Origin);
+
+		if (!OriginGetter)
+		{
+			PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("Some inputs don't have the required Origin data."));
+			return false;
+		}
+
 		DirectionGetter = PointDataFacade->GetScopedBroadcaster<FVector>(Settings->Direction);
 
 		if (!DirectionGetter)
@@ -107,7 +142,12 @@ namespace PCGExSampleSurfaceGuided
 			PCGEX_FOREACH_FIELD_SURFACEGUIDED(PCGEX_OUTPUT_INIT)
 		}
 
-		if (Settings->bUseLocalMaxDistance)
+		// So texture params are registered last, otherwise they're first in the list and it's confusing
+		TexParamLookup = MakeShared<PCGExTexture::FLookup>();
+		if (!TexParamLookup->BuildFrom(Context->TexParamsFactories)) { TexParamLookup.Reset(); }
+		else { TexParamLookup->PrepareForWrite(Context, PointDataFacade); }
+
+		if (Settings->DistanceInput == EPCGExTraceSampleDistanceInput::Attribute)
 		{
 			MaxDistanceGetter = PointDataFacade->GetScopedBroadcaster<double>(Settings->LocalMaxDistance);
 			if (!MaxDistanceGetter)
@@ -123,16 +163,23 @@ namespace PCGExSampleSurfaceGuided
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		TPointsProcessor<FPCGExSampleSurfaceGuidedContext, UPCGExSampleSurfaceGuidedSettings>::PrepareLoopScopesForPoints(Loops);
+		MaxDistanceValue = MakeShared<PCGExMT::TScopedValue<double>>(Loops, 0);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		const double MaxDistance = MaxDistanceGetter ? MaxDistanceGetter->Read(Index) : Settings->MaxDistance;
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
+	}
+
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
+	{
 		const FVector Direction = DirectionGetter->Read(Index).GetSafeNormal();
+		const FVector Origin = OriginGetter->Read(Index);
+		const double MaxDistance = MaxDistanceGetter ? MaxDistanceGetter->Read(Index) : Settings->DistanceInput == EPCGExTraceSampleDistanceInput::Constant ? Settings->MaxDistance : Direction.Length();
 
 		auto SamplingFailed = [&]()
 		{
@@ -142,10 +189,14 @@ namespace PCGExSampleSurfaceGuided
 			PCGEX_OUTPUT_VALUE(Normal, Index, Direction*-1)
 			PCGEX_OUTPUT_VALUE(LookAt, Index, Direction)
 			PCGEX_OUTPUT_VALUE(Distance, Index, MaxDistance)
+			//PCGEX_OUTPUT_VALUE(UVCoords, Index, FVector2D::ZeroVector)
+			//PCGEX_OUTPUT_VALUE(FaceIndex, Index, -1)
+			//PCGEX_OUTPUT_VALUE(RenderMat, Index, -1)
 			//PCGEX_OUTPUT_VALUE(IsInside, Index, false)
 			//PCGEX_OUTPUT_VALUE(Success, Index, false)
 			//PCGEX_OUTPUT_VALUE(ActorReference, Index, TEXT(""))
 			//PCGEX_OUTPUT_VALUE(PhysMat, Index, TEXT(""))
+			if (TexParamLookup) { TexParamLookup->ExtractParams(Index, nullptr); }
 		};
 
 		if (!PointFilterCache[Index])
@@ -154,11 +205,10 @@ namespace PCGExSampleSurfaceGuided
 			return;
 		}
 
-		const FVector Origin = Point.Transform.GetLocation();
-
 		FCollisionQueryParams CollisionParams;
 		Context->CollisionSettings.Update(CollisionParams);
-		CollisionParams.bReturnPhysicalMaterial = PhysMatWriter ? true : false;
+		CollisionParams.bReturnPhysicalMaterial = Settings->bWritePhysMat;
+		CollisionParams.bReturnFaceIndex = Settings->bWriteFaceIndex || Settings->bWriteUVCoords;
 
 		const FVector Trace = Direction * MaxDistance;
 		const FVector End = Origin + Trace;
@@ -172,12 +222,24 @@ namespace PCGExSampleSurfaceGuided
 		{
 			bSuccess = true;
 
+			const double HitDistance = FVector::Distance(HitResult.ImpactPoint, Origin);
 			PCGEX_OUTPUT_VALUE(Location, Index, HitResult.ImpactPoint)
 			PCGEX_OUTPUT_VALUE(LookAt, Index, Direction)
 			PCGEX_OUTPUT_VALUE(Normal, Index, HitResult.ImpactNormal)
-			PCGEX_OUTPUT_VALUE(Distance, Index, FVector::Distance(HitResult.ImpactPoint, Origin))
+			PCGEX_OUTPUT_VALUE(Distance, Index, HitDistance)
 			PCGEX_OUTPUT_VALUE(IsInside, Index, FVector::DotProduct(Direction, HitResult.Normal) > 0)
 			PCGEX_OUTPUT_VALUE(Success, Index, bSuccess)
+
+			MaxDistanceValue->Set(Scope, FMath::Max(MaxDistanceValue->Get(Scope), HitDistance));
+
+			if (Settings->bWriteUVCoords)
+			{
+				FVector2D UVCoords = FVector2D::ZeroVector;
+				if (UGameplayStatics::FindCollisionUV(HitResult, Settings->UVChannel, UVCoords)) { PCGEX_OUTPUT_VALUE(UVCoords, Index, UVCoords) }
+				else { PCGEX_OUTPUT_VALUE(UVCoords, Index, FVector2D::ZeroVector) }
+			}
+
+			PCGEX_OUTPUT_VALUE(FaceIndex, Index, HitResult.FaceIndex)
 
 			SampleState[Index] = bSuccess;
 
@@ -189,6 +251,13 @@ namespace PCGExSampleSurfaceGuided
 			}
 
 			if (const UPhysicalMaterial* PhysMat = HitResult.PhysMaterial.Get()) { PCGEX_OUTPUT_VALUE(PhysMat, Index, PhysMat->GetPathName()) }
+			if (const UPrimitiveComponent* HitComponent = HitResult.GetComponent())
+			{
+				PCGEX_OUTPUT_VALUE(HitComponentReference, Index, HitComponent->GetPathName())
+				UMaterialInterface* RenderMat = HitComponent->GetMaterial(Settings->RenderMaterialIndex);
+				PCGEX_OUTPUT_VALUE(RenderMat, Index, RenderMat ? RenderMat->GetPathName() : TEXT(""))
+				if(TexParamLookup){TexParamLookup->ExtractParams(Index, RenderMat);}
+			}
 #else
 			if (const AActor* HitActor = HitResult.GetActor())
 			{
@@ -197,6 +266,14 @@ namespace PCGExSampleSurfaceGuided
 			}
 
 			if (const UPhysicalMaterial* PhysMat = HitResult.PhysMaterial.Get()) { PCGEX_OUTPUT_VALUE(PhysMat, Index, FSoftObjectPath(PhysMat->GetPathName())) }
+			if (const UPrimitiveComponent* HitComponent = HitResult.GetComponent())
+			{
+				PCGEX_OUTPUT_VALUE(HitComponentReference, Index, FSoftObjectPath(HitComponent->GetPathName()))
+				UMaterialInterface* RenderMat = HitComponent->GetMaterial(Settings->RenderMaterialIndex);
+				PCGEX_OUTPUT_VALUE(RenderMat, Index, FSoftObjectPath(RenderMat ? RenderMat->GetPathName() : TEXT("")))
+				if (TexParamLookup) { TexParamLookup->ExtractParams(Index, RenderMat); }
+			}
+
 #endif
 
 			if (SurfacesForward && HitIndex) { SurfacesForward->Forward(*HitIndex, Index); }
@@ -284,8 +361,8 @@ namespace PCGExSampleSurfaceGuided
 	{
 		PointDataFacade->Write(AsyncManager);
 
-		if (Settings->bTagIfHasSuccesses && bAnySuccess) { PointDataFacade->Source->Tags->Add(Settings->HasSuccessesTag); }
-		if (Settings->bTagIfHasNoSuccesses && !bAnySuccess) { PointDataFacade->Source->Tags->Add(Settings->HasNoSuccessesTag); }
+		if (Settings->bTagIfHasSuccesses && bAnySuccess) { PointDataFacade->Source->Tags->AddRaw(Settings->HasSuccessesTag); }
+		if (Settings->bTagIfHasNoSuccesses && !bAnySuccess) { PointDataFacade->Source->Tags->AddRaw(Settings->HasNoSuccessesTag); }
 	}
 
 	void FProcessor::Write()

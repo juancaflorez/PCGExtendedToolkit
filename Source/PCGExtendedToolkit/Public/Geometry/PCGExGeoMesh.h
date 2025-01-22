@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -7,6 +7,7 @@
 #include "PCGEx.h"
 #include "PCGExMT.h"
 #include "PCGExHelpers.h"
+
 
 //#include "PCGExGeoMesh.generated.h"
 
@@ -129,7 +130,7 @@ namespace PCGExGeo
 		{
 			if (!InSoftStaticMesh.ToSoftObjectPath().IsValid()) { return; }
 
-			StaticMesh = InSoftStaticMesh.LoadSynchronous();
+			StaticMesh = PCGExHelpers::LoadBlocking_AnyThread(InSoftStaticMesh);
 			if (!StaticMesh) { return; }
 
 			StaticMesh->GetRenderData();
@@ -158,7 +159,6 @@ namespace PCGExGeo
 			TUniquePtr<FMeshLookup> MeshLookup = MakeUnique<FMeshLookup>(VertexBuffer.GetNumVertices() / 3);
 			Edges.Empty();
 
-			int32 Idx = 0;
 			const FIndexArrayView& Indices = LODResources.IndexBuffer.GetArrayView();
 			for (int i = 0; i < Indices.Num(); i += 3)
 			{
@@ -195,7 +195,6 @@ namespace PCGExGeo
 			TUniquePtr<FMeshLookup> MeshLookup = MakeUnique<FMeshLookup>(VertexBuffer.GetNumVertices() / 3);
 			TMap<uint64, uint64> EdgeAdjacency;
 
-			int32 Idx = 0;
 			const FIndexArrayView& Indices = LODResources.IndexBuffer.GetArrayView();
 
 			PCGEx::InitArray(Triangles, Indices.Num() / 3);
@@ -245,7 +244,6 @@ namespace PCGExGeo
 				TriangleIndex++;
 			}
 
-			int32 ENum = EdgeAdjacency.Num();
 			PCGEx::InitArray(Adjacencies, Triangles.Num());
 
 			for (int j = 0; j < Triangles.Num(); j++)
@@ -270,17 +268,13 @@ namespace PCGExGeo
 			bIsLoaded = true;
 		}
 
-		void ExtractMeshAsync(PCGExMT::FTaskManager* AsyncManager)
-		{
-			if (bIsLoaded) { return; }
-			if (!bIsValid) { return; }
-			AsyncManager->Start<FExtractStaticMeshTask>(-1, nullptr, SharedThis(this));
-		}
+		void ExtractMeshAsync(PCGExMT::FTaskManager* AsyncManager);
 
 		~FGeoStaticMesh()
 		{
 		}
 	};
+
 
 	class /*PCGEXTENDEDTOOLKIT_API*/ FGeoStaticMeshMap : public FGeoMesh
 	{
@@ -298,7 +292,7 @@ namespace PCGExGeo
 		{
 			if (const int32* GSMPtr = Map.Find(InPath)) { return *GSMPtr; }
 
-			const TSharedPtr<FGeoStaticMesh> GSM = MakeShared<FGeoStaticMesh>(InPath);
+			PCGEX_MAKE_SHARED(GSM, FGeoStaticMesh, InPath)
 			if (!GSM->bIsValid) { return -1; }
 
 			const int32 Index = GSMs.Add(GSM);
@@ -314,20 +308,28 @@ namespace PCGExGeo
 		}
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FExtractStaticMeshTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FExtractStaticMeshTask final : public PCGExMT::FTask
 	{
 	public:
-		FExtractStaticMeshTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO, const TSharedPtr<FGeoStaticMesh>& InGSM) :
-			FPCGExTask(InPointIO), GSM(InGSM)
+		PCGEX_ASYNC_TASK_NAME(FExtractStaticMeshTask)
+
+		FExtractStaticMeshTask(const TSharedPtr<FGeoStaticMesh>& InGSM) :
+			FTask(), GSM(InGSM)
 		{
 		}
 
 		TSharedPtr<FGeoStaticMesh> GSM;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
 		{
 			GSM->ExtractMeshSynchronous();
-			return true;
 		}
 	};
+
+	inline void FGeoStaticMesh::ExtractMeshAsync(PCGExMT::FTaskManager* AsyncManager)
+	{
+		if (bIsLoaded) { return; }
+		if (!bIsValid) { return; }
+		PCGEX_LAUNCH(FExtractStaticMeshTask, SharedThis(this))
+	}
 }

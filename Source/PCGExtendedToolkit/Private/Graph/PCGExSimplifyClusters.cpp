@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExSimplifyClusters.h"
@@ -81,7 +81,7 @@ namespace PCGExSimplifyClusters
 		StartParallelLoopForRange(ChainBuilder->Chains.Num());
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		const TSharedPtr<PCGExCluster::FNodeChain> Chain = ChainBuilder->Chains[Iteration];
 		if (!Chain) { return; }
@@ -181,7 +181,7 @@ namespace PCGExSimplifyClusters
 		if (Context->FilterFactories.IsEmpty())
 		{
 			// Process breakpoint filters
-			const TSharedPtr<PCGExPointFilter::FManager> FilterManager = MakeShared<PCGExPointFilter::FManager>(VtxDataFacade);
+			PCGEX_MAKE_SHARED(FilterManager, PCGExPointFilter::FManager, VtxDataFacade)
 			TArray<int8>& Breaks = *Breakpoints;
 			if (FilterManager->Init(ExecutionContext, Context->FilterFactories))
 			{

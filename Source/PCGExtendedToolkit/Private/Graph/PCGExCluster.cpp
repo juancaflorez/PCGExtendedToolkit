@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExCluster.h"
@@ -94,22 +94,22 @@ namespace PCGExCluster
 		VtxPoints = &InVtxIO->GetPoints(PCGExData::ESource::In);
 
 		bIsMirror = true;
-		bIsCopyCluster = false;
+		OriginalCluster = OtherCluster;
 
 		NumRawVtx = InVtxIO->GetNum();
 		NumRawEdges = InEdgesIO->GetNum();
 
-		Bounds = OtherCluster->Bounds;
+		Bounds = OriginalCluster->Bounds;
 
-		BoundedEdges = OtherCluster->BoundedEdges;
+		BoundedEdges = OriginalCluster->BoundedEdges;
 
 		if (bCopyNodes)
 		{
-			const int32 NumNewNodes = OtherCluster->Nodes->Num();
+			const int32 NumNewNodes = OriginalCluster->Nodes->Num();
 
 			Nodes = MakeShared<TArray<FNode>>();
 			TArray<FNode>& NewNodes = *Nodes;
-			TArray<FNode>& SourceNodes = *OtherCluster->Nodes;
+			TArray<FNode>& SourceNodes = *OriginalCluster->Nodes;
 
 			PCGEx::InitArray(NewNodes, NumNewNodes);
 
@@ -123,7 +123,7 @@ namespace PCGExCluster
 		}
 		else
 		{
-			Nodes = OtherCluster->Nodes;
+			Nodes = OriginalCluster->Nodes;
 
 			// Update index lookup
 			for (const FNode& Node : *Nodes) { NodeIndexLookup->GetMutable(Node.PointIndex) = Node.Index; }
@@ -133,11 +133,11 @@ namespace PCGExCluster
 
 		if (bCopyEdges)
 		{
-			const int32 NumNewEdges = OtherCluster->Edges->Num();
+			const int32 NumNewEdges = OriginalCluster->Edges->Num();
 
 			Edges = MakeShared<TArray<FEdge>>();
 			TArray<FEdge>& NewEdges = *Edges;
-			TArray<FEdge>& SourceEdges = *OtherCluster->Edges;
+			TArray<FEdge>& SourceEdges = *OriginalCluster->Edges;
 
 			PCGEx::InitArray(NewEdges, NumNewEdges);
 
@@ -153,11 +153,8 @@ namespace PCGExCluster
 		}
 		else
 		{
-			Edges = OtherCluster->Edges;
+			Edges = OriginalCluster->Edges;
 		}
-
-		NodeOctree = OtherCluster->NodeOctree;
-		EdgeOctree = OtherCluster->EdgeOctree;
 	}
 
 	void FCluster::ClearInheritedForChanges(const bool bClearOwned)
@@ -200,7 +197,7 @@ namespace PCGExCluster
 		Nodes->Empty();
 		Edges->Empty();
 
-		const TUniquePtr<PCGExData::TBuffer<int64>> EndpointsBuffer = MakeUnique<PCGExData::TBuffer<int64>>(PinnedEdgesIO.ToSharedRef(), PCGExGraph::Tag_EdgeEndpoints);
+		const TUniquePtr<PCGExData::TBuffer<int64>> EndpointsBuffer = MakeUnique<PCGExData::TBuffer<int64>>(PinnedEdgesIO.ToSharedRef(), PCGExGraph::Attr_PCGExEdgeIdx);
 		if (!EndpointsBuffer->PrepareRead()) { return false; }
 
 		NumRawVtx = InNodePoints.Num();
@@ -229,13 +226,13 @@ namespace PCGExCluster
 			const int32* StartPointIndexPtr = InEndpointsLookup.Find(A);
 			const int32* EndPointIndexPtr = InEndpointsLookup.Find(B);
 
-			if ((!StartPointIndexPtr || !EndPointIndexPtr)) { return OnFail(); }
+			if ((!StartPointIndexPtr || !EndPointIndexPtr || *StartPointIndexPtr == *EndPointIndexPtr)) { return OnFail(); }
 
-			FNode& StartNode = GetOrCreateNodeUnsafe(InNodePoints, *StartPointIndexPtr);
-			FNode& EndNode = GetOrCreateNodeUnsafe(InNodePoints, *EndPointIndexPtr);
+			const int32 StartNode = GetOrCreateNode_Unsafe(InNodePoints, *StartPointIndexPtr);
+			const int32 EndNode = GetOrCreateNode_Unsafe(InNodePoints, *EndPointIndexPtr);
 
-			StartNode.Link(EndNode, i);
-			EndNode.Link(StartNode, i);
+			(Nodes->GetData() + StartNode)->Link(EndNode, i);
+			(Nodes->GetData() + EndNode)->Link(StartNode, i);
 
 			*(Edges->GetData() + i) = FEdge(i, *StartPointIndexPtr, *EndPointIndexPtr, i, EdgeIOIndex);
 		}
@@ -255,9 +252,11 @@ namespace PCGExCluster
 		return true;
 	}
 
-	void FCluster::BuildFrom(const PCGExGraph::FSubGraph* SubGraph)
+	void FCluster::BuildFrom(const TSharedRef<PCGExGraph::FSubGraph>& SubGraph)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExCluster::BuildClusterFromSubgraph);
+
+		TSharedPtr<FCluster> LocalPin = SharedThis(this);
 
 		Bounds = FBox(ForceInit);
 
@@ -270,13 +269,19 @@ namespace PCGExCluster
 		Edges->Reserve(NumRawEdges);
 		Edges->Append(SubGraph->FlattenedEdges);
 
-		for (const FEdge& E : SubGraph->FlattenedEdges)
-		{
-			FNode& StartNode = GetOrCreateNodeUnsafe(SubVtxPoints, E.Start);
-			FNode& EndNode = GetOrCreateNodeUnsafe(SubVtxPoints, E.End);
+		TSparseArray<int32> TempLookup;
+		TempLookup.Reserve(SubGraph->Nodes.Num());
 
-			StartNode.Link(EndNode, E.Index);
-			EndNode.Link(StartNode, E.Index);
+		const int32 NumEdges = Edges->Num();
+
+		for (int i = 0; i < NumEdges; i++)
+		{
+			const FEdge* E = Edges->GetData() + i;
+			const int32 StartNode = GetOrCreateNode_Unsafe(TempLookup, SubVtxPoints, E->Start);
+			const int32 EndNode = GetOrCreateNode_Unsafe(TempLookup, SubVtxPoints, E->End);
+
+			(Nodes->GetData() + StartNode)->Link(EndNode, E->Index);
+			(Nodes->GetData() + EndNode)->Link(StartNode, E->Index);
 		}
 
 		Bounds = Bounds.ExpandBy(10);
@@ -285,6 +290,13 @@ namespace PCGExCluster
 	bool FCluster::IsValidWith(const TSharedRef<PCGExData::FPointIO>& InVtxIO, const TSharedRef<PCGExData::FPointIO>& InEdgesIO) const
 	{
 		return NumRawVtx == InVtxIO->GetNum() && NumRawEdges == InEdgesIO->GetNum();
+	}
+
+	bool FCluster::HasTag(const FString& InTag)
+	{
+		if (const TSharedPtr<PCGExData::FPointIO>& PinnedVtxIO = VtxIO.Pin()) { if (PinnedVtxIO->Tags->IsTagged(InTag)) { return true; } }
+		if (const TSharedPtr<PCGExData::FPointIO>& PinnedEdgesIO = EdgesIO.Pin()) { if (PinnedEdgesIO->Tags->IsTagged(InTag)) { return true; } }
+		return false;
 	}
 
 	FNode* FCluster::GetGuidedHalfEdge(const int32 Edge, const FVector& Guide, const FVector& Up) const
@@ -354,8 +366,7 @@ namespace PCGExCluster
 		{
 			for (int i = 0; i < Edges->Num(); i++)
 			{
-				const FBoundedEdge& ExpandedEdge = *(BoundedEdges->GetData() + i);
-				EdgeOctree->AddElement(PCGEx::FIndexedItem(i, ExpandedEdge.Bounds));
+				EdgeOctree->AddElement(PCGEx::FIndexedItem(i, (BoundedEdges->GetData() + i)->Bounds));
 			}
 		}
 	}
@@ -465,9 +476,6 @@ namespace PCGExCluster
 		EdgeLengths = MakeShared<TArray<double>>();
 		TArray<double>& LengthsRef = *EdgeLengths;
 
-		const TArray<FNode>& NodesRef = *Nodes;
-		const TArray<FEdge>& EdgesRef = *Edges;
-
 		const int32 NumEdges = Edges->Num();
 		double Min = MAX_dbl;
 		double Max = MIN_dbl;
@@ -475,7 +483,7 @@ namespace PCGExCluster
 
 		for (int i = 0; i < NumEdges; i++)
 		{
-			const FEdge& Edge = EdgesRef[i];
+			const FEdge* Edge = GetEdge(i);
 			const double Dist = GetDist(Edge);
 			LengthsRef[i] = Dist;
 			Min = FMath::Min(Dist, Min);
@@ -616,16 +624,13 @@ namespace PCGExCluster
 		PCGEx::InitArray(BoundedEdges, Edges->Num());
 
 		ExpandEdgesTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FCluster>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				const TSharedPtr<FCluster> This = WeakThis.Pin();
-				if (!This) { return; }
+				PCGEX_ASYNC_THIS
 
 				TArray<FBoundedEdge>& ExpandedEdgesRef = (*This->BoundedEdges);
 				const FCluster* Cluster = This.Get();
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++) { ExpandedEdgesRef[i] = FBoundedEdge(Cluster, i); }
+				for (int i = Scope.Start; i < Scope.End; i++) { ExpandedEdgesRef[i] = FBoundedEdge(Cluster, i); }
 			};
 
 		ExpandEdgesTask->StartSubLoops(Edges->Num(), 256);

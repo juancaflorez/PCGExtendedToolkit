@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,45 +12,37 @@
 
 namespace PCGExPointsMT
 {
-	PCGEX_ASYNC_STATE(MTState_PointsProcessing)
-	PCGEX_ASYNC_STATE(MTState_PointsCompletingWork)
-	PCGEX_ASYNC_STATE(MTState_PointsWriting)
+	PCGEX_CTX_STATE(MTState_PointsProcessing)
+	PCGEX_CTX_STATE(MTState_PointsCompletingWork)
+	PCGEX_CTX_STATE(MTState_PointsWriting)
 
 #define PCGEX_ASYNC_MT_LOOP_TPL(_ID, _INLINE_CONDITION, _BODY)\
-	TWeakPtr<TBatch<T>> WeakBatch = SharedThis(this);\
+	PCGEX_CHECK_WORK_PERMIT_VOID\
 	if (_INLINE_CONDITION)  { \
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, _ID##Inlined) \
-		_ID##Inlined->OnIterationCallback = [WeakBatch](const int32 Index, const int32 Count, const int32 LoopIdx) { \
-		const TSharedPtr<TBatch<T>> Batch = WeakBatch.Pin(); if(!Batch){return;}\
-		const TSharedRef<T>& Processor = Batch->Processors[Index]; _BODY }; \
-		_ID##Inlined->StartIterations( Processors.Num(), 1, true, false);\
+		_ID##Inlined->OnIterationCallback = [PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope) { PCGEX_ASYNC_THIS const TSharedRef<T>& Processor = This->Processors[Index]; _BODY }; \
+		_ID##Inlined->StartIterations( Processors.Num(), 1, true);\
 	} else {\
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, _ID##NonTrivial)\
-		_ID##NonTrivial->OnIterationCallback = [WeakBatch](const int32 Index, const int32 Count, const int32 LoopIdx) {\
-const TSharedPtr<TBatch<T>> Batch = WeakBatch.Pin(); if(!Batch){return;}\
-		const TSharedRef<T>& Processor = Batch->Processors[Index]; if (Processor->IsTrivial()) { return; } _BODY }; \
-		_ID##NonTrivial->StartIterations(Processors.Num(), 1, false, false);\
-		if(!TrivialProcessors.IsEmpty()){\
-		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, _ID##Trivial) \
-		_ID##Trivial->OnIterationCallback =[WeakBatch](const int32 Index, const int32 Count, const int32 LoopIdx){ \
-		const TSharedPtr<TBatch<T>> Batch = WeakBatch.Pin(); if(!Batch){return;}\
-		const TSharedRef<T>& Processor = Batch->TrivialProcessors[Index]; _BODY }; \
-		_ID##Trivial->StartIterations( TrivialProcessors.Num(), 32, false, false); }\
+		_ID##NonTrivial->OnIterationCallback = [PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope) { PCGEX_ASYNC_THIS \
+		const TSharedRef<T>& Processor = This->Processors[Index]; if (Processor->IsTrivial()) { return; } _BODY }; \
+		_ID##NonTrivial->StartIterations(Processors.Num(), 1, false);\
+		if(!TrivialProcessors.IsEmpty()){ PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, _ID##Trivial) \
+		_ID##Trivial->OnIterationCallback =[PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope){ PCGEX_ASYNC_THIS const TSharedRef<T>& Processor = This->TrivialProcessors[Index]; _BODY }; \
+		_ID##Trivial->StartIterations( TrivialProcessors.Num(), 32, false); }\
 	}
 
-#define PCGEX_ASYNC_PROCESSOR_LOOP(_TYPE, _NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE, _PLI) \
-	if (IsTrivial()){ _PREPARE({PCGEx::H64(0, _NUM)}); _PROCESS(0, _NUM, 0); _COMPLETE(); return; } \
+#define PCGEX_ASYNC_PROCESSOR_LOOP(_NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE, _PLI) \
+	PCGEX_CHECK_WORK_PERMIT_VOID\
+	if (IsTrivial()){ _PREPARE({PCGExMT::FScope(0, _NUM, 0)}); _PROCESS(PCGExMT::FScope(0, _NUM, 0)); _COMPLETE(); return; } \
 	const int32 PLI = GetDefault<UPCGExGlobalSettings>()->_PLI(PerLoopIterations); \
 	PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, ParallelLoopFor##_NAME) \
-	ParallelLoopFor##_NAME->OnCompleteCallback = [WeakThis = TWeakPtr<_TYPE>(SharedThis(this))]() { \
-	if(const TSharedPtr<_TYPE> This = WeakThis.Pin()){ This->_COMPLETE(); } }; \
-	ParallelLoopFor##_NAME->OnPrepareSubLoopsCallback = [WeakThis = TWeakPtr<_TYPE>(SharedThis(this))](const TArray<uint64>& Loops) { \
-	if(const TSharedPtr<_TYPE> This = WeakThis.Pin()){ This->_PREPARE(Loops); }}; \
-	ParallelLoopFor##_NAME->OnSubLoopStartCallback =[WeakThis = TWeakPtr<_TYPE>(SharedThis(this))](const int32 StartIndex, const int32 Count, const int32 LoopIdx) { \
-	if(const TSharedPtr<_TYPE> This = WeakThis.Pin()){ This->_PROCESS(StartIndex, Count, LoopIdx); } }; \
-ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
+	ParallelLoopFor##_NAME->OnCompleteCallback = [PCGEX_ASYNC_THIS_CAPTURE]() { PCGEX_ASYNC_THIS This->_COMPLETE(); }; \
+	ParallelLoopFor##_NAME->OnPrepareSubLoopsCallback = [PCGEX_ASYNC_THIS_CAPTURE](const TArray<PCGExMT::FScope>& Loops) { PCGEX_ASYNC_THIS This->_PREPARE(Loops); }; \
+	ParallelLoopFor##_NAME->OnSubLoopStartCallback =[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope) { PCGEX_ASYNC_THIS This->_PROCESS(Scope); }; \
+    ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
-#define PCGEX_ASYNC_POINT_PROCESSOR_LOOP(_TYPE, _NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE) PCGEX_ASYNC_PROCESSOR_LOOP(_TYPE, _NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE, GetPointsBatchChunkSize)
+#define PCGEX_ASYNC_POINT_PROCESSOR_LOOP(_NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE) PCGEX_ASYNC_PROCESSOR_LOOP(_NAME, _NUM, _PREPARE, _PROCESS, _COMPLETE, _INLINE, GetPointsBatchChunkSize)
 
 #define PCGEX_ASYNC_MT_LOOP_VALID_PROCESSORS(_ID, _INLINE_CONDITION, _BODY) PCGEX_ASYNC_MT_LOOP_TPL(_ID, _INLINE_CONDITION, if(Processor->bIsProcessorValid){ _BODY })
 
@@ -63,12 +55,13 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 	protected:
 		TSharedPtr<PCGExMT::FTaskManager> AsyncManager;
 		FPCGExContext* ExecutionContext = nullptr;
+		TWeakPtr<PCGEx::FWorkPermit> WorkPermit;
 
 		TSharedPtr<PCGExData::FFacadePreloader> InternalFacadePreloader;
 
 		TSharedPtr<PCGExPointFilter::FManager> PrimaryFilters;
 		bool bInlineProcessPoints = false;
-		bool bInlineProcessRange = false;
+		bool bDaisyChainProcessRange = false;
 
 		PCGExData::ESource CurrentProcessingSource = PCGExData::ESource::Out;
 		int32 LocalPointProcessingChunkSize = -1;
@@ -81,7 +74,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
 		TSharedRef<PCGExData::FFacade> PointDataFacade;
 
-		TArray<TObjectPtr<const UPCGExFilterFactoryBase>>* FilterFactories = nullptr;
+		TArray<TObjectPtr<const UPCGExFilterFactoryData>>* FilterFactories = nullptr;
 		bool DefaultPointFilterValue = true;
 		bool bIsTrivial = false;
 
@@ -101,6 +94,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		{
 			check(InContext)
 			ExecutionContext = InContext;
+			WorkPermit = ExecutionContext->GetWorkPermit();
 		}
 
 		virtual ~FPointsProcessor()
@@ -112,9 +106,18 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
 		bool HasFilters() const { return FilterFactories != nullptr; }
 
-		void SetPointsFilterData(TArray<TObjectPtr<const UPCGExFilterFactoryBase>>* InFactories)
+		void SetPointsFilterData(TArray<TObjectPtr<const UPCGExFilterFactoryData>>* InFactories)
 		{
 			FilterFactories = InFactories;
+		}
+
+		virtual void RegisterConsumableAttributesWithFacade() const
+		{
+			// Gives an opportunity for the processor to register attributes with a valid facade
+			// So selectors shortcut can be properly resolved (@Last, etc.)
+
+			if (FilterFactories) { PCGExFactories::RegisterConsumableAttributesWithFacade(*FilterFactories, PointDataFacade); }
+			if (PrimaryOperation) { PrimaryOperation->RegisterConsumableAttributesWithFacade(ExecutionContext, PointDataFacade); }
 		}
 
 		virtual void RegisterBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader)
@@ -135,6 +138,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
 		{
 			AsyncManager = InAsyncManager;
+			PCGEX_ASYNC_CHKD(AsyncManager)
 
 #pragma region Path filter data
 
@@ -162,34 +166,30 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 			const int32 NumPoints = PointDataFacade->Source->GetNum(Source);
 
 			PCGEX_ASYNC_POINT_PROCESSOR_LOOP(
-				FPointsProcessor, Points, NumPoints,
+				Points, NumPoints,
 				PrepareLoopScopesForPoints, ProcessPoints,
 				OnPointsProcessingComplete,
 				bInlineProcessPoints)
 		}
 
-		virtual void PrepareLoopScopesForPoints(const TArray<uint64>& Loops)
+		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops)
 		{
 		}
 
-		virtual void PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 		{
 		}
 
-		virtual void ProcessPoints(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+		virtual void ProcessPoints(const PCGExMT::FScope& Scope)
 		{
 			if (!PointDataFacade->IsDataValid(CurrentProcessingSource)) { return; }
 
-			PrepareSingleLoopScopeForPoints(StartIndex, Count);
+			PrepareSingleLoopScopeForPoints(Scope);
 			TArray<FPCGPoint>& Points = PointDataFacade->Source->GetMutableData(CurrentProcessingSource)->GetMutablePoints();
-			for (int i = 0; i < Count; i++)
-			{
-				const int32 PtIndex = StartIndex + i;
-				ProcessSinglePoint(PtIndex, Points[PtIndex], LoopIdx, Count);
-			}
+			for (int i = Scope.Start; i < Scope.End; i++) { ProcessSinglePoint(i, Points[i], Scope); }
 		}
 
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 		{
 		}
 
@@ -204,31 +204,31 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		void StartParallelLoopForRange(const int32 NumIterations, const int32 PerLoopIterations = -1)
 		{
 			PCGEX_ASYNC_POINT_PROCESSOR_LOOP(
-				FPointsProcessor, Ranges, NumIterations,
+				Ranges, NumIterations,
 				PrepareLoopScopesForRanges, ProcessRange,
 				OnRangeProcessingComplete,
-				bInlineProcessRange)
+				bDaisyChainProcessRange)
 		}
 
-		virtual void PrepareLoopScopesForRanges(const TArray<uint64>& Loops)
+		virtual void PrepareLoopScopesForRanges(const TArray<PCGExMT::FScope>& Loops)
 		{
 		}
 
-		virtual void PrepareSingleLoopScopeForRange(const uint32 StartIndex, const int32 Count)
+		virtual void PrepareSingleLoopScopeForRange(const PCGExMT::FScope& Scope)
 		{
 		}
 
-		virtual void ProcessRange(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+		virtual void ProcessRange(const PCGExMT::FScope& Scope)
 		{
-			PrepareSingleLoopScopeForRange(StartIndex, Count);
-			for (int i = 0; i < Count; i++) { ProcessSingleRangeIteration(StartIndex + i, LoopIdx, Count); }
+			PrepareSingleLoopScopeForRange(Scope);
+			for (int i = Scope.Start; i < Scope.End; i++) { ProcessSingleRangeIteration(i, Scope); }
 		}
 
 		virtual void OnRangeProcessingComplete()
 		{
 		}
 
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 		{
 		}
 
@@ -252,7 +252,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		}
 
 	protected:
-		virtual bool InitPrimaryFilters(TArray<TObjectPtr<const UPCGExFilterFactoryBase>>* InFilterFactories)
+		virtual bool InitPrimaryFilters(TArray<TObjectPtr<const UPCGExFilterFactoryData>>* InFilterFactories)
 		{
 			PointFilterCache.Init(DefaultPointFilterValue, PointDataFacade->GetNum());
 
@@ -262,16 +262,12 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 			return PrimaryFilters->Init(ExecutionContext, *InFilterFactories);
 		}
 
-		virtual void FilterScope(const int32 StartIndex, const int32 Count)
+		virtual void FilterScope(const PCGExMT::FScope& Scope)
 		{
-			if (PrimaryFilters)
-			{
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++) { PointFilterCache[i] = PrimaryFilters->Test(i); }
-			}
+			if (PrimaryFilters) { for (int i = Scope.Start; i < Scope.End; i++) { PointFilterCache[i] = PrimaryFilters->Test(i); } }
 		}
 
-		virtual void FilterAll() { FilterScope(0, PointDataFacade->GetNum()); }
+		virtual void FilterAll() { FilterScope(PCGExMT::FScope(0, PointDataFacade->GetNum())); }
 	};
 
 	template <typename TContext, typename TSettings>
@@ -304,22 +300,24 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 	{
 	protected:
 		TSharedPtr<PCGExMT::FTaskManager> AsyncManager;
-		TArray<TObjectPtr<const UPCGExFilterFactoryBase>>* FilterFactories = nullptr;
+		TArray<TObjectPtr<const UPCGExFilterFactoryData>>* FilterFactories = nullptr;
 
 	public:
 		bool bPrefetchData = false;
-		bool bInlineProcessing = false;
-		bool bInlineCompletion = false;
-		bool bInlineWrite = false;
+		bool bDaisyChainProcessing = false;
+		bool bSkipCompletion = false;
+		bool bDaisyChainCompletion = false;
+		bool bDaisyChainWrite = false;
 		bool bRequiresWriteStep = false;
 		TArray<TSharedRef<PCGExData::FFacade>> ProcessorFacades;
 		TMap<PCGExData::FPointIO*, TSharedRef<FPointsProcessor>>* SubProcessorMap = nullptr;
 
 		mutable FRWLock BatchLock;
 
-		PCGEx::AsyncState CurrentState = PCGEx::State_InitialExecution;
+		std::atomic<PCGEx::ContextState> CurrentState{PCGEx::State_InitialExecution};
 
 		FPCGExContext* ExecutionContext = nullptr;
+		TWeakPtr<PCGEx::FWorkPermit> WorkPermit;
 
 		TArray<TWeakPtr<PCGExData::FPointIO>> PointsCollection;
 
@@ -331,6 +329,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 			ExecutionContext(InContext), PointsCollection(InPointsCollection)
 		{
 			PCGEX_LOG_CTR(FPointsProcessorBatchBase)
+			SetExecutionContext(InContext);
 		}
 
 		virtual ~FPointsProcessorBatchBase()
@@ -341,7 +340,11 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		virtual void SetExecutionContext(FPCGExContext* InContext)
 		{
 			ExecutionContext = InContext;
+			WorkPermit = ExecutionContext->GetWorkPermit();
 		}
+
+		template <typename T>
+		FORCEINLINE T* GetContext() { return static_cast<T*>(ExecutionContext); }
 
 		virtual bool PrepareProcessing()
 		{
@@ -379,7 +382,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
 		virtual int32 GetNumProcessors() const override { return Processors.Num(); }
 
-		PCGEx::AsyncState CurrentState = PCGEx::State_InitialExecution;
+		std::atomic<PCGEx::ContextState> CurrentState{PCGEx::State_InitialExecution};
 
 		TBatch(FPCGExContext* InContext, const TArray<TWeakPtr<PCGExData::FPointIO>>& InPointsCollection):
 			FPointsProcessorBatchBase(InContext, InPointsCollection)
@@ -390,7 +393,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		{
 		}
 
-		void SetPointsFilterData(TArray<TObjectPtr<const UPCGExFilterFactoryBase>>* InFilterFactories)
+		void SetPointsFilterData(TArray<TObjectPtr<const UPCGExFilterFactoryData>>* InFilterFactories)
 		{
 			FilterFactories = InFilterFactories;
 		}
@@ -404,16 +407,19 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		{
 			if (PointsCollection.IsEmpty()) { return; }
 
-			CurrentState = PCGEx::State_Processing;
+			CurrentState.store(PCGEx::State_Processing, std::memory_order_release);
 
 			AsyncManager = InAsyncManager;
+			PCGEX_ASYNC_CHKD_VOID(AsyncManager)
 
 			TSharedPtr<FPointsProcessorBatchBase> SelfPtr = SharedThis(this);
 
 			for (const TWeakPtr<PCGExData::FPointIO>& WeakIO : PointsCollection)
 			{
 				TSharedPtr<PCGExData::FPointIO> IO = WeakIO.Pin();
-				const TSharedPtr<PCGExData::FFacade> PointDataFacade = MakeShared<PCGExData::FFacade>(IO.ToSharedRef());
+
+				PCGEX_MAKE_SHARED(PointDataFacade, PCGExData::FFacade, IO.ToSharedRef())
+
 				const TSharedPtr<T> NewProcessor = MakeShared<T>(PointDataFacade.ToSharedRef());
 
 				NewProcessor->SetExecutionContext(ExecutionContext);
@@ -429,6 +435,7 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 				if (FilterFactories) { NewProcessor->SetPointsFilterData(FilterFactories); }
 				if (PrimaryOperation) { NewProcessor->PrimaryOperation = PrimaryOperation; }
 
+				NewProcessor->RegisterConsumableAttributesWithFacade();
 
 				NewProcessor->bIsTrivial = IO->GetNum() < GetDefault<UPCGExGlobalSettings>()->SmallPointsSize;
 				if (NewProcessor->IsTrivial()) { TrivialProcessors.Add(NewProcessor.ToSharedRef()); }
@@ -436,23 +443,19 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
 			if (bPrefetchData)
 			{
-				TWeakPtr<TBatch<T>> WeakPtr = SharedThis(this);
 				PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, ParallelAttributeRead)
 
-				ParallelAttributeRead->OnCompleteCallback = [WeakPtr]()
+				ParallelAttributeRead->OnCompleteCallback = [PCGEX_ASYNC_THIS_CAPTURE]()
 				{
-					const TSharedPtr<TBatch<T>> This = WeakPtr.Pin();
-					if (!This) { return; }
+					PCGEX_ASYNC_THIS
 					This->OnProcessingPreparationComplete();
 				};
 
 				ParallelAttributeRead->OnSubLoopStartCallback =
-					[WeakPtr, ParallelAttributeRead](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+					[PCGEX_ASYNC_THIS_CAPTURE, ParallelAttributeRead](const PCGExMT::FScope& Scope)
 					{
-						const TSharedPtr<TBatch<T>> This = WeakPtr.Pin();
-						if (!This) { return; }
-
-						This->Processors[StartIndex]->PrefetchData(This->AsyncManager, ParallelAttributeRead);
+						PCGEX_ASYNC_THIS
+						This->Processors[Scope.Start]->PrefetchData(This->AsyncManager, ParallelAttributeRead);
 					};
 
 				ParallelAttributeRead->StartSubLoops(Processors.Num(), 1);
@@ -464,9 +467,9 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 		}
 
 	protected:
-		void OnProcessingPreparationComplete()
+		virtual void OnProcessingPreparationComplete()
 		{
-			PCGEX_ASYNC_MT_LOOP_TPL(Process, bInlineProcessing, { Processor->bIsProcessorValid = Processor->Process(Batch->AsyncManager); })
+			PCGEX_ASYNC_MT_LOOP_TPL(Process, bDaisyChainProcessing, { Processor->bIsProcessorValid = Processor->Process(This->AsyncManager); })
 		}
 
 	public:
@@ -477,15 +480,16 @@ ParallelLoopFor##_NAME->StartSubLoops(_NUM, PLI, _INLINE);
 
 		virtual void CompleteWork() override
 		{
-			CurrentState = PCGEx::State_Completing;
-			PCGEX_ASYNC_MT_LOOP_VALID_PROCESSORS(CompleteWork, bInlineCompletion, { Processor->CompleteWork(); })
+			if (bSkipCompletion) { return; }
+			CurrentState.store(PCGEx::State_Completing, std::memory_order_release);
+			PCGEX_ASYNC_MT_LOOP_VALID_PROCESSORS(CompleteWork, bDaisyChainCompletion, { Processor->CompleteWork(); })
 			FPointsProcessorBatchBase::CompleteWork();
 		}
 
 		virtual void Write() override
 		{
-			CurrentState = PCGEx::State_Writing;
-			PCGEX_ASYNC_MT_LOOP_VALID_PROCESSORS(Write, bInlineWrite, { Processor->Write(); })
+			CurrentState.store(PCGEx::State_Writing, std::memory_order_release);
+			PCGEX_ASYNC_MT_LOOP_VALID_PROCESSORS(Write, bDaisyChainWrite, { Processor->Write(); })
 			FPointsProcessorBatchBase::Write();
 		}
 

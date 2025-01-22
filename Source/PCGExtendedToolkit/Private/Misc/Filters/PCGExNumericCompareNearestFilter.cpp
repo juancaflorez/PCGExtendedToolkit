@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExNumericCompareNearestFilter.h"
@@ -19,13 +19,17 @@ bool UPCGExNumericCompareNearestFilterFactory::Init(FPCGExContext* InContext)
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExNumericCompareNearestFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::TNumericComparisonNearestFilter>(this);
+	return MakeShared<PCGExPointsFilter::FNumericCompareNearestFilter>(this);
 }
 
-void UPCGExNumericCompareNearestFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
+bool UPCGExNumericCompareNearestFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
 {
-	Super::RegisterConsumableAttributes(InContext);
-	//TODO : Implement Consumable
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.OperandB, Consumable)
+
+	return true;
 }
 
 void UPCGExNumericCompareNearestFilterFactory::BeginDestroy()
@@ -34,7 +38,7 @@ void UPCGExNumericCompareNearestFilterFactory::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-bool PCGExPointsFilter::TNumericComparisonNearestFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointsFilter::FNumericCompareNearestFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 

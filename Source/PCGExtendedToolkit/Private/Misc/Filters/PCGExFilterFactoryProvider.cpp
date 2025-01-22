@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExFilterFactoryProvider.h"
@@ -12,9 +12,9 @@
 FString UPCGExFilterProviderSettings::GetDisplayName() const { return TEXT(""); }
 #endif
 
-UPCGExParamFactoryBase* UPCGExFilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+UPCGExFactoryData* UPCGExFilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
-	if (UPCGExFilterFactoryBase* OutFilterFactory = static_cast<UPCGExFilterFactoryBase*>(InFactory)) { OutFilterFactory->Priority = Priority; }
+	if (UPCGExFilterFactoryData* OutFilterFactory = static_cast<UPCGExFilterFactoryData*>(InFactory)) { OutFilterFactory->Priority = Priority; }
 	return InFactory;
 }
 

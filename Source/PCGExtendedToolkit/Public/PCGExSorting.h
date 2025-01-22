@@ -1,11 +1,11 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PCGExConstants.h"
+
 #include "PCGExFactoryProvider.h"
 #include "Data/PCGExData.h"
 
@@ -73,7 +73,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSortRule
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSortingRule : public UPCGExParamFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSortingRule : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
@@ -82,6 +82,8 @@ public:
 
 	int32 Priority;
 	FPCGExSortRuleConfig Config;
+
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
@@ -101,7 +103,7 @@ public:
 
 	//~Begin UPCGExFactoryProviderSettings
 	virtual FName GetMainOutputPin() const override { return FName("SortingRule"); }
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
 
 #if WITH_EDITOR
 	virtual FString GetDisplayName() const override;
@@ -141,10 +143,15 @@ namespace PCGExSorting
 				InDataFacade->Source->PrintOutKeysMap(PointIndices);
 			}
 
+			const UPCGData* InData = InDataFacade->Source->GetIn();
+			FName Consumable = NAME_None;
+
 			for (const FPCGExSortRuleConfig& RuleConfig : InRuleConfigs)
 			{
-				TSharedPtr<FPCGExSortRule> NewRule = MakeShared<FPCGExSortRule>(RuleConfig);
+				PCGEX_MAKE_SHARED(NewRule, FPCGExSortRule, RuleConfig)
 				Rules.Add(NewRule.ToSharedRef());
+
+				if (InContext->bCleanupConsumableAttributes && InData) { PCGEX_CONSUMABLE_SELECTOR(RuleConfig.Selector, Consumable) }
 			}
 		}
 
@@ -160,7 +167,7 @@ namespace PCGExSorting
 				for (int i = 0; i < Rules.Num(); i++)
 				{
 					const TSharedPtr<FPCGExSortRule> Rule = Rules[i];
-					const TSharedPtr<PCGEx::TAttributeBroadcaster<double>> SoftCache = MakeShared<PCGEx::TAttributeBroadcaster<double>>();
+					PCGEX_MAKE_SHARED(SoftCache, PCGEx::TAttributeBroadcaster<double>)
 
 					if (!SoftCache->Prepare(Rule->Selector, DataFacade->Source))
 					{

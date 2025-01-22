@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfindingEdges.h"
@@ -64,11 +64,14 @@ void FPCGExPathfindingEdgesContext::BuildPath(const TSharedPtr<PCGExPathfinding:
 	}
 
 	const TSharedPtr<PCGExData::FPointIO> PathIO = OutputPaths->Emplace_GetRef<UPCGPointData>(ReferenceIO, PCGExData::EIOInit::New);
+	if (!PathIO) { return; }
 
-	PCGExGraph::CleanupClusterTags(PathIO, true);
+	PathIO->IOIndex = Query->QueryIndex;
+
+	PCGExGraph::CleanupClusterTags(PathIO);
 	PCGExGraph::CleanupVtxData(PathIO);
 
-	const TSharedPtr<PCGExData::FFacade> PathDataFacade = MakeShared<PCGExData::FFacade>(PathIO.ToSharedRef());
+	PCGEX_MAKE_SHARED(PathDataFacade, PCGExData::FFacade, PathIO.ToSharedRef())
 	PathDataFacade->GetMutablePoints() = MutablePoints;
 
 	SeedAttributesToPathTags.Tag(Query->Seed.SourceIndex, PathIO);
@@ -87,7 +90,7 @@ TArray<FPCGPinProperties> UPCGExPathfindingEdgesSettings::InputPinProperties() c
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 	PCGEX_PIN_POINT(PCGExGraph::SourceSeedsLabel, "Seeds points for pathfinding.", Required, {})
 	PCGEX_PIN_POINT(PCGExGraph::SourceGoalsLabel, "Goals points for pathfinding.", Required, {})
-	PCGEX_PIN_PARAMS(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
 	PCGEX_PIN_OPERATION_OVERRIDES(PCGExPathfinding::SourceOverridesGoalPicker)
 	PCGEX_PIN_OPERATION_OVERRIDES(PCGExPathfinding::SourceOverridesSearch)
 	return PinProperties;
@@ -132,13 +135,20 @@ bool FPCGExPathfindingEdgesElement::Boot(FPCGExContext* InContext) const
 
 	// Prepare path seed/goal pairs
 
-	Context->GoalPicker->PrepareForData(Context->SeedsDataFacade, Context->GoalsDataFacade);
+	if (!Context->GoalPicker->PrepareForData(Context, Context->SeedsDataFacade, Context->GoalsDataFacade)) { return false; }
+
 	PCGExPathfinding::ProcessGoals(
 		Context->SeedsDataFacade, Context->GoalPicker,
 		[&](const int32 SeedIndex, const int32 GoalIndex)
 		{
 			Context->SeedGoalPairs.Add(PCGEx::H64(SeedIndex, GoalIndex));
 		});
+
+	if (Context->SeedGoalPairs.IsEmpty())
+	{
+		PCGE_LOG(Error, GraphAndLog, FTEXT("Could not generate any seed/goal pairs."));
+		return false;
+	}
 
 	return true;
 }
@@ -205,32 +215,32 @@ namespace PCGExPathfindingEdge
 			TSharedPtr<PCGExPathfinding::FPathQuery> Query = MakeShared<PCGExPathfinding::FPathQuery>(
 				Cluster.ToSharedRef(),
 				Context->SeedsDataFacade->Source->GetInPointRef(PCGEx::H64A(Context->SeedGoalPairs[i])),
-				Context->GoalsDataFacade->Source->GetInPointRef(PCGEx::H64B(Context->SeedGoalPairs[i])));
+				Context->GoalsDataFacade->Source->GetInPointRef(PCGEx::H64B(Context->SeedGoalPairs[i])),
+				i);
 
 			Queries[i] = Query;
 		}
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, ResolveQueriesTask)
-		TWeakPtr<FProcessor> WeakPtr = SharedThis(this);
-		ResolveQueriesTask->OnIterationCallback = [WeakPtr](const int32 Index, const int32 Count, const int32 LoopIdx)
-		{
-			TSharedPtr<FProcessor> This = WeakPtr.Pin();
-			if (!This) { return; }
+		ResolveQueriesTask->OnIterationCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope)
+			{
+				PCGEX_ASYNC_THIS
 
-			TSharedPtr<PCGExPathfinding::FPathQuery> Query = This->Queries[Index];
-			Query->ResolvePicks(This->Settings->SeedPicking, This->Settings->GoalPicking);
+				TSharedPtr<PCGExPathfinding::FPathQuery> Query = This->Queries[Index];
+				Query->ResolvePicks(This->Settings->SeedPicking, This->Settings->GoalPicking);
 
-			if (!Query->HasValidEndpoints()) { return; }
+				if (!Query->HasValidEndpoints()) { return; }
 
-			Query->FindPath(This->SearchOperation, This->HeuristicsHandler, nullptr);
+				Query->FindPath(This->SearchOperation, This->HeuristicsHandler, nullptr);
 
-			if (!Query->IsQuerySuccessful()) { return; }
+				if (!Query->IsQuerySuccessful()) { return; }
 
-			This->Context->BuildPath(Query);
-			Query->Cleanup();
-		};
+				This->Context->BuildPath(Query);
+				Query->Cleanup();
+			};
 
-		ResolveQueriesTask->StartIterations(Queries.Num(), 1, HeuristicsHandler->HasGlobalFeedback(), false);
+		ResolveQueriesTask->StartIterations(Queries.Num(), 1, HeuristicsHandler->HasGlobalFeedback());
 		return true;
 	}
 }

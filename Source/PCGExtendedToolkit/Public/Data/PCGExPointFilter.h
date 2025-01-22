@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -38,21 +38,18 @@ namespace PCGExFilters
  * 
  */
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFilterFactoryBase : public UPCGExParamFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFilterFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
 public:
 	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::FilterPoint; }
+	virtual bool SupportsDirectEvaluation() const { return false; }
 
 	virtual bool Init(FPCGExContext* InContext);
 
 	int32 Priority = 0;
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const;
-
-	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
-	{
-	}
 };
 
 namespace PCGExPointFilter
@@ -64,6 +61,7 @@ namespace PCGExPointFilter
 
 	const FName SourceFiltersConditionLabel = FName("Conditions Filters");
 	const FName SourceKeepConditionLabel = FName("Keep Conditions");
+	const FName SourceStopConditionLabel = FName("Stop Conditions");
 
 	const FName SourcePointFiltersLabel = FName("Point Filters");
 	const FName SourceVtxFiltersLabel = FName("Vtx Filters");
@@ -75,16 +73,18 @@ namespace PCGExPointFilter
 	class /*PCGEXTENDEDTOOLKIT_API*/ FFilter
 	{
 	public:
-		explicit FFilter(const TObjectPtr<const UPCGExFilterFactoryBase>& InFactory):
+		explicit FFilter(const TObjectPtr<const UPCGExFilterFactoryData>& InFactory):
 			Factory(InFactory)
 		{
 		}
+
+		bool bUseEdgeAsPrimary = false; // This shouldn't be there but...
 
 		bool DefaultResult = true;
 		TSharedPtr<PCGExData::FFacade> PointDataFacade;
 
 		bool bCacheResults = true;
-		TObjectPtr<const UPCGExFilterFactoryBase> Factory;
+		TObjectPtr<const UPCGExFilterFactoryData> Factory;
 		TArray<int8> Results;
 
 		int32 FilterIndex = 0;
@@ -96,6 +96,7 @@ namespace PCGExPointFilter
 		virtual void PostInit();
 
 		virtual bool Test(const int32 Index) const;
+		virtual bool Test(const FPCGPoint& Point) const; // destined for live testing support only
 		virtual bool Test(const PCGExCluster::FNode& Node) const;
 		virtual bool Test(const PCGExGraph::FEdge& Edge) const;
 
@@ -105,12 +106,13 @@ namespace PCGExPointFilter
 	class /*PCGEXTENDEDTOOLKIT_API*/ FSimpleFilter : public FFilter
 	{
 	public:
-		explicit FSimpleFilter(const TObjectPtr<const UPCGExFilterFactoryBase>& InFactory):
+		explicit FSimpleFilter(const TObjectPtr<const UPCGExFilterFactoryData>& InFactory):
 			FFilter(InFactory)
 		{
 		}
 
 		virtual bool Test(const int32 Index) const override;
+		virtual bool Test(const FPCGPoint& Point) const override;
 		virtual bool Test(const PCGExCluster::FNode& Node) const override final;
 		virtual bool Test(const PCGExGraph::FEdge& Edge) const override final;
 	};
@@ -120,6 +122,8 @@ namespace PCGExPointFilter
 	public:
 		explicit FManager(const TSharedRef<PCGExData::FFacade>& InPointDataFacade);
 
+		bool bUseEdgeAsPrimary = false; // This shouldn't be there...
+
 		bool bCacheResultsPerFilter = false;
 		bool bCacheResults = false;
 		TArray<int8> Results;
@@ -128,9 +132,10 @@ namespace PCGExPointFilter
 
 		TSharedRef<PCGExData::FFacade> PointDataFacade;
 
-		bool Init(FPCGExContext* InContext, const TArray<TObjectPtr<const UPCGExFilterFactoryBase>>& InFactories);
+		bool Init(FPCGExContext* InContext, const TArray<TObjectPtr<const UPCGExFilterFactoryData>>& InFactories);
 
 		virtual bool Test(const int32 Index);
+		virtual bool Test(const FPCGPoint& Point);
 		virtual bool Test(const PCGExCluster::FNode& Node);
 		virtual bool Test(const PCGExGraph::FEdge& Edge);
 
@@ -148,11 +153,37 @@ namespace PCGExPointFilter
 		virtual void InitCache();
 	};
 
-	static void RegisterBuffersDependencies(FPCGExContext* InContext, const TArray<TObjectPtr<const UPCGExFilterFactoryBase>>& InFactories, PCGExData::FFacadePreloader& FacadePreloader)
+	static void RegisterBuffersDependencies(FPCGExContext* InContext, const TArray<TObjectPtr<const UPCGExFilterFactoryData>>& InFactories, PCGExData::FFacadePreloader& FacadePreloader)
 	{
-		for (const UPCGExFilterFactoryBase* Factory : InFactories)
+		for (const UPCGExFilterFactoryData* Factory : InFactories)
 		{
 			Factory->RegisterBuffersDependencies(InContext, FacadePreloader);
+		}
+	}
+
+	static void PruneForDirectEvaluation(FPCGExContext* InContext, TArray<TObjectPtr<const UPCGExFilterFactoryData>>& InFactories)
+	{
+		if (InFactories.IsEmpty()) { return; }
+
+		TArray<FString> UnsupportedFilters;
+		UnsupportedFilters.Reserve(InFactories.Num());
+
+		int32 WriteIndex = 0;
+		for (int32 i = 0; i < InFactories.Num(); i++)
+		{
+			if (InFactories[i]->SupportsDirectEvaluation()) { InFactories[WriteIndex++] = InFactories[i]; }
+			else { UnsupportedFilters.AddUnique(InFactories[i]->GetName()); }
+		}
+
+		InFactories.SetNum(WriteIndex);
+
+		if (InFactories.IsEmpty())
+		{
+			PCGE_LOG_C(Warning, GraphAndLog, InContext, FTEXT("None of the filters used supports direct evaluation."));
+		}
+		else if (!UnsupportedFilters.IsEmpty())
+		{
+			PCGE_LOG_C(Warning, GraphAndLog, InContext, FText::Format(FTEXT("Some filters don't support direct evaluation and will be ignored: \"{0}\"."), FText::FromString(FString::Join(UnsupportedFilters, TEXT(", ")))));
 		}
 	}
 }

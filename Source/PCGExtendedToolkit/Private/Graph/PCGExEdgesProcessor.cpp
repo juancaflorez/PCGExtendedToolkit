@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExEdgesProcessor.h"
@@ -14,6 +14,11 @@ PCGExData::EIOInit UPCGExEdgesProcessorSettings::GetMainOutputInitMode() const {
 PCGExData::EIOInit UPCGExEdgesProcessorSettings::GetEdgeOutputInitMode() const { return PCGExData::EIOInit::Forward; }
 
 bool UPCGExEdgesProcessorSettings::GetMainAcceptMultipleData() const { return true; }
+
+bool UPCGExEdgesProcessorSettings::WantsScopedIndexLookupBuild() const
+{
+	PCGEX_GET_OPTION_STATE(ScopedIndexLookupBuild, bDefaultScopedIndexLookupBuild)
+}
 
 FPCGExEdgesProcessorContext::~FPCGExEdgesProcessorContext()
 {
@@ -44,14 +49,14 @@ TArray<FPCGPinProperties> UPCGExEdgesProcessorSettings::InputPinProperties() con
 
 	if (SupportsPointFilters())
 	{
-		if (RequiresPointFilters()) { PCGEX_PIN_PARAMS(GetPointFilterPin(), GetPointFilterTooltip(), Required, {}) }
-		else { PCGEX_PIN_PARAMS(GetPointFilterPin(), GetPointFilterTooltip(), Normal, {}) }
+		if (RequiresPointFilters()) { PCGEX_PIN_FACTORIES(GetPointFilterPin(), GetPointFilterTooltip(), Required, {}) }
+		else { PCGEX_PIN_FACTORIES(GetPointFilterPin(), GetPointFilterTooltip(), Normal, {}) }
 	}
 
 	if (SupportsEdgeSorting())
 	{
-		if (RequiresEdgeSorting()) { PCGEX_PIN_PARAMS(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {}) }
-		else { PCGEX_PIN_PARAMS(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Normal, {}) }
+		if (RequiresEdgeSorting()) { PCGEX_PIN_FACTORIES(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {}) }
+		else { PCGEX_PIN_FACTORIES(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Normal, {}) }
 	}
 	return PinProperties;
 }
@@ -85,14 +90,17 @@ bool FPCGExEdgesProcessorContext::AdvancePointsIO(const bool bCleanupKeys)
 
 	if (!FPCGExPointsProcessorContext::AdvancePointsIO(bCleanupKeys)) { return false; }
 
-	if (FString CurrentPairId;
-		CurrentIO->Tags->GetValue(PCGExGraph::TagStr_ClusterPair, CurrentPairId))
+	if (const PCGExTags::IDType TagValue = CurrentIO->Tags->GetTypedValue<int32>(PCGExGraph::TagStr_PCGExCluster))
 	{
-		FString OutId;
-		PCGExGraph::SetClusterVtx(CurrentIO, OutId);
+		int32 PreUpdateKey = TagValue->Value;
+		TaggedEdges = InputDictionary->GetEntries(PreUpdateKey);
 
-		TaggedEdges = InputDictionary->GetEntries(CurrentPairId);
-		if (TaggedEdges && !TaggedEdges->Entries.IsEmpty()) { PCGExGraph::MarkClusterEdges(TaggedEdges->Entries, OutId); }
+		if (TaggedEdges && !TaggedEdges->Entries.IsEmpty())
+		{
+			PCGExTags::IDType OutId;
+			PCGExGraph::SetClusterVtx(CurrentIO, OutId); // Update key
+			PCGExGraph::MarkClusterEdges(TaggedEdges->Entries, OutId);
+		}
 		else { TaggedEdges = nullptr; }
 	}
 	else { TaggedEdges = nullptr; }
@@ -104,7 +112,7 @@ bool FPCGExEdgesProcessorContext::AdvancePointsIO(const bool bCleanupKeys)
 			PCGExGraph::BuildEndpointsLookup(CurrentIO, EndpointsLookup, EndpointsAdjacency);
 		}
 	}
-	else
+	else if (!bQuietMissingClusterPairElement)
 	{
 		PCGE_LOG_C(Warning, GraphAndLog, this, FTEXT("Some input vtx have no associated edges."));
 	}
@@ -117,8 +125,10 @@ void FPCGExEdgesProcessorContext::OutputBatches() const
 	for (const TSharedPtr<PCGExClusterMT::FClusterProcessorBatchBase>& Batch : Batches) { Batch->Output(); }
 }
 
-bool FPCGExEdgesProcessorContext::ProcessClusters(const PCGEx::AsyncState NextStateId, const bool bIsNextStateAsync)
+bool FPCGExEdgesProcessorContext::ProcessClusters(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync)
 {
+	//FWriteScopeLock WriteScopeLock(ClusterProcessingLock); // Just in case
+
 	if (!bBatchProcessingEnabled) { return true; }
 
 	if (bClusterBatchInlined)
@@ -137,8 +147,15 @@ bool FPCGExEdgesProcessorContext::ProcessClusters(const PCGEx::AsyncState NextSt
 
 		PCGEX_ON_ASYNC_STATE_READY_INTERNAL(PCGExClusterMT::MTState_ClusterProcessing)
 		{
-			SetAsyncState(PCGExClusterMT::MTState_ClusterCompletingWork);
-			CurrentBatch->CompleteWork();
+			if (!CurrentBatch->bSkipCompletion)
+			{
+				SetAsyncState(PCGExClusterMT::MTState_ClusterCompletingWork);
+				CurrentBatch->CompleteWork();
+			}
+			else
+			{
+				SetState(PCGExClusterMT::MTState_ClusterCompletingWork);
+			}
 		}
 
 		PCGEX_ON_ASYNC_STATE_READY_INTERNAL(PCGExClusterMT::MTState_ClusterCompletingWork)
@@ -151,13 +168,21 @@ bool FPCGExEdgesProcessorContext::ProcessClusters(const PCGEx::AsyncState NextSt
 		PCGEX_ON_ASYNC_STATE_READY_INTERNAL(PCGExClusterMT::MTState_ClusterProcessing)
 		{
 			ClusterProcessing_InitialProcessingDone();
-			SetAsyncState(PCGExClusterMT::MTState_ClusterCompletingWork);
-			CompleteBatches(Batches);
+
+			if (!bSkipClusterBatchCompletionStep)
+			{
+				SetAsyncState(PCGExClusterMT::MTState_ClusterCompletingWork);
+				CompleteBatches(Batches);
+			}
+			else
+			{
+				SetState(PCGExClusterMT::MTState_ClusterCompletingWork);
+			}
 		}
 
 		PCGEX_ON_ASYNC_STATE_READY_INTERNAL(PCGExClusterMT::MTState_ClusterCompletingWork)
 		{
-			ClusterProcessing_WorkComplete();
+			if (!bSkipClusterBatchCompletionStep) { ClusterProcessing_WorkComplete(); }
 
 			if (bDoClusterBatchWritingStep)
 			{
@@ -186,7 +211,7 @@ bool FPCGExEdgesProcessorContext::ProcessClusters(const PCGEx::AsyncState NextSt
 	return false;
 }
 
-bool FPCGExEdgesProcessorContext::CompileGraphBuilders(const bool bOutputToContext, const PCGEx::AsyncState NextStateId)
+bool FPCGExEdgesProcessorContext::CompileGraphBuilders(const bool bOutputToContext, const PCGEx::ContextState NextStateId)
 {
 	PCGEX_ON_STATE_INTERNAL(PCGExGraph::State_ReadyToCompile)
 	{
@@ -204,7 +229,7 @@ bool FPCGExEdgesProcessorContext::CompileGraphBuilders(const bool bOutputToConte
 	return true;
 }
 
-void FPCGExEdgesProcessorContext::AdvanceBatch(const PCGEx::AsyncState NextStateId, const bool bIsNextStateAsync)
+void FPCGExEdgesProcessorContext::AdvanceBatch(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync)
 {
 	CurrentBatchIndex++;
 	if (!Batches.IsValidIndex(CurrentBatchIndex))
@@ -259,11 +284,13 @@ bool FPCGExEdgesProcessorElement::Boot(FPCGExContext* InContext) const
 
 	PCGEX_CONTEXT_AND_SETTINGS(EdgesProcessor)
 
+	Context->bQuietMissingClusterPairElement = Settings->bQuietMissingClusterPairElement;
+
 	Context->bHasValidHeuristics = PCGExFactories::GetInputFactories(
 		Context, PCGExGraph::SourceHeuristicsLabel, Context->HeuristicsFactories,
 		{PCGExFactories::EType::Heuristics}, false);
 
-	Context->InputDictionary = MakeShared<PCGExData::FPointIOTaggedDictionary>(PCGExGraph::TagStr_ClusterPair);
+	Context->InputDictionary = MakeShared<PCGExData::FPointIOTaggedDictionary>(PCGExGraph::TagStr_PCGExCluster);
 
 	TArray<TSharedPtr<PCGExData::FPointIO>> TaggedVtx;
 	TArray<TSharedPtr<PCGExData::FPointIO>> TaggedEdges;
@@ -395,7 +422,7 @@ FPCGExContext* FPCGExEdgesProcessorElement::InitializeContext(
 
 	PCGEX_CONTEXT_AND_SETTINGS(EdgesProcessor)
 
-	Context->bScopedIndexLookupBuild = Settings->bScopedIndexLookupBuild;
+	Context->bScopedIndexLookupBuild = Settings->WantsScopedIndexLookupBuild();
 
 	return Context;
 }

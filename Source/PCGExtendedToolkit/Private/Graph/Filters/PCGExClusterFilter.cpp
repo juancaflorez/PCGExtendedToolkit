@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Filters/PCGExClusterFilter.h"
@@ -51,14 +51,14 @@ namespace PCGExClusterFilter
 
 	bool FManager::InitFilter(FPCGExContext* InContext, const TSharedPtr<PCGExPointFilter::FFilter>& Filter)
 	{
-		if (Filter->GetFilterType() == PCGExFilters::EType::Point) { return Filter->Init(InContext, bUseEdgeAsPrimary ? EdgeDataFacade : PointDataFacade); }
-		if (PCGExFactories::ClusterSpecificFilters.Contains(Filter->Factory->GetFactoryType()))
+		if (PCGExFactories::SupportsClusterFilters.Contains(Filter->Factory->GetFactoryType()))
 		{
 			const TSharedPtr<FFilter> ClusterFilter = StaticCastSharedPtr<FFilter>(Filter);
 			if (!ClusterFilter->Init(InContext, Cluster, PointDataFacade, EdgeDataFacade)) { return false; }
 			return true;
 		}
-		return false;
+
+		return Filter->Init(InContext, bUseEdgeAsPrimary ? EdgeDataFacade : PointDataFacade);
 	}
 
 	void FManager::InitCache()

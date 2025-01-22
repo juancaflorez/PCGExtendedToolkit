@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -157,11 +157,12 @@ protected:
 class /*PCGEXTENDEDTOOLKIT_API*/ FSampleNavmeshTask final : public FPCGExPathfindingTask
 {
 public:
-	FSampleNavmeshTask(
-		const TSharedPtr<PCGExData::FPointIO>& InPointIO, const TArray<PCGExPathfinding::FSeedGoalPair>* InQueries) :
-		FPCGExPathfindingTask(InPointIO, InQueries)
+	FSampleNavmeshTask(const int32 InTaskIndex,
+	                   const TSharedPtr<PCGExData::FPointIO>& InPointIO,
+	                   const TArray<PCGExPathfinding::FSeedGoalPair>* InQueries)
+		: FPCGExPathfindingTask(InTaskIndex, InPointIO, InQueries)
 	{
 	}
 
-	virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+	virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 };

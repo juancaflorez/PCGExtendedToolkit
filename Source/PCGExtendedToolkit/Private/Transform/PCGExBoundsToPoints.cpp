@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Transform/PCGExBoundsToPoints.h"
@@ -35,7 +35,7 @@ bool FPCGExBoundsToPointsElement::ExecuteInternal(FPCGContext* InContext) const
 				//NewBatch->bRequiresWriteStep = true;
 			}))
 		{
-			return Context->CancelExecution(TEXT("Could not find any paths to subdivide."));
+			return Context->CancelExecution(TEXT("Missing data."));
 		}
 	}
 
@@ -102,7 +102,7 @@ namespace PCGExBoundsToPoints
 		return true;
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
 

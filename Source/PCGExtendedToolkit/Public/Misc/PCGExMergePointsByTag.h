@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -34,7 +34,7 @@ namespace PCPGExMergePointsByTag
 	{
 	public:
 		TArray<TSharedPtr<PCGExData::FPointIO>> IOs;
-		TSharedPtr<PCGExData::FFacade> CompositeIODataFacade;
+		TSharedPtr<PCGExData::FFacade> CompositeDataFacade;
 		TSharedPtr<FPCGExPointIOMerger> Merger;
 
 		FMergeList();

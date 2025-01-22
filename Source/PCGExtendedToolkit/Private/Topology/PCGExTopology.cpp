@@ -1,10 +1,9 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Topology/PCGExTopology.h"
 
 #include "PCGExCompare.h"
-#include "Curve/CurveUtil.h"
 
 void FPCGExCellSeedMutationDetails::ApplyToPoint(const PCGExTopology::FCell* InCell, FPCGPoint& OutPoint, const TArray<FPCGPoint>& CellPoints) const
 {
@@ -14,10 +13,10 @@ void FPCGExCellSeedMutationDetails::ApplyToPoint(const PCGExTopology::FCell* InC
 	case EPCGExCellSeedLocation::Original:
 		break;
 	case EPCGExCellSeedLocation::Centroid:
-		OutPoint.Transform.SetLocation(InCell->Centroid);
+		OutPoint.Transform.SetLocation(InCell->Data.Centroid);
 		break;
 	case EPCGExCellSeedLocation::PathBoundsCenter:
-		OutPoint.Transform.SetLocation(InCell->Bounds.GetCenter());
+		OutPoint.Transform.SetLocation(InCell->Data.Bounds.GetCenter());
 		break;
 	case EPCGExCellSeedLocation::FirstNode:
 		OutPoint.Transform.SetLocation(CellPoints[0].Transform.GetLocation());
@@ -34,13 +33,13 @@ void FPCGExCellSeedMutationDetails::ApplyToPoint(const PCGExTopology::FCell* InC
 	if (bMatchCellBounds)
 	{
 		FVector Offset = OutPoint.Transform.GetLocation();
-		OutPoint.BoundsMin = InCell->Bounds.Min - Offset;
-		OutPoint.BoundsMax = InCell->Bounds.Max - Offset;
+		OutPoint.BoundsMin = InCell->Data.Bounds.Min - Offset;
+		OutPoint.BoundsMax = InCell->Data.Bounds.Max - Offset;
 	}
 
-	PCGExHelpers::SetPointProperty(OutPoint, InCell->Area, AreaTo);
-	PCGExHelpers::SetPointProperty(OutPoint, InCell->Perimeter, PerimeterTo);
-	PCGExHelpers::SetPointProperty(OutPoint, InCell->Compactness, CompactnessTo);
+	PCGExHelpers::SetPointProperty(OutPoint, InCell->Data.Area, AreaTo);
+	PCGExHelpers::SetPointProperty(OutPoint, InCell->Data.Perimeter, PerimeterTo);
+	PCGExHelpers::SetPointProperty(OutPoint, InCell->Data.Compactness, CompactnessTo);
 }
 
 namespace PCGExTopology
@@ -67,7 +66,7 @@ namespace PCGExTopology
 		return UniqueStartHalfEdgesHash.Contains(Hash);
 	}
 
-	bool FCellConstraints::IsUniqueStartHash(const uint64 Hash)
+	bool FCellConstraints::IsUniqueStartHalfEdge(const uint64 Hash)
 	{
 		bool bAlreadyExists = false;
 		{
@@ -101,12 +100,13 @@ namespace PCGExTopology
 
 	void FCellConstraints::BuildWrapperCell(TSharedRef<PCGExCluster::FCluster> InCluster, const TArray<FVector>& ProjectedPositions)
 	{
-		const FVector SeedWP = InCluster->Bounds.GetCenter() + InCluster->Bounds.GetSize() * FVector(1, 1, 0);
+		const FVector SeedWP = InCluster->Bounds.GetCenter() + InCluster->Bounds.GetSize() * FVector(1.01, 1.01, 0);
 
-		TSharedPtr<FCellConstraints> TempConstraints = MakeShared<FCellConstraints>();
+		PCGEX_MAKE_SHARED(TempConstraints, FCellConstraints)
 		TempConstraints->bKeepCellsWithLeaves = bKeepCellsWithLeaves;
+		TempConstraints->bDuplicateLeafPoints = bDuplicateLeafPoints;
 
-		WrapperCell = MakeShared<PCGExTopology::FCell>(TempConstraints.ToSharedRef());
+		WrapperCell = MakeShared<FCell>(TempConstraints.ToSharedRef());
 		if (WrapperCell->BuildFromCluster(SeedWP, InCluster, ProjectedPositions) != ECellResult::Success) { WrapperCell = nullptr; }
 		else { IsUniqueCellHash(WrapperCell); }
 	}
@@ -120,197 +120,184 @@ namespace PCGExTopology
 	{
 		if (CellHash != 0) { return CellHash; }
 
-		TArray<int32> SortedNodes = Nodes;
-		SortedNodes.Sort();
+		//TArray<int32> SortedNodes = Nodes;
+		//SortedNodes.Sort();
 
-		for (int32 i = 0; i < SortedNodes.Num(); i++) { CellHash = HashCombineFast(CellHash, SortedNodes[i]); }
+		for (int32 i = 0; i < Nodes.Num(); i++) { CellHash = HashCombineFast(CellHash, Nodes[i]); }
 
 		return CellHash;
 	}
 
 	ECellResult FCell::BuildFromCluster(
-		const int32 SeedNodeIndex,
-		const int32 SeedEdgeIndex,
+		const PCGExGraph::FLink InSeedLink,
 		TSharedRef<PCGExCluster::FCluster> InCluster,
 		const TArray<FVector>& ProjectedPositions)
 	{
 		bBuiltSuccessfully = false;
-		Bounds = FBox(ForceInit);
+		Data.Bounds = FBox(ForceInit);
 
-		int32 StartNodeIndex = SeedNodeIndex;
-		int32 PrevIndex = SeedNodeIndex;
-		int32 NextIndex = InCluster->GetEdgeOtherNode(SeedEdgeIndex, PrevIndex)->Index;
+		Seed = InSeedLink;
+		PCGExGraph::FLink From = InSeedLink;                                                           // From node, through edge; edge will be updated to be last traversed after.
+		PCGExGraph::FLink To = PCGExGraph::FLink(InCluster->GetEdgeOtherNode(From)->Index, Seed.Edge); // To node, through edge
 
-		const FVector A = ProjectedPositions[InCluster->GetNode(PrevIndex)->PointIndex];
-		const FVector B = ProjectedPositions[InCluster->GetNode(NextIndex)->PointIndex];
-		/*
-				if (InCluster->GetNode(StartNodeIndex)->IsLeaf())
-				{
-					// Swap search orientation since we're starting with a dead end
-					PrevIndex = NextIndex;
-					NextIndex = StartNodeIndex;
-					StartNodeIndex = PrevIndex;
-				}
-		*/
-		SeedEdge = SeedEdgeIndex;
-		SeedNode = StartNodeIndex;
+		const uint64 SeedHalfEdge = PCGEx::H64(From.Node, To.Node);
+		if (!Constraints->IsUniqueStartHalfEdge(SeedHalfEdge)) { return ECellResult::Duplicate; }
 
-		const uint64 UniqueStartEdgeHash = PCGEx::H64(PrevIndex, NextIndex);
-		if (!Constraints->IsUniqueStartHash(UniqueStartEdgeHash)) { return ECellResult::Duplicate; }
-
-		const FVector SeedRP = InCluster->GetPos(PrevIndex);
+		const FVector SeedRP = InCluster->GetPos(From.Node);
 
 		PCGExPaths::FPathMetrics Metrics = PCGExPaths::FPathMetrics(SeedRP);
-		Centroid = SeedRP;
-		Bounds += SeedRP;
+		Data.Centroid = SeedRP;
+		Data.Bounds += SeedRP;
 
-		Nodes.Add(PrevIndex);
+		Nodes.Add(From.Node);
+		if (InCluster->GetNode(From.Node)->IsLeaf() && Constraints->bDuplicateLeafPoints) { Nodes.Add(From.Node); }
 
 		int32 NumUniqueNodes = 1;
 
-		TSet<int32> Exclusions;
-		if (!InCluster->GetNode(PrevIndex)->IsLeaf()) { Exclusions.Add(PrevIndex); }
-
+		const int32 FailSafe = InCluster->Edges->Num() * 2;
 		TSet<uint64> SignedEdges;
-		bool bHasAdjacencyToStart = false;
-
-		while (NextIndex != -1)
+		while (To.Node != -1)
 		{
+			if (SignedEdges.Num() > FailSafe) { return ECellResult::MalformedCluster; } // Let's hope this never happens
+
 			bool bEdgeAlreadyExists;
-			uint64 SignedEdgeHash = PCGEx::H64(PrevIndex, NextIndex);
+			uint64 SignedEdgeHash = PCGEx::H64(From.Node, To.Node);
 
 			//if (SignedEdgeHash != UniqueStartEdgeHash && Constraints->ContainsSignedEdgeHash(SignedEdgeHash)) { return ECellResult::Duplicate; }
 
 			SignedEdges.Add(SignedEdgeHash, &bEdgeAlreadyExists);
-			if (bEdgeAlreadyExists) { break; }
+			if (bEdgeAlreadyExists)
+			{
+				if (To.Edge == Seed.Edge || To.Node == Seed.Node)
+				{
+					Data.bIsClosedLoop = true;
+					const int32 RemovedIndex = Nodes.Pop();            // Remove last added point
+					if (RemovedIndex == Nodes.Last()) { Nodes.Pop(); } // Remove last if duplicate (leaf)
+					break;
+				}
 
-			//
+				return ECellResult::OpenCell;
+			}
 
-			const PCGExCluster::FNode* Current = InCluster->GetNode(NextIndex);
+			// Add next node since it's valid
+
+			const PCGExCluster::FNode* Current = InCluster->GetNode(To.Node);
 
 			Nodes.Add(Current->Index);
 			NumUniqueNodes++;
 
 			const FVector& RP = InCluster->GetPos(Current);
-			Centroid += RP;
+			Data.Centroid += RP;
 
 			double SegmentLength = 0;
 			const double NewLength = Metrics.Add(RP, SegmentLength);
-			if (NewLength > Constraints->MaxPerimeter) { return ECellResult::Unknown; }
-			if (SegmentLength < Constraints->MinSegmentLength || SegmentLength > Constraints->MaxSegmentLength) { return ECellResult::Unknown; }
+			if (NewLength > Constraints->MaxPerimeter) { return ECellResult::OutsidePerimeterLimit; }
+			if (SegmentLength < Constraints->MinSegmentLength || SegmentLength > Constraints->MaxSegmentLength) { return ECellResult::OutsideSegmentsLimit; }
 
-			if (NumUniqueNodes > Constraints->MaxPointCount) { return ECellResult::AbovePointsLimit; }
+			if (NumUniqueNodes > Constraints->MaxPointCount) { return ECellResult::OutsidePointsLimit; }
 
-			Bounds += RP;
-			if (Bounds.GetSize().Length() > Constraints->MaxBoundsSize) { return ECellResult::AboveBoundsLimit; }
+			Data.Bounds += RP;
+			if (Data.Bounds.GetSize().Length() > Constraints->MaxBoundsSize) { return ECellResult::OutsideBoundsLimit; }
 
+			int32 LockedEdge = To.Edge;
+
+			if (Current->IsLeaf())
+			{
+				LockedEdge = -1;
+				if (Constraints->bDuplicateLeafPoints) { Nodes.Add(Current->Index); }
+			}
+
+			// Seek next best candidate
 			const FVector PP = ProjectedPositions[Current->PointIndex];
-			const FVector GuideDir = (PP - ProjectedPositions[InCluster->GetNode(PrevIndex)->PointIndex]).GetSafeNormal();
+			const FVector GuideDir = (PP - ProjectedPositions[InCluster->GetNode(From.Node)->PointIndex]).GetSafeNormal();
+
+			From = To;
+			To = PCGExGraph::FLink(-1, -1);
 
 			double BestAngle = MAX_dbl;
-			int32 NextBest = -1;
-
-			if (Current->Num() == 1 && Constraints->bDuplicateLeafPoints) { Nodes.Add(Current->Index); }
-			if (Current->Num() > 1) { Exclusions.Add(PrevIndex); } // Only exclude previous if it's not a leaf, so we can wrap back
-
-			PrevIndex = NextIndex;
-
-			bHasAdjacencyToStart = false;
 			for (const PCGExGraph::FLink Lk : Current->Links)
 			{
 				const int32 NeighborIndex = Lk.Node;
 
-				if (NeighborIndex == StartNodeIndex) { bHasAdjacencyToStart = true; }
-				if (Exclusions.Contains(NeighborIndex)) { continue; }
+				if (Lk.Edge == LockedEdge) { continue; }
 
 				const FVector OtherDir = (PP - ProjectedPositions[InCluster->GetNode(NeighborIndex)->PointIndex]).GetSafeNormal();
 
 				if (const double Angle = PCGExMath::GetRadiansBetweenVectors(OtherDir, GuideDir); Angle < BestAngle)
 				{
 					BestAngle = Angle;
-					NextBest = NeighborIndex;
+					To = Lk;
 				}
 			}
 
-			Exclusions.Reset();
+			if (To.Node == -1) { return ECellResult::OpenCell; } // Failed to wrap
 
-			if (NextBest == StartNodeIndex)
+			if (InCluster->GetNode(To.Node)->Num() == 1 && !Constraints->bKeepCellsWithLeaves) { return ECellResult::Leaf; }
+			if (NumUniqueNodes > Constraints->MaxPointCount) { return ECellResult::OutsideBoundsLimit; }
+
+			if (NumUniqueNodes > 2)
 			{
-				bHasAdjacencyToStart = true;
-				NextBest = -1;
-			}
+				PCGExMath::CheckConvex(
+					InCluster->GetPos(Nodes.Last(2)),
+					InCluster->GetPos(Nodes.Last(1)),
+					InCluster->GetPos(Nodes.Last()),
+					Data.bIsConvex, Sign);
 
-			if (NextBest != -1)
-			{
-				if (InCluster->GetNode(NextBest)->Num() == 1 && !Constraints->bKeepCellsWithLeaves) { return ECellResult::Leaf; }
-				if (NumUniqueNodes > Constraints->MaxPointCount) { return ECellResult::AboveBoundsLimit; }
-
-				if (NumUniqueNodes > 2)
-				{
-					PCGExMath::CheckConvex(
-						InCluster->GetPos(Nodes.Last(2)),
-						InCluster->GetPos(Nodes.Last(1)),
-						InCluster->GetPos(Nodes.Last()),
-						bIsConvex, Sign);
-
-					if (Constraints->bConvexOnly && !bIsConvex) { return ECellResult::WrongAspect; }
-				}
-
-				NextIndex = NextBest;
-			}
-			else
-			{
-				NextIndex = -1;
+				if (Constraints->bConvexOnly && !Data.bIsConvex) { return ECellResult::WrongAspect; }
 			}
 		}
 
 		if (NumUniqueNodes <= 2) { return ECellResult::Leaf; }
 
-		bIsClosedLoop = bHasAdjacencyToStart;
+		if (!Data.bIsClosedLoop) { return ECellResult::OpenCell; }
 
-		if (!bIsClosedLoop) { return ECellResult::OpenCell; }
+		PCGEx::ShiftArrayToSmallest(Nodes); // ! important to guarantee contour determinism
+		
 		if (!Constraints->IsUniqueCellHash(SharedThis(this))) { return ECellResult::Duplicate; }
 
 		bBuiltSuccessfully = true;
 
-		Centroid /= NumUniqueNodes;
+		Data.Centroid /= NumUniqueNodes;
 
-		Perimeter = Metrics.Length;
-		double SegmentLength = 0;
-		Perimeter = Metrics.Add(InCluster->GetPos(Nodes[0]), SegmentLength);
-		if (SegmentLength < Constraints->MinSegmentLength || SegmentLength > Constraints->MaxSegmentLength) { return ECellResult::Unknown; }
+		Data.Perimeter = Metrics.Length;
+		const double LastSegmentLength = FVector::Dist(InCluster->GetPos(Nodes[0]), InCluster->GetPos(Nodes.Last()));
+		if (Constraints->MinSegmentLength > LastSegmentLength || LastSegmentLength > Constraints->MaxSegmentLength) { return ECellResult::OutsideSegmentsLimit; }
 
-		if (Perimeter < Constraints->MinPerimeter || Perimeter > Constraints->MaxPerimeter) { return ECellResult::Unknown; }
+		if (Data.Perimeter < Constraints->MinPerimeter || Data.Perimeter > Constraints->MaxPerimeter) { return ECellResult::OutsidePerimeterLimit; }
 
-		if (Constraints->bConcaveOnly && bIsConvex) { return ECellResult::WrongAspect; }
-		if (NumUniqueNodes < Constraints->MinPointCount) { return ECellResult::BelowPointsLimit; }
-		if (Bounds.GetSize().Length() < Constraints->MinBoundsSize) { return ECellResult::BelowBoundsLimit; }
+		if (Constraints->bConcaveOnly && Data.bIsConvex) { return ECellResult::WrongAspect; }
+		if (NumUniqueNodes < Constraints->MinPointCount) { return ECellResult::OutsidePointsLimit; }
+		if (Data.Bounds.GetSize().Length() < Constraints->MinBoundsSize) { return ECellResult::OutsideBoundsLimit; }
 
 		Polygon.Reset();
 		TArray<FVector2D>& Vertices = *Polygon.Vertices;
 		Vertices.SetNumUninitialized(Nodes.Num());
 		for (int i = 0; i < Nodes.Num(); ++i) { Vertices[i] = FVector2D(ProjectedPositions[InCluster->GetNode(Nodes[i])->PointIndex]); }
 
-		Area = UE::Geometry::CurveUtil::SignedArea2<double, FVector2D>(Vertices);
-		if (Area < 0)
+		PCGExGeo::FPolygonInfos PolyInfos = PCGExGeo::FPolygonInfos(Vertices);
+
+		Data.Area = PolyInfos.Area;
+		Data.bIsClockwise = PolyInfos.bIsClockwise;
+		Data.Compactness = PolyInfos.Compactness;
+
+		if (!PolyInfos.IsWinded(Constraints->Winding))
 		{
-			Area = FMath::Abs(Area);
 			Algo::Reverse(Nodes);
 			Algo::Reverse(Vertices);
 		}
 
 		if (Constraints->Holes && Constraints->Holes->Overlaps(Polygon)) { return ECellResult::Hole; }
+		if (Constraints->MinCompactness > Data.Compactness || Data.Compactness > Constraints->MaxCompactness) { return ECellResult::OutsideCompactnessLimit; }
 
-		if (Perimeter == 0.0f) { Compactness = 0; }
-		else { Compactness = (4.0f * PI * Area) / (Perimeter * Perimeter); }
+		Data.Area *= 0.01; // QoL to avoid extra 000 in the detail panel.
+		if (Constraints->MinArea > Data.Area || Data.Area > Constraints->MaxArea) { return ECellResult::OutsideAreaLimit; }
 
-		if (Compactness < Constraints->MinCompactness || Compactness > Constraints->MaxCompactness) { return ECellResult::Unknown; }
-
-		Area *= 0.01; // QoL to avoid extra 000 in the detail panel.
-		if (Area < Constraints->MinArea) { return ECellResult::BelowAreaLimit; }
-		if (Area > Constraints->MaxArea) { return ECellResult::AboveAreaLimit; }
-
-		if (Constraints->WrapperCell && FMath::IsNearlyEqual(Area, Constraints->WrapperCell->Area, Constraints->WrapperClassificationTolerance)) { return ECellResult::WrapperCell; }
+		if (Constraints->WrapperCell &&
+			Constraints->WrapperClassificationTolerance > 0 &&
+			FMath::IsNearlyEqual(Data.Area, Constraints->WrapperCell->Data.Area, Constraints->WrapperClassificationTolerance))
+		{
+			return ECellResult::WrapperCell;
+		}
 
 		return ECellResult::Success;
 	}
@@ -321,30 +308,31 @@ namespace PCGExTopology
 		const TArray<FVector>& ProjectedPositions,
 		const FPCGExNodeSelectionDetails* Picking)
 	{
-		int32 StartNodeIndex = InCluster->FindClosestNode<2>(SeedPosition, Picking ? Picking->PickingMethod : EPCGExClusterClosestSearchMode::Edge);
+		PCGExGraph::FLink Link = PCGExGraph::FLink(-1, -1);
+		Link.Node = InCluster->FindClosestNode<2>(SeedPosition, Picking ? Picking->PickingMethod : EPCGExClusterClosestSearchMode::Edge);
 
-		if (StartNodeIndex == -1)
+		if (Link.Node == -1)
 		{
 			// Fail. Either single-node or single-edge cluster, or no connected edge
 			return ECellResult::Unknown;
 		}
 
-		if (const FVector StartPosition = InCluster->GetPos(StartNodeIndex);
+		if (const FVector StartPosition = InCluster->GetPos(Link.Node);
 			Picking && !Picking->WithinDistance(StartPosition, SeedPosition))
 		{
 			// Fail. Not within radius.
 			return ECellResult::Unknown;
 		}
 
-		const int32 NextEdge = InCluster->FindClosestEdge<2>(StartNodeIndex, SeedPosition);
-		if (NextEdge == -1)
+		Link.Edge = InCluster->FindClosestEdge<2>(Link.Node, SeedPosition);
+		if (Link.Edge == -1)
 		{
 			// Fail. Either single-node or single-edge cluster, or no connected edge
 			return ECellResult::Unknown;
 		}
 
-		StartNodeIndex = InCluster->GetGuidedHalfEdge(NextEdge, SeedPosition)->Index;
-		return BuildFromCluster(StartNodeIndex, NextEdge, InCluster, ProjectedPositions);
+		Link.Node = InCluster->GetGuidedHalfEdge(Link.Edge, SeedPosition)->Index;
+		return BuildFromCluster(Link, InCluster, ProjectedPositions);
 	}
 
 	ECellResult FCell::BuildFromPath(
@@ -355,27 +343,78 @@ namespace PCGExTopology
 
 	void FCell::PostProcessPoints(TArray<FPCGPoint>& InMutablePoints)
 	{
-		if (!Constraints->bKeepCellsWithLeaves) { return; }
+	}
+}
 
-		const int32 NumPoints = InMutablePoints.Num();
 
-		FVector A = InMutablePoints[0].Transform.GetLocation();
-		FVector B = InMutablePoints[1].Transform.GetLocation();
-		int32 BIdx = Nodes[0];
-		int32 AIdx = -1;
+bool FPCGExCellArtifactsDetails::WriteAny() const
+{
+	return bFlagTerminalPoint || bWriteNumRepeat;
+}
 
-		for (int i = 2; i < NumPoints; i++)
+bool FPCGExCellArtifactsDetails::Init(FPCGExContext* InContext)
+{
+	if (bFlagTerminalPoint) { PCGEX_VALIDATE_NAME_C(InContext, TerminalFlagAttributeName); }
+	if (bWriteNumRepeat) { PCGEX_VALIDATE_NAME_C(InContext, NumRepeatAttributeName); }
+	TagForwarding.bFilterToRemove = true;
+	TagForwarding.bPreservePCGExData = false;
+	TagForwarding.Init();
+	return true;
+}
+
+void FPCGExCellArtifactsDetails::Process(
+	const TSharedPtr<PCGExCluster::FCluster>& InCluster,
+	const TSharedPtr<PCGExData::FFacade>& InDataFacade,
+	const TSharedPtr<PCGExTopology::FCell>& InCell) const
+{
+	auto FwdTags = [&](const TSet<FString>& SourceTags)
+	{
+		TArray<FString> Tags = SourceTags.Array();
+		for (int i = 0; i < Tags.Num(); i++)
 		{
-			FVector C = InMutablePoints[i].Transform.GetLocation();
-
-			if (B == C)
+			if (Tags[i].StartsWith(PCGEx::PCGExPrefix))
 			{
-				// Duplicate point, most likely a dead end. Could also be collocated points.
-				//InMutablePoints[i].Transform.SetLocation(C + PCGExMath::GetNormalUp(A, B, FVector::UpVector) * 0.01); //Slightly offset
+				Tags.RemoveAt(i);
+				i--;
 			}
-
-			A = B;
-			B = C;
 		}
+		TagForwarding.Prune(Tags);
+		InDataFacade->Source->Tags->Append(Tags);
+	};
+
+	// Lots of wasted cycles here
+	FwdTags(InCluster->VtxIO.Pin()->Tags->Flatten());
+	FwdTags(InCluster->EdgesIO.Pin()->Tags->Flatten());
+
+	if (bTagIfClosedLoop) { InDataFacade->Source->Tags->AddRaw(IsClosedLoopTag); }
+
+	if (InCell->Data.bIsConvex) { if (bTagConvex) { InDataFacade->Source->Tags->AddRaw(ConvexTag); } }
+	else { if (bTagConcave) { InDataFacade->Source->Tags->AddRaw(ConcaveTag); } }
+
+	if (!WriteAny()) { return; }
+
+	const int32 NumNodes = InCell->Nodes.Num();
+	const TSharedPtr<PCGExData::TBuffer<bool>> TerminalBuffer = bFlagTerminalPoint ? InDataFacade->GetWritable(TerminalFlagAttributeName, false, true, PCGExData::EBufferInit::New) : nullptr;
+
+	TMap<int32, int32> NumRepeats;
+
+	const TSharedPtr<PCGExData::TBuffer<int32>> RepeatBuffer = bWriteNumRepeat ? InDataFacade->GetWritable(NumRepeatAttributeName, 0, true, PCGExData::EBufferInit::New) : nullptr;
+
+	if (bWriteNumRepeat)
+	{
+		NumRepeats.Reserve(NumNodes);
+		for (int i = 0; i < NumNodes; i++)
+		{
+			int32 NodeIdx = InCell->Nodes[i];
+			int32 Count = NumRepeats.FindOrAdd(NodeIdx, 0);
+			NumRepeats.Add(NodeIdx, Count + 1);
+		}
+	}
+
+	for (int i = 0; i < NumNodes; i++)
+	{
+		int32 NodeIdx = InCell->Nodes[i];
+		if (TerminalBuffer) { TerminalBuffer->GetMutable(i) = InCluster->GetNode(NodeIdx)->IsLeaf(); }
+		if (RepeatBuffer) { RepeatBuffer->GetMutable(i) = NumRepeats[NodeIdx] - 1; }
 	}
 }

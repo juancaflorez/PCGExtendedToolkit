@@ -1,15 +1,31 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExWritePathProperties.h"
-
+#include "MinVolumeBox3.h"
+#include "OrientedBoxTypes.h"
 #include "PCGExDataMath.h"
-
 
 #define LOCTEXT_NAMESPACE "PCGExWritePathPropertiesElement"
 #define PCGEX_NAMESPACE WritePathProperties
 
 PCGExData::EIOInit UPCGExWritePathPropertiesSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
+
+bool UPCGExWritePathPropertiesSettings::WriteAnyPathData() const
+{
+#define PCGEX_PATH_MARK_TRUE(_NAME, _TYPE, _DEFAULT) if(bWrite##_NAME){return true;}
+	PCGEX_FOREACH_FIELD_PATH_MARKS(PCGEX_PATH_MARK_TRUE)
+#undef PCGEX_PATH_MARK_TRUE
+
+	return false;
+}
+
+TArray<FPCGPinProperties> UPCGExWritePathPropertiesSettings::OutputPinProperties() const
+{
+	TArray<FPCGPinProperties> PinProperties = Super::OutputPinProperties();
+	if (WriteAnyPathData()) { PCGEX_PIN_PARAMS(PCGExWritePathProperties::OutputPathProperties, "...", Required, {}) }
+	return PinProperties;
+}
 
 PCGEX_INITIALIZE_ELEMENT(WritePathProperties)
 
@@ -21,6 +37,13 @@ bool FPCGExWritePathPropertiesElement::Boot(FPCGExContext* InContext) const
 
 	PCGEX_FOREACH_FIELD_PATH(PCGEX_OUTPUT_VALIDATE_NAME)
 	PCGEX_FOREACH_FIELD_PATH_MARKS(PCGEX_OUTPUT_VALIDATE_NAME)
+
+	if (Settings->PathAttributePackingMode == EPCGExAttributeSetPackingMode::Merged &&
+		Settings->WriteAnyPathData())
+	{
+		Context->PathAttributeSet = Context->ManagedObjects->New<UPCGParamData>();
+		PCGEx::InitArray(Context->MergedAttributeSetKeys, Context->MainPoints->Num());
+	}
 
 	return true;
 }
@@ -42,6 +65,11 @@ bool FPCGExWritePathPropertiesElement::ExecuteInternal(FPCGContext* InContext) c
 					bHasInvalidInputs = true;
 					return false;
 				}
+				if (Context->PathAttributeSet)
+				{
+					Context->MergedAttributeSetKeys[Entry->IOIndex] = Context->PathAttributeSet->Metadata->AddEntry();
+				}
+
 				return true;
 			},
 			[&](const TSharedPtr<PCGExPointsMT::TBatch<PCGExWritePathProperties::FProcessor>>& NewBatch)
@@ -55,6 +83,17 @@ bool FPCGExWritePathPropertiesElement::ExecuteInternal(FPCGContext* InContext) c
 	PCGEX_POINTS_BATCH_PROCESSING(PCGEx::State_Done)
 
 	Context->MainPoints->StageOutputs();
+	if (Settings->WriteAnyPathData())
+	{
+		if (Context->PathAttributeSet)
+		{
+			Context->StageOutput(PCGExWritePathProperties::OutputPathProperties, Context->PathAttributeSet, {}, false, false);
+		}
+		else
+		{
+			Context->MainBatch->Output();
+		}
+	}
 
 	return Context->TryComplete();
 }
@@ -69,6 +108,9 @@ namespace PCGExWritePathProperties
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		ProjectionDetails = Settings->ProjectionDetails;
+		if (!ProjectionDetails.Init(Context, PointDataFacade)) { return false; }
 
 		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
 
@@ -107,12 +149,12 @@ namespace PCGExWritePathProperties
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		FPointDetails& Current = Details[Index];
 
@@ -160,7 +202,7 @@ namespace PCGExWritePathProperties
 			PCGEX_OUTPUT_VALUE(DistanceToEnd, i, PathLength->TotalLength - TraversedDistance);
 
 			TraversedDistance += !Path->IsClosedLoop() && i == Path->LastIndex ? 0 : PathLength->Get(i);
-			PathCentroid += Path->GetPosUnsafe(i);
+			PathCentroid += Path->GetPos_Unsafe(i);
 		}
 
 		if (!bClosedLoop)
@@ -175,19 +217,73 @@ namespace PCGExWritePathProperties
 			PCGEX_OUTPUT_VALUE(Angle, Path->LastIndex, PCGExSampling::GetAngle(Settings->AngleRange, Last.ToPrev *-1, Last.ToPrev));
 		}
 
-		if (Context->bWritePathLength) { WriteMark(PointIO, Settings->PathLengthAttributeName, PathLength->TotalLength); }
-		if (Context->bWritePathDirection) { WriteMark(PointIO, Settings->PathDirectionAttributeName, (PathDir / Path->NumPoints).GetSafeNormal()); }
-		if (Context->bWritePathCentroid) { WriteMark(PointIO, Settings->PathCentroidAttributeName, (PathCentroid / Path->NumPoints).GetSafeNormal()); }
+		if (Settings->WriteAnyPathData())
+		{
+			TArray<FVector2D> WindedPoints;
+			ProjectionDetails.ProjectFlat(PointDataFacade, WindedPoints);
+
+			const PCGExGeo::FPolygonInfos PolyInfos = PCGExGeo::FPolygonInfos(WindedPoints);
+
+			PathAttributeSet = Context->PathAttributeSet ? Context->PathAttributeSet.Get() : Context->ManagedObjects->New<UPCGParamData>();
+			const int64 Key = Context->PathAttributeSet ? Context->MergedAttributeSetKeys[PointDataFacade->Source->IOIndex] : PathAttributeSet->Metadata->AddEntry();
+
+#define PCGEX_OUTPUT_PATH_VALUE(_NAME, _TYPE, _VALUE) if(Context->bWrite##_NAME){\
+	if (Settings->bWritePathDataToPoints) { WriteMark(PointIO, Settings->_NAME##AttributeName, _VALUE);}\
+			PathAttributeSet->Metadata->FindOrCreateAttribute<_TYPE>(Settings->_NAME##AttributeName, _VALUE)->SetValue(Key, _VALUE); }
+
+			PCGEX_OUTPUT_PATH_VALUE(PathLength, double, PathLength->TotalLength)
+			PCGEX_OUTPUT_PATH_VALUE(PathDirection, FVector, (PathDir / Path->NumPoints).GetSafeNormal())
+			PCGEX_OUTPUT_PATH_VALUE(PathCentroid, FVector, (PathCentroid / Path->NumPoints))
+			PCGEX_OUTPUT_PATH_VALUE(IsClockwise, bool, PolyInfos.bIsClockwise)
+			PCGEX_OUTPUT_PATH_VALUE(Area, double, PolyInfos.Area * 0.01)
+			PCGEX_OUTPUT_PATH_VALUE(Perimeter, double, PolyInfos.Perimeter)
+			PCGEX_OUTPUT_PATH_VALUE(Compactness, double, PolyInfos.Compactness)
+
+			if (Settings->bWriteBoundingBoxCenter ||
+				Settings->bWriteBoundingBoxExtent ||
+				Settings->bWriteBoundingBoxOrientation)
+			{
+				UE::Geometry::TMinVolumeBox3<double> Box;
+				if (Box.Solve(Path->NumPoints, [PathPtr = Path.Get()](int32 i) { return PathPtr->GetPos_Unsafe(i); }))
+				{
+					UE::Geometry::FOrientedBox3d Result;
+					Box.GetResult(Result);
+
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxCenter, FVector, Result.Center());
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxExtent, FVector, Result.Extents);
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxOrientation, FQuat, FQuat(Result.Frame.Rotation));
+				}
+				else
+				{
+					const FBox Bounds = PointIO->GetIn()->GetBounds();
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxCenter, FVector, Bounds.GetCenter());
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxExtent, FVector, Bounds.GetExtent());
+					PCGEX_OUTPUT_PATH_VALUE(BoundingBoxOrientation, FQuat, FQuat::Identity);
+				}
+			}
+
+
+#undef PCGEX_OUTPUT_PATH_VALUE
+		}
 
 		///
 
 		if (Path->ConvexitySign != 0)
 		{
-			if (Settings->bTagConcave && !Path->bIsConvex) { PointIO->Tags->Add(Settings->ConcaveTag); }
-			if (Settings->bTagConvex && Path->bIsConvex) { PointIO->Tags->Add(Settings->ConvexTag); }
+			if (Settings->bTagConcave && !Path->bIsConvex) { PointIO->Tags->AddRaw(Settings->ConcaveTag); }
+			if (Settings->bTagConvex && Path->bIsConvex) { PointIO->Tags->AddRaw(Settings->ConvexTag); }
 		}
 
 		PointDataFacade->Write(AsyncManager);
+	}
+
+	void FProcessor::Output()
+	{
+		TPointsProcessor<FPCGExWritePathPropertiesContext, UPCGExWritePathPropertiesSettings>::Output();
+		if (PathAttributeSet && !Context->PathAttributeSet)
+		{
+			Context->StageOutput(OutputPathProperties, PathAttributeSet, {}, false, false);
+		}
 	}
 }
 

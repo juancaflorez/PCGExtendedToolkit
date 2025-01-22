@@ -1,10 +1,10 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PCGExFilter.h"
+#include "PCGExPartition.h"
 #include "PCGExPointsProcessor.h"
 
 
@@ -21,14 +21,14 @@ namespace PCGExPartition
 		mutable FRWLock PointLock;
 
 	public:
-		FKPartition(const TWeakPtr<FKPartition>& InParent, int64 InKey, FPCGExFilter::FRule* InRule, int32 InPartitionIndex);
+		FKPartition(const TWeakPtr<FKPartition>& InParent, int64 InKey, FRule* InRule, int32 InPartitionIndex);
 		~FKPartition();
 
 		TWeakPtr<FKPartition> Parent;
 		int32 IOIndex = -1;
 		int32 PartitionIndex = 0;
 		int64 PartitionKey = 0;
-		FPCGExFilter::FRule* Rule = nullptr;
+		FRule* Rule = nullptr;
 
 		TSet<int64> UniquePartitionKeys;
 		TMap<int64, TSharedPtr<FKPartition>> SubLayers;
@@ -37,7 +37,7 @@ namespace PCGExPartition
 		int32 GetNum() const { return Points.Num(); }
 		int32 GetSubPartitionsNum();
 
-		TSharedPtr<FKPartition> GetPartition(int64 Key, FPCGExFilter::FRule* InRule);
+		TSharedPtr<FKPartition> GetPartition(int64 Key, FRule* InRule);
 		FORCEINLINE void Add(const int64 Index)
 		{
 			FWriteScopeLock WriteLock(PointLock);
@@ -143,7 +143,7 @@ namespace PCGExPartitionByValues
 {
 	class FProcessor final : public PCGExPointsMT::TPointsProcessor<FPCGExPartitionByValuesBaseContext, UPCGExPartitionByValuesBaseSettings>
 	{
-		TArray<FPCGExFilter::FRule> Rules;
+		TArray<PCGExPartition::FRule> Rules;
 		TArray<int64> KeySums;
 
 		TSharedPtr<PCGExPartition::FKPartition> RootPartition;
@@ -158,9 +158,9 @@ namespace PCGExPartitionByValues
 		}
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count) override;
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount) override;
+		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};
 }

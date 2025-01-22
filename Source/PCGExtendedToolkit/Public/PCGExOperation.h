@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -37,6 +37,8 @@ public:
 	virtual void Cleanup() override;
 	virtual void CopySettingsFrom(const UPCGExOperation* Other);
 
+	virtual void RegisterAssetDependencies(FPCGExContext* InContext);
+
 	TSharedPtr<PCGExData::FFacade> PrimaryDataFacade;
 	TSharedPtr<PCGExData::FFacade> SecondaryDataFacade;
 
@@ -49,6 +51,14 @@ public:
 
 		TypedInstance->CopySettingsFrom(this);
 		return TypedInstance;
+	}
+
+	virtual void RegisterConsumableAttributesWithFacade(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InFacade) const
+	{
+	}
+
+	virtual void RegisterPrimaryBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader) const
+	{
 	}
 
 	virtual void BeginDestroy() override;

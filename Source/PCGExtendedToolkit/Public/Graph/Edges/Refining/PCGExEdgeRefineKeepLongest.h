@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -26,7 +26,7 @@ public:
 	virtual void ProcessNode(PCGExCluster::FNode& Node) override
 	{
 		int32 BestIndex = -1;
-		double LongestDist = MIN_dbl;
+		double LongestDist = 0;
 
 		for (const PCGExGraph::FLink Lk : Node.Links)
 		{

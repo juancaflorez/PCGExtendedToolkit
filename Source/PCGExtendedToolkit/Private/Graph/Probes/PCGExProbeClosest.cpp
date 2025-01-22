@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Probes/PCGExProbeClosest.h"
@@ -6,11 +6,6 @@
 #include "Graph/Probes/PCGExProbing.h"
 
 PCGEX_CREATE_PROBE_FACTORY(Closest, {}, {})
-
-bool UPCGExProbeClosest::RequiresDirectProcessing()
-{
-	return Config.bUnbounded;
-}
 
 bool UPCGExProbeClosest::PrepareForPoints(const TSharedPtr<PCGExData::FPointIO>& InPointIO)
 {
@@ -40,7 +35,7 @@ void UPCGExProbeClosest::ProcessCandidates(const int32 Index, const FPCGPoint& P
 {
 	bool bIsAlreadyConnected;
 	const int32 MaxIterations = FMath::Min(MaxConnectionsCache ? MaxConnectionsCache->Read(Index) : MaxConnections, Candidates.Num());
-	const double R = SearchRadiusCache ? SearchRadiusCache->Read(Index) : SearchRadiusSquared;
+	const double R = GetSearchRadius(Index);
 
 	if (MaxIterations <= 0) { return; }
 
@@ -63,18 +58,16 @@ void UPCGExProbeClosest::ProcessCandidates(const int32 Index, const FPCGPoint& P
 			if (bIsAlreadyConnected) { continue; }
 		}
 
-		//bool bEdgeAlreadyExists;
 		OutEdges->Add(PCGEx::H64U(Index, C.PointIndex));
-		//if (bEdgeAlreadyExists) { continue; }
 
 		Additions++;
 		if (Additions >= MaxIterations) { return; }
 	}
 }
 
-void UPCGExProbeClosest::ProcessNode(const int32 Index, const FPCGPoint& Point, TSet<FInt32Vector>* Coincidence, const FVector& ST, TSet<uint64>* OutEdges)
+void UPCGExProbeClosest::ProcessNode(const int32 Index, const FPCGPoint& Point, TSet<FInt32Vector>* Coincidence, const FVector& ST, TSet<uint64>* OutEdges, const TArray<int8>& AcceptConnections)
 {
-	Super::ProcessNode(Index, Point, nullptr, FVector::ZeroVector, OutEdges);
+	Super::ProcessNode(Index, Point, nullptr, FVector::ZeroVector, OutEdges, AcceptConnections);
 }
 
 #if WITH_EDITOR

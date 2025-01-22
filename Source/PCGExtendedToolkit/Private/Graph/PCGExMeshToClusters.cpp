@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExMeshToClusters.h"
@@ -51,7 +51,7 @@ bool FPCGExMeshToClustersElement::Boot(FPCGExContext* InContext) const
 
 	if (Settings->StaticMeshInput == EPCGExInputValueType::Attribute)
 	{
-		PCGEX_VALIDATE_NAME(Settings->StaticMeshAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->StaticMeshAttribute)
 	}
 
 	const TSharedPtr<PCGExData::FPointIO> Targets = Context->MainPoints->Pairs[0];
@@ -179,10 +179,10 @@ bool FPCGExMeshToClustersElement::ExecuteInternal(
 		Context->GraphBuilders.SetNum(GSMNums);
 		for (int i = 0; i < GSMNums; i++) { Context->GraphBuilders[i] = nullptr; }
 
+		const TSharedPtr<PCGExMT::FTaskManager> AsyncManager = Context->GetAsyncManager();
 		for (int i = 0; i < Context->StaticMeshMap->GSMs.Num(); i++)
 		{
-			const TSharedPtr<PCGExGeo::FGeoStaticMesh> GSM = Context->StaticMeshMap->GSMs[i];
-			Context->GetAsyncManager()->Start<PCGExMeshToCluster::FExtractMeshAndBuildGraph>(i, nullptr, GSM);
+			PCGEX_LAUNCH(PCGExMeshToCluster::FExtractMeshAndBuildGraph, i, Context->StaticMeshMap->GSMs[i])
 		}
 
 		// Preload all & build local graphs to copy to points later on			
@@ -191,6 +191,9 @@ bool FPCGExMeshToClustersElement::ExecuteInternal(
 
 	PCGEX_ON_ASYNC_STATE_READY(PCGExGeo::State_ExtractingMesh)
 	{
+		Context->SetAsyncState(PCGExGraph::State_WritingClusters);
+
+		const TSharedPtr<PCGExMT::FTaskManager> AsyncManager = Context->GetAsyncManager();
 		const TArray<FPCGPoint>& Targets = Context->CurrentIO->GetIn()->GetPoints();
 		for (int i = 0; i < Targets.Num(); i++)
 		{
@@ -198,12 +201,8 @@ bool FPCGExMeshToClustersElement::ExecuteInternal(
 
 			if (MeshIdx == -1) { continue; }
 
-			Context->GetAsyncManager()->Start<PCGExGraphTask::FCopyGraphToPoint>(
-				i, Context->CurrentIO, Context->GraphBuilders[MeshIdx],
-				Context->VtxChildCollection, Context->EdgeChildCollection, &Context->TransformDetails);
+			PCGEX_LAUNCH(PCGExGraphTask::FCopyGraphToPoint, i, Context->CurrentIO, Context->GraphBuilders[MeshIdx], Context->VtxChildCollection, Context->EdgeChildCollection, &Context->TransformDetails)
 		}
-
-		Context->SetAsyncState(PCGExGraph::State_WritingClusters);
 	}
 
 	PCGEX_ON_ASYNC_STATE_READY(PCGExGraph::State_WritingClusters)
@@ -219,7 +218,7 @@ bool FPCGExMeshToClustersElement::ExecuteInternal(
 
 namespace PCGExMeshToCluster
 {
-	bool FExtractMeshAndBuildGraph::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
+	void FExtractMeshAndBuildGraph::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
 	{
 		FPCGExMeshToClustersContext* Context = AsyncManager->GetContext<FPCGExMeshToClustersContext>();
 		PCGEX_SETTINGS(MeshToClusters)
@@ -241,13 +240,15 @@ namespace PCGExMeshToCluster
 		}
 
 		const TSharedPtr<PCGExData::FPointIO> RootVtx = Context->RootVtx->Emplace_GetRef<UPCGExClusterNodesData>();
+		if (!RootVtx) { return; }
+
 		RootVtx->IOIndex = TaskIndex;
 		TArray<FPCGPoint>& VtxPoints = RootVtx->GetOut()->GetMutablePoints();
 		VtxPoints.SetNum(Mesh->Vertices.Num());
 
-		const TSharedPtr<PCGExData::FFacade> RootVtxFacade = MakeShared<PCGExData::FFacade>(RootVtx.ToSharedRef());
+		PCGEX_MAKE_SHARED(RootVtxFacade, PCGExData::FFacade, RootVtx.ToSharedRef())
 
-		const TSharedPtr<PCGExGraph::FGraphBuilder> GraphBuilder = MakeShared<PCGExGraph::FGraphBuilder>(RootVtxFacade.ToSharedRef(), &Context->GraphBuilderDetails);
+		PCGEX_MAKE_SHARED(GraphBuilder, PCGExGraph::FGraphBuilder, RootVtxFacade.ToSharedRef(), &Context->GraphBuilderDetails)
 		Context->GraphBuilders[TaskIndex] = GraphBuilder;
 
 		for (int i = 0; i < VtxPoints.Num(); i++)
@@ -258,8 +259,6 @@ namespace PCGExMeshToCluster
 
 		GraphBuilder->Graph->InsertEdges(Mesh->Edges, -1);
 		GraphBuilder->CompileAsync(Context->GetAsyncManager(), true);
-
-		return true;
 	}
 }
 

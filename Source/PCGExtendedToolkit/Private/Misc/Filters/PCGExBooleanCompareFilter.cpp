@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExBooleanCompareFilter.h"
@@ -9,17 +9,21 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExBooleanCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FBooleanComparisonFilter>(this);
+	return MakeShared<PCGExPointsFilter::FBooleanCompareFilter>(this);
 }
 
-void UPCGExBooleanCompareFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
+bool UPCGExBooleanCompareFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
 {
-	Super::RegisterConsumableAttributes(InContext);
-	//InContext->AddConsumableAttributeName(Config.OperandA.GetName());
-	//InContext->AddConsumableAttributeName(Config.OperandB.GetName());
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_SELECTOR(Config.OperandA, Consumable)
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.OperandB, Consumable)
+
+	return true;
 }
 
-bool PCGExPointsFilter::FBooleanComparisonFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointsFilter::FBooleanCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 

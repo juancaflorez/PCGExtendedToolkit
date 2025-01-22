@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,6 +12,7 @@
 #include "PCGExContext.h"
 #include "PCGExDataTag.h"
 #include "PCGExPointData.h"
+#include "PCGParamData.h"
 
 #include "Metadata/Accessors/PCGAttributeAccessorKeys.h"
 
@@ -69,8 +70,10 @@ namespace PCGExData
 		friend class FPointIOCollection;
 
 	protected:
+		bool bTransactional = false;
 		bool bMutable = false;
 		FPCGExContext* Context = nullptr;
+		TWeakPtr<PCGEx::FWorkPermit> WorkPermit;
 
 		mutable FRWLock PointsLock;
 		mutable FRWLock InKeysLock;
@@ -87,7 +90,7 @@ namespace PCGExData
 		UPCGPointData* Out = nullptr;      // Output PointData
 
 		TWeakPtr<FPointIO> RootIO;
-		bool bEnabled = true;
+		std::atomic<bool> bIsEnabled{true};
 
 	public:
 		TSharedPtr<FTags> Tags;
@@ -96,19 +99,19 @@ namespace PCGExData
 		bool bAllowEmptyOutput = false;
 
 		explicit FPointIO(FPCGExContext* InContext):
-			Context(InContext), In(nullptr)
+			Context(InContext), WorkPermit(Context->GetWorkPermit()), In(nullptr)
 		{
 			PCGEX_LOG_CTR(FPointIO)
 		}
 
 		explicit FPointIO(FPCGExContext* InContext, const UPCGPointData* InData):
-			Context(InContext), In(InData)
+			Context(InContext), WorkPermit(Context->GetWorkPermit()), In(InData)
 		{
 			PCGEX_LOG_CTR(FPointIO)
 		}
 
 		explicit FPointIO(const TSharedRef<FPointIO>& InPointIO):
-			Context(InPointIO->GetContext()), In(InPointIO->GetIn())
+			Context(InPointIO->GetContext()), WorkPermit(InPointIO->WorkPermit), In(InPointIO->GetIn())
 		{
 			PCGEX_LOG_CTR(FPointIO)
 			RootIO = InPointIO;
@@ -125,12 +128,13 @@ namespace PCGExData
 		              const FName InOutputPin,
 		              const TSet<FString>* InTags = nullptr);
 
-		void InitializeOutput(EIOInit InitOut = EIOInit::None);
+		bool InitializeOutput(EIOInit InitOut = EIOInit::None);
 
 		template <typename T>
-		void InitializeOutput(const EIOInit InitOut = EIOInit::None)
+		bool InitializeOutput(const EIOInit InitOut = EIOInit::None)
 		{
-			if (Out && Out != In) { Context->ManagedObjects->Destroy(Out); }
+			if (!WorkPermit.IsValid()) { return false; }
+			if (IsValid(Out) && Out != In) { Context->ManagedObjects->Destroy(Out); }
 
 			bMutable = true;
 
@@ -141,12 +145,12 @@ namespace PCGExData
 				Out = Cast<UPCGPointData>(TypedOut);
 				check(Out)
 
-				if (In) { Out->InitializeFromData(In); }
+				if (IsValid(In)) { Out->InitializeFromData(In); }
 				const UPCGExPointData* TypedPointData = Cast<UPCGExPointData>(In);
 				UPCGExPointData* TypedOutPointData = Cast<UPCGExPointData>(TypedOut);
 				if (TypedPointData && TypedOutPointData) { TypedOutPointData->InitializeFromPCGExData(TypedPointData, EIOInit::New); }
 
-				return;
+				return true;
 			}
 
 			if (InitOut == EIOInit::Duplicate)
@@ -168,10 +172,10 @@ namespace PCGExData
 					Out = Context->ManagedObjects->Duplicate<UPCGPointData>(In);
 				}
 
-				return;
+				return true;
 			}
 
-			InitializeOutput(InitOut);
+			return InitializeOutput(InitOut);
 		}
 
 		~FPointIO();
@@ -257,9 +261,9 @@ namespace PCGExData
 
 		void CleanupKeys();
 
-		void Disable() { bEnabled = false; }
-		void Enable() { bEnabled = true; }
-		bool IsEnabled() const { return bEnabled; }
+		void Disable() { bIsEnabled.store(false, std::memory_order_release); }
+		void Enable() { bIsEnabled.store(true, std::memory_order_release); }
+		bool IsEnabled() const { return bIsEnabled.load(std::memory_order_acquire); }
 
 		bool StageOutput() const;
 		bool StageOutput(const int32 MinPointCount, const int32 MaxPointCount) const;
@@ -297,21 +301,21 @@ namespace PCGExData
 
 	static TSharedPtr<FPointIO> NewPointIO(FPCGExContext* InContext, FName InOutputPin = NAME_None, int32 Index = -1)
 	{
-		TSharedPtr<FPointIO> NewIO = MakeShared<FPointIO>(InContext);
+		PCGEX_MAKE_SHARED(NewIO, FPointIO, InContext)
 		NewIO->SetInfos(Index, InOutputPin);
 		return NewIO;
 	}
 
 	static TSharedPtr<FPointIO> NewPointIO(FPCGExContext* InContext, const UPCGPointData* InData, FName InOutputPin = NAME_None, int32 Index = -1)
 	{
-		TSharedPtr<FPointIO> NewIO = MakeShared<FPointIO>(InContext, InData);
+		PCGEX_MAKE_SHARED(NewIO, FPointIO, InContext, InData)
 		NewIO->SetInfos(Index, InOutputPin);
 		return NewIO;
 	}
 
 	static TSharedPtr<FPointIO> NewPointIO(const TSharedRef<FPointIO>& InPointIO, FName InOutputPin = NAME_None, int32 Index = -1)
 	{
-		TSharedPtr<FPointIO> NewIO = MakeShared<FPointIO>(InPointIO);
+		PCGEX_MAKE_SHARED(NewIO, FPointIO, InPointIO)
 		NewIO->SetInfos(Index, InOutputPin);
 		return NewIO;
 	}
@@ -324,11 +328,12 @@ namespace PCGExData
 	protected:
 		mutable FRWLock PairsLock;
 		FPCGExContext* Context = nullptr;
+		bool bTransactional = false;
 
 	public:
-		explicit FPointIOCollection(FPCGExContext* InContext);
-		FPointIOCollection(FPCGExContext* InContext, FName InputLabel, EIOInit InitOut = EIOInit::None);
-		FPointIOCollection(FPCGExContext* InContext, TArray<FPCGTaggedData>& Sources, EIOInit InitOut = EIOInit::None);
+		explicit FPointIOCollection(FPCGExContext* InContext, bool bIsTransactional = false);
+		FPointIOCollection(FPCGExContext* InContext, FName InputLabel, EIOInit InitOut = EIOInit::None, bool bIsTransactional = false);
+		FPointIOCollection(FPCGExContext* InContext, TArray<FPCGTaggedData>& Sources, EIOInit InitOut = EIOInit::None, bool bIsTransactional = false);
 
 		~FPointIOCollection();
 
@@ -347,9 +352,9 @@ namespace PCGExData
 		TSharedPtr<FPointIO> Emplace_GetRef(const UPCGPointData* In, const EIOInit InitOut = EIOInit::None, const TSet<FString>* Tags = nullptr);
 		TSharedPtr<FPointIO> Emplace_GetRef(EIOInit InitOut = EIOInit::New);
 		TSharedPtr<FPointIO> Emplace_GetRef(const TSharedPtr<FPointIO>& PointIO, const EIOInit InitOut = EIOInit::None);
-		TSharedPtr<FPointIO> InsertUnsafe(const int32 Index, const TSharedPtr<FPointIO>& PointIO);
-		TSharedPtr<FPointIO> AddUnsafe(const TSharedPtr<FPointIO>& PointIO);
-		void AddUnsafe(const TArray<TSharedPtr<FPointIO>>& IOs);
+		TSharedPtr<FPointIO> Insert_Unsafe(const int32 Index, const TSharedPtr<FPointIO>& PointIO);
+		TSharedPtr<FPointIO> Add_Unsafe(const TSharedPtr<FPointIO>& PointIO);
+		void Add_Unsafe(const TArray<TSharedPtr<FPointIO>>& IOs);
 
 
 		template <typename T>
@@ -358,7 +363,7 @@ namespace PCGExData
 			FWriteScopeLock WriteLock(PairsLock);
 			TSharedPtr<FPointIO> NewIO = Pairs.Add_GetRef(MakeShared<FPointIO>(Context, In));
 			NewIO->SetInfos(Pairs.Num() - 1, OutputPin, Tags);
-			NewIO->InitializeOutput<T>(InitOut);
+			if (!NewIO->InitializeOutput<T>(InitOut)) { return nullptr; }
 			return NewIO;
 		}
 
@@ -368,7 +373,7 @@ namespace PCGExData
 			FWriteScopeLock WriteLock(PairsLock);
 			TSharedPtr<FPointIO> NewIO = Pairs.Add_GetRef(MakeShared<FPointIO>(Context));
 			NewIO->SetInfos(Pairs.Num() - 1, OutputPin);
-			NewIO->InitializeOutput<T>(InitOut);
+			if (!NewIO->InitializeOutput<T>(InitOut)) { return nullptr; }
 			return NewIO;
 		}
 
@@ -376,6 +381,8 @@ namespace PCGExData
 		TSharedPtr<FPointIO> Emplace_GetRef(const TSharedPtr<FPointIO>& PointIO, const EIOInit InitOut = EIOInit::None)
 		{
 			TSharedPtr<FPointIO> Branch = Emplace_GetRef<T>(PointIO->GetIn(), InitOut);
+			if (!Branch) { return nullptr; }
+
 			Branch->Tags->Reset(PointIO->Tags);
 			Branch->RootIO = PointIO;
 			return Branch;
@@ -385,6 +392,8 @@ namespace PCGExData
 		int32 Num() const { return Pairs.Num(); }
 
 		TSharedPtr<FPointIO> operator[](const int32 Index) const { return Pairs[Index]; }
+
+		void IncreaseReserve(int32 InIncreaseNum);
 
 		void StageOutputs();
 		void StageOutputs(const int32 MinPointCount, const int32 MaxPointCount);
@@ -399,14 +408,14 @@ namespace PCGExData
 		void Flush();
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FPointIOTaggedEntries
+	class /*PCGEXTENDEDTOOLKIT_API*/ FPointIOTaggedEntries : public TSharedFromThis<FPointIOTaggedEntries>
 	{
 	public:
 		FString TagId;
-		FString TagValue;
+		IDType TagValue;
 		TArray<TSharedRef<FPointIO>> Entries;
 
-		FPointIOTaggedEntries(const FString& InTagId, const FString& InTagValue)
+		FPointIOTaggedEntries(const FString& InTagId, const IDType& InTagValue)
 			: TagId(InTagId), TagValue(InTagValue)
 		{
 		}
@@ -419,8 +428,8 @@ namespace PCGExData
 	class /*PCGEXTENDEDTOOLKIT_API*/ FPointIOTaggedDictionary
 	{
 	public:
-		FString TagId;
-		TMap<FString, int32> TagMap;
+		FString TagId;             // LeftSide
+		TMap<int32, int32> TagMap; // :RightSize @ Entry Index
 		TArray<TSharedPtr<FPointIOTaggedEntries>> Entries;
 
 		explicit FPointIOTaggedDictionary(const FString& InTagId)
@@ -432,20 +441,79 @@ namespace PCGExData
 
 		bool CreateKey(const TSharedRef<FPointIO>& PointIOKey);
 		bool TryAddEntry(const TSharedRef<FPointIO>& PointIOEntry);
-		TSharedPtr<FPointIOTaggedEntries> GetEntries(const FString& Key);
+		TSharedPtr<FPointIOTaggedEntries> GetEntries(int32 Key);
 	};
 
 	namespace PCGExPointIO
 	{
+		static const UPCGPointData* GetPointData(const FPCGContext* Context, const FPCGTaggedData& Source)
+		{
+			// This is actually creating a transient In that is potentially a new data, this is super bad
+			//const UPCGSpatialData* SpatialData = Cast<UPCGSpatialData>(Source.Data);
+			//if (!SpatialData) { return nullptr; }
+
+			//const UPCGPointData* PointData = SpatialData->ToPointData(const_cast<FPCGContext*>(Context));
+			const UPCGPointData* PointData = Cast<const UPCGPointData>(Source.Data);
+			if (!PointData) { return nullptr; }
+
+			return PointData;
+		}
+
 		static UPCGPointData* GetMutablePointData(const FPCGContext* Context, const FPCGTaggedData& Source)
 		{
-			const UPCGSpatialData* SpatialData = Cast<UPCGSpatialData>(Source.Data);
-			if (!SpatialData) { return nullptr; }
-
-			const UPCGPointData* PointData = SpatialData->ToPointData(const_cast<FPCGContext*>(Context));
+			const UPCGPointData* PointData = GetPointData(Context, Source);
 			if (!PointData) { return nullptr; }
 
 			return const_cast<UPCGPointData*>(PointData);
+		}
+
+		static const UPCGPointData* ToPointData(FPCGExContext* Context, const FPCGTaggedData& Source)
+		{
+			// NOTE : This has a high probability of creating new data on the fly
+			// so it should absolutely not be used to be inherited or duplicated
+			// since it would mean point data that inherit potentially destroyed parents
+			if (const UPCGPointData* RealPointData = Cast<const UPCGPointData>(Source.Data))
+			{
+				return RealPointData;
+			}
+			if (const UPCGSpatialData* SpatialData = Cast<UPCGSpatialData>(Source.Data))
+			{
+				// Currently we support collapsing to point data only, but at some point in the future that might be different
+#if PCGEX_ENGINE_VERSION < 505
+				const UPCGPointData* PointData = Cast<const UPCGSpatialData>(SpatialData)->ToPointData();
+#else
+				const UPCGPointData* PointData = Cast<const UPCGSpatialData>(SpatialData)->ToPointData(Context);
+#endif
+
+				//Keep track of newly created data internally
+				if (PointData != SpatialData) { Context->ManagedObjects->Add(const_cast<UPCGPointData*>(PointData)); }
+				return PointData;
+			}
+#if PCGEX_ENGINE_VERSION > 503
+			if (const UPCGParamData* ParamData = Cast<UPCGParamData>(Source.Data))
+			{
+				const UPCGMetadata* ParamMetadata = ParamData->Metadata;
+
+				const int64 ParamItemCount = ParamMetadata->GetLocalItemCount();
+				if (ParamItemCount == 0) { return nullptr; }
+
+				UPCGPointData* PointData = Context->ManagedObjects->New<UPCGPointData>();
+				check(PointData->Metadata);
+				PointData->Metadata->Initialize(ParamMetadata);
+
+				TArray<FPCGPoint>& Points = PointData->GetMutablePoints();
+				Points.SetNum(ParamItemCount);
+
+				for (int PointIndex = 0; PointIndex < ParamItemCount; ++PointIndex)
+				{
+					Points[PointIndex].MetadataEntry = PointIndex;
+				}
+
+				return PointData;
+			}
+#endif
+
+			return nullptr;
 		}
 	}
 

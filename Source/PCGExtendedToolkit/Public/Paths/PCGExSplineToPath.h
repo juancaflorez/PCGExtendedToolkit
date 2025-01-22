@@ -1,12 +1,12 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PCGExPathProcessor.h"
-
 #include "PCGExPointsProcessor.h"
+
+
 #include "Sampling/PCGExSampleNearestSpline.h"
 #include "Sampling/PCGExSampling.h"
 
@@ -16,6 +16,7 @@
 MACRO(ArriveTangent, FVector, FVector::ZeroVector)\
 MACRO(LeaveTangent, FVector, FVector::ZeroVector)\
 MACRO(LengthAtPoint, double, 0)\
+MACRO(PointType, int32, 0)\
 MACRO(Alpha, double, 0)
 
 /**
@@ -45,7 +46,7 @@ public:
 
 	/** Point transform */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
-	FPCGExTransformDetails TransformDetails = FPCGExTransformDetails(false);
+	FPCGExLeanTransformDetails TransformDetails;
 
 	/** Sample inputs.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable))
@@ -84,21 +85,29 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(DisplayName="Alpha", PCG_Overridable, EditCondition="bWriteAlpha"))
 	FName AlphaAttributeName = FName("Alpha");
 
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bWritePointType = false;
+
+	/** Name of the 'int32' attribute that store the point type. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(DisplayName="Point Type", PCG_Overridable, EditCondition="bWritePointType"))
+	FName PointTypeAttributeName = FName("PointType");
+
 
 	/** */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
 	bool bTagIfClosedLoop = true;
 
 	/** ... */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, EditCondition="bTagIfClosedLoop"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagIfClosedLoop"))
 	FString IsClosedLoopTag = TEXT("ClosedLoop");
 
 	/** */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
 	bool bTagIfOpenSpline = false;
 
 	/** ... */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, EditCondition="bTagIfOpenSpline"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagIfOpenSpline"))
 	FString IsOpenSplineTag = TEXT("OpenPath");
 
 	/** Tags to be forwarded from source splines */
@@ -138,17 +147,19 @@ namespace PCGExSplineToPath
 {
 	const FName SourceSplineLabel = TEXT("Splines");
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteTask final : public PCGExMT::FPCGExIndexedTask
 	{
 	public:
-		FWriteTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
-			: FPCGExTask(InPointIO), PointDataFacade(InPointDataFacade)
+		FWriteTask(const int32 InTaskIndex,
+		           const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
+			: FPCGExIndexedTask(InTaskIndex),
+			  PointDataFacade(InPointDataFacade)
 
 		{
 		}
 
 		TSharedPtr<PCGExData::FFacade> PointDataFacade;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 }

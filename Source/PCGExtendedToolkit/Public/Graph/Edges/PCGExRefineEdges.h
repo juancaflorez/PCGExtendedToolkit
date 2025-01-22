@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -80,9 +80,9 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefineEdgesContext final : FPCGExEdgesPr
 {
 	friend class FPCGExRefineEdgesElement;
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> VtxFilterFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> EdgeFilterFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> SanitizationFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> VtxFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> EdgeFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> SanitizationFilterFactories;
 
 	UPCGExEdgeRefineOperation* Refinement = nullptr;
 
@@ -131,10 +131,10 @@ namespace PCGExRefineEdges
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope) override;
 
-		virtual void PrepareSingleLoopScopeForEdges(const uint32 StartIndex, const int32 Count) override;
-		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count) override;
+		virtual void PrepareSingleLoopScopeForEdges(const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope) override;
 		virtual void OnEdgesProcessingComplete() override;
 		void Sanitize();
 		void InsertEdges() const;
@@ -158,18 +158,16 @@ namespace PCGExRefineEdges
 		virtual void OnProcessingPreparationComplete() override;
 	};
 
-	class FSanitizeRangeTask final : public PCGExMT::FPCGExTask
+	class FSanitizeRangeTask final : public PCGExMT::FScopeIterationTask
 	{
 	public:
-		FSanitizeRangeTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-		                   const TSharedPtr<FProcessor>& InProcessor):
-			FPCGExTask(InPointIO),
+		explicit FSanitizeRangeTask(const TSharedPtr<FProcessor>& InProcessor):
+			FScopeIterationTask(),
 			Processor(InProcessor)
 		{
 		}
 
 		TSharedPtr<FProcessor> Processor;
-		uint64 Scope = 0;
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 }

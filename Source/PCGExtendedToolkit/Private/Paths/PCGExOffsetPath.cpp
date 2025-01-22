@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExOffsetPath.h"
@@ -9,7 +9,7 @@
 #define LOCTEXT_NAMESPACE "PCGExOffsetPathElement"
 #define PCGEX_NAMESPACE OffsetPath
 
-PCGExData::EIOInit UPCGExOffsetPathSettings::GetMainOutputInitMode() const { return bCleanupPath ? PCGExData::EIOInit::New : PCGExData::EIOInit::Duplicate; }
+PCGExData::EIOInit UPCGExOffsetPathSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 PCGEX_INITIALIZE_ELEMENT(OffsetPath)
 
@@ -39,6 +39,7 @@ bool FPCGExOffsetPathElement::ExecuteInternal(FPCGContext* InContext) const
 			{
 				if (Entry->GetNum() < 2)
 				{
+					if (!Settings->bOmitInvalidPathsOutputs) { Entry->InitializeOutput(PCGExData::EIOInit::Forward); }
 					bHasInvalidInputs = true;
 					return false;
 				}
@@ -49,7 +50,7 @@ bool FPCGExOffsetPathElement::ExecuteInternal(FPCGContext* InContext) const
 				//NewBatch->SetPointsFilterData(&Context->FilterFactories);
 			}))
 		{
-			Context->CancelExecution(TEXT("Could not find any paths to shrink."));
+			Context->CancelExecution(TEXT("Could not find any paths to offset."));
 		}
 	}
 
@@ -66,16 +67,12 @@ namespace PCGExOffsetPath
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExOffsetPath::Process);
 
-		if (Settings->OffsetMethod == EPCGExOffsetMethod::Slide)
-		{
-			PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
-		}
-		else
-		{
-			PointDataFacade->bSupportsScopedGet = false;
-		}
+		if (Settings->OffsetMethod == EPCGExOffsetMethod::Slide) { PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet; }
+		else { PointDataFacade->bSupportsScopedGet = false; }
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, Settings->bCleanupPath ? PCGExData::EIOInit::New : PCGExData::EIOInit::Duplicate)
 
 		if (Settings->bInvertDirection) { DirectionFactor *= -1; }
 
@@ -144,18 +141,21 @@ namespace PCGExOffsetPath
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const int32 EdgeIndex = (!Path->IsClosedLoop() && Index == Path->LastIndex) ? Path->LastEdge : Index;
 		Path->ComputeEdgeExtra(EdgeIndex);
 
-		const FVector Dir = (OffsetDirection ? OffsetDirection->Get(EdgeIndex) : DirectionGetter->Read(Index)) * DirectionFactor;
+		FVector Dir = (OffsetDirection ? OffsetDirection->Get(EdgeIndex) : DirectionGetter->Read(Index)) * DirectionFactor;
 		double Offset = (OffsetGetter ? OffsetGetter->Read(Index) : OffsetConstant);
+
+		if (Settings->bApplyPointScaleToOffset) { Dir *= Point.Transform.GetScale3D(); }
 
 		if (Settings->OffsetMethod == EPCGExOffsetMethod::Slide)
 		{
@@ -177,15 +177,15 @@ namespace PCGExOffsetPath
 				}
 			}
 
-			Positions[Index] = Path->GetPosUnsafe(Index) + (Dir * Offset);
+			Positions[Index] = Path->GetPos_Unsafe(Index) + (Dir * Offset);
 		}
 		else
 		{
 			const int32 PrevIndex = Path->SafePointIndex(Index - 1);
 			const FVector PlaneDir = ((OffsetDirection ? OffsetDirection->Get(PrevIndex) : DirectionGetter->Read(PrevIndex)) * DirectionFactor).GetSafeNormal();
-			const FVector PlaneOrigin = Path->GetPosUnsafe(PrevIndex) + (PlaneDir * (OffsetGetter ? OffsetGetter->Read(PrevIndex) : OffsetConstant));
+			const FVector PlaneOrigin = Path->GetPos_Unsafe(PrevIndex) + (PlaneDir * (OffsetGetter ? OffsetGetter->Read(PrevIndex) : OffsetConstant));
 
-			const FVector A = Path->GetPosUnsafe(Index) + (Dir * Offset);
+			const FVector A = Path->GetPos_Unsafe(Index) + (Dir * Offset);
 			const double Dot = FMath::Clamp(FMath::Abs(FVector::DotProduct(Path->DirToPrevPoint(Index), Path->DirToNextPoint(Index))), 0, 1);
 
 
@@ -201,7 +201,7 @@ namespace PCGExOffsetPath
 			}
 		}
 
-
+		if (!PointFilterCache[Index]) { Positions[Index] = Point.Transform.GetLocation(); }
 		if (!Settings->bCleanupPath) { Point.Transform.SetLocation(Positions[Index]); }
 	}
 
@@ -215,14 +215,10 @@ namespace PCGExOffsetPath
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, FlipTestTask)
 
 		FlipTestTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				const TSharedPtr<FProcessor> This = WeakThis.Pin();
-				if (!This) { return; }
-
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++)
+				PCGEX_ASYNC_THIS
+				for (int i = Scope.Start; i < Scope.End; i++)
 				{
 					This->DirtyPath->ComputeEdgeExtra(i);
 					This->CleanEdge[i] = FVector::DotProduct(This->Path->Edges[i].Dir, This->DirtyPath->Edges[i].Dir) > 0;
@@ -260,7 +256,6 @@ namespace PCGExOffsetPath
 		}
 
 		FVector A = FVector::ZeroVector;
-		FVector B = FVector::ZeroVector;
 		FVector MutatedPosition = FVector::ZeroVector;
 
 		DirtyPath->BuildPartialEdgeOctree(CleanEdge);

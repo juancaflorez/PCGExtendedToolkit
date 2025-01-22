@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExPickClosestClusters.h"
@@ -150,58 +150,67 @@ namespace PCGExPickClosestClusters
 
 		if (Settings->SearchMode == EPCGExClusterClosestSearchMode::Edge)
 		{
-			ProcessTargets->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx)
-			{
-				Distances[Index] = MAX_dbl;
-
-				const FPCGPoint& Point = Context->TargetDataFacade->Source->GetInPoint(Index);
-				const FVector TargetLocation = Point.Transform.GetLocation();
-
-				bool bFound = false;
-				Cluster->EdgeOctree->FindElementsWithBoundsTest(
-					FBoxCenterAndExtent(TargetLocation, Point.GetScaledExtents() + FVector(Settings->TargetBoundsExpansion)), [&](const PCGEx::FIndexedItem& Item)
-					{
-						Distances[Index] = FMath::Min(Distances[Index], FVector::DistSquared(TargetLocation, Cluster->GetClosestPointOnEdge(Item.Index, TargetLocation)));
-						bFound = true;
-					});
-				if (!bFound && Settings->bExpandSearchOutsideTargetBounds)
+			ProcessTargets->OnIterationCallback =
+				[PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope)
 				{
-					Cluster->EdgeOctree->FindNearbyElements(
-						TargetLocation, [&](const PCGEx::FIndexedItem& Item)
+					PCGEX_ASYNC_THIS
+
+					This->Distances[Index] = MAX_dbl;
+
+					const FPCGPoint& Point = This->Context->TargetDataFacade->Source->GetInPoint(Index);
+					const FVector TargetLocation = Point.Transform.GetLocation();
+
+					bool bFound = false;
+					This->Cluster->GetEdgeOctree()->FindElementsWithBoundsTest(
+						FBoxCenterAndExtent(TargetLocation, Point.GetScaledExtents() + FVector(This->Settings->TargetBoundsExpansion)),
+						[&](const PCGEx::FIndexedItem& Item)
 						{
-							Distances[Index] = FMath::Min(Distances[Index], FVector::DistSquared(TargetLocation, Cluster->GetPos(Item.Index)));
+							This->Distances[Index] = FMath::Min(This->Distances[Index], FVector::DistSquared(TargetLocation, This->Cluster->GetClosestPointOnEdge(Item.Index, TargetLocation)));
 							bFound = true;
 						});
-				}
-			};
+
+					if (!bFound && This->Settings->bExpandSearchOutsideTargetBounds)
+					{
+						This->Cluster->GetEdgeOctree()->FindNearbyElements(
+							TargetLocation, [&](const PCGEx::FIndexedItem& Item)
+							{
+								This->Distances[Index] = FMath::Min(This->Distances[Index], FVector::DistSquared(TargetLocation, This->Cluster->GetPos(Item.Index)));
+								bFound = true;
+							});
+					}
+				};
 		}
 		else
 		{
-			ProcessTargets->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx)
-			{
-				Distances[Index] = MAX_dbl;
-
-				const FPCGPoint& Point = Context->TargetDataFacade->Source->GetInPoint(Index);
-				const FVector TargetLocation = Point.Transform.GetLocation();
-
-				bool bFound = false;
-				Cluster->NodeOctree->FindElementsWithBoundsTest(
-					FBoxCenterAndExtent(TargetLocation, Point.GetScaledExtents() + FVector(Settings->TargetBoundsExpansion)), [&](const PCGEx::FIndexedItem& Item)
-					{
-						Distances[Index] = FMath::Min(Distances[Index], FVector::DistSquared(TargetLocation, Cluster->GetPos(Item.Index)));
-						bFound = true;
-					});
-
-				if (!bFound && Settings->bExpandSearchOutsideTargetBounds)
+			ProcessTargets->OnIterationCallback =
+				[PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope)
 				{
-					Cluster->NodeOctree->FindNearbyElements(
-						TargetLocation, [&](const PCGEx::FIndexedItem& Item)
+					PCGEX_ASYNC_THIS
+
+					This->Distances[Index] = MAX_dbl;
+
+					const FPCGPoint& Point = This->Context->TargetDataFacade->Source->GetInPoint(Index);
+					const FVector TargetLocation = Point.Transform.GetLocation();
+
+					bool bFound = false;
+					This->Cluster->NodeOctree->FindElementsWithBoundsTest(
+						FBoxCenterAndExtent(TargetLocation, Point.GetScaledExtents() + FVector(This->Settings->TargetBoundsExpansion)),
+						[&](const PCGEx::FIndexedItem& Item)
 						{
-							Distances[Index] = FMath::Min(Distances[Index], FVector::DistSquared(TargetLocation, Cluster->GetPos(Item.Index)));
+							This->Distances[Index] = FMath::Min(This->Distances[Index], FVector::DistSquared(TargetLocation, This->Cluster->GetPos(Item.Index)));
 							bFound = true;
 						});
-				}
-			};
+
+					if (!bFound && This->Settings->bExpandSearchOutsideTargetBounds)
+					{
+						This->Cluster->NodeOctree->FindNearbyElements(
+							TargetLocation, [&](const PCGEx::FIndexedItem& Item)
+							{
+								This->Distances[Index] = FMath::Min(This->Distances[Index], FVector::DistSquared(TargetLocation, This->Cluster->GetPos(Item.Index)));
+								bFound = true;
+							});
+					}
+				};
 		}
 
 		ProcessTargets->StartIterations(NumTargets, 256);
@@ -215,22 +224,22 @@ namespace PCGExPickClosestClusters
 		{
 			if (Picker == -1)
 			{
-				EdgeDataFacade->Source->Tags->Add(Context->OmitTag);
+				EdgeDataFacade->Source->Tags->AddRaw(Context->OmitTag);
 				return;
 			}
 
-			EdgeDataFacade->Source->Tags->Add(Context->KeepTag);
+			EdgeDataFacade->Source->Tags->AddRaw(Context->KeepTag);
 		}
 
 		if (!Settings->TargetForwarding.bEnabled)
 		{
-			EdgeDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward);
-			if (!VtxDataFacade->Source->GetOut()) { VtxDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward); }
+			PCGEX_INIT_IO_VOID(EdgeDataFacade->Source, PCGExData::EIOInit::Forward)
+			if (!VtxDataFacade->Source->GetOut()) { PCGEX_INIT_IO_VOID(VtxDataFacade->Source, PCGExData::EIOInit::Forward) }
 		}
 		else
 		{
-			EdgeDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Duplicate);
-			if (!VtxDataFacade->Source->GetOut()) { VtxDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Duplicate); }
+			PCGEX_INIT_IO_VOID(EdgeDataFacade->Source, PCGExData::EIOInit::Duplicate)
+			if (!VtxDataFacade->Source->GetOut()) { PCGEX_INIT_IO_VOID(VtxDataFacade->Source, PCGExData::EIOInit::Duplicate) }
 
 			Context->TargetForwardHandler->Forward(Picker, EdgeDataFacade);
 			Context->TargetForwardHandler->Forward(Picker, VtxDataFacade);
@@ -252,9 +261,12 @@ namespace PCGExPickClosestClusters
 
 		if (Stg->Action == EPCGExFilterDataAction::Omit) { if (Picks == MaxPicks) { return; } }
 		else if (Stg->Action == EPCGExFilterDataAction::Keep) { if (Picks == 0) { return; } }
+		else
+		{
+			if (Picks > 0) { VtxDataFacade->Source->Tags->AddRaw(Ctx->KeepTag); }
+			else { VtxDataFacade->Source->Tags->AddRaw(Ctx->OmitTag); }
+		}
 
-		if (Picks > 0) { VtxDataFacade->Source->Tags->Add(Ctx->KeepTag); }
-		else { VtxDataFacade->Source->Tags->Add(Ctx->OmitTag); }
 
 		TBatch<FProcessor>::Output();
 	}

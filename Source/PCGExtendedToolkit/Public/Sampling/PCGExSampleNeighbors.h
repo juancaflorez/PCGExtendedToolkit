@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -15,7 +15,7 @@ namespace PCGExNeighborSample
 	struct FNeighbor;
 }
 
-class UPCGExNeighborSamplerFactoryBase;
+class UPCGExNeighborSamplerFactoryData;
 class UPCGExNeighborSampleOperation;
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
@@ -51,7 +51,7 @@ private:
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNeighborsContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExSampleNeighborsElement;
-	TArray<TObjectPtr<const UPCGExNeighborSamplerFactoryBase>> SamplerFactories;
+	TArray<TObjectPtr<const UPCGExNeighborSamplerFactoryData>> SamplerFactories;
 };
 
 class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNeighborsElement final : public FPCGExEdgesProcessorElement
@@ -83,8 +83,8 @@ namespace PCGExSampleNeighbors
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 Count) override;
-		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 	};

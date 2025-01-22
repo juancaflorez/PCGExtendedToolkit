@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExBevelPath.h"
@@ -91,7 +91,7 @@ bool FPCGExBevelPathElement::ExecuteInternal(FPCGContext* InContext) const
 					bHasInvalidInputs = true;
 					return false;
 				}
-				
+
 				if (Entry->GetNum() < 3)
 				{
 					Entry->InitializeOutput(PCGExData::EIOInit::Duplicate);
@@ -203,7 +203,7 @@ namespace PCGExBevelPath
 		else { SubdivideArc(Amount, InProcessor->bSubdivideCount); }
 	}
 
-	void FBevel::SubdivideLine(const double Factor, const double bIsCount)
+	void FBevel::SubdivideLine(const double Factor, const bool bIsCount)
 	{
 		const double Dist = FVector::Dist(Arrive, Leave);
 		const FVector Dir = (Leave - Arrive).GetSafeNormal();
@@ -228,7 +228,7 @@ namespace PCGExBevelPath
 		for (int i = 0; i < SubdivCount; i++) { Subdivisions[i] = Arrive + Dir * (StepSize + i * StepSize); }
 	}
 
-	void FBevel::SubdivideArc(const double Factor, const double bIsCount)
+	void FBevel::SubdivideArc(const double Factor, const bool bIsCount)
 	{
 		const PCGExGeo::FExCenterArc Arc = PCGExGeo::FExCenterArc(Arrive, Corner, Leave);
 
@@ -325,11 +325,10 @@ namespace PCGExBevelPath
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, Preparation)
 
-		TWeakPtr<FProcessor> WeakPtr = SharedThis(this);
-		Preparation->OnCompleteCallback = [WeakPtr]()
-		{
-			if (const TSharedPtr<FProcessor> This = WeakPtr.Pin())
+		Preparation->OnCompleteCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
+				PCGEX_ASYNC_THIS
 				if (!This->bClosedLoop)
 				{
 					// Ensure bevel is disabled on start/end points
@@ -338,18 +337,15 @@ namespace PCGExBevelPath
 				}
 
 				This->StartParallelLoopForPoints(PCGExData::ESource::In);
-			}
-		};
+			};
+
 		Preparation->OnSubLoopStartCallback =
-			[WeakPtr](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				const TSharedPtr<FProcessor> This = WeakPtr.Pin();
-				if (!This) { return; }
+				PCGEX_ASYNC_THIS
 
-				This->PointDataFacade->Fetch(StartIndex, Count);
-				This->FilterScope(StartIndex, Count);
-
-				const int32 MaxIndex = StartIndex + Count;
+				This->PointDataFacade->Fetch(Scope);
+				This->FilterScope(Scope);
 
 				if (!This->bClosedLoop)
 				{
@@ -358,7 +354,7 @@ namespace PCGExBevelPath
 					This->PointFilterCache[This->PointFilterCache.Num() - 1] = false;
 				}
 
-				for (int i = StartIndex; i < MaxIndex; i++)
+				for (int i = Scope.Start; i < Scope.End; i++)
 				{
 					if (!This->PointFilterCache[i]) { continue; }
 					This->Bevels[i] = MakeShared<FBevel>(i, This.Get()); // no need for SharedThis
@@ -370,7 +366,7 @@ namespace PCGExBevelPath
 		return true;
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const TSharedPtr<FBevel>& Bevel = Bevels[Index];
 		if (!Bevel) { return; }
@@ -378,7 +374,7 @@ namespace PCGExBevelPath
 		Bevel->Compute(this);
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		const int32 StartIndex = StartIndices[Iteration];
 
@@ -467,12 +463,12 @@ namespace PCGExBevelPath
 
 		if (NumBevels == 0)
 		{
-			PointIO->InitializeOutput(PCGExData::EIOInit::Duplicate);
+			PCGEX_INIT_IO_VOID(PointIO, PCGExData::EIOInit::Duplicate)
 			Settings->InitOutputFlags(PointIO);
 			return;
 		}
 
-		PointIO->InitializeOutput(PCGExData::EIOInit::New);
+		PCGEX_INIT_IO_VOID(PointIO, PCGExData::EIOInit::New)
 		Settings->InitOutputFlags(PointIO);
 
 		// Build output points
@@ -507,19 +503,17 @@ namespace PCGExBevelPath
 
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, WriteFlagsTask)
 		WriteFlagsTask->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (const TSharedPtr<FProcessor> This = WeakThis.Pin()) { This->PointDataFacade->Write(This->AsyncManager); }
+				PCGEX_ASYNC_THIS
+				This->PointDataFacade->Write(This->AsyncManager);
 			};
-		WriteFlagsTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-			{
-				const TSharedPtr<FProcessor> This = WeakThis.Pin();
-				if (!This) { return; }
 
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++)
+		WriteFlagsTask->OnSubLoopStartCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
+			{
+				PCGEX_ASYNC_THIS
+				for (int i = Scope.Start; i < Scope.End; i++)
 				{
 					if (!This->PointFilterCache[i]) { continue; }
 					This->WriteFlags(i);

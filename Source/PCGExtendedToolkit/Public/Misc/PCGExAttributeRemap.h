@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -8,7 +8,6 @@
 #include "PCGEx.h"
 #include "PCGExGlobalSettings.h"
 #include "PCGExPointsProcessor.h"
-#include "PCGExDetails.h"
 #include "Data/PCGExAttributeHelpers.h"
 
 
@@ -68,23 +67,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 
 	FPCGExRemapDetails()
 	{
-	}
-
-	FPCGExRemapDetails(const FPCGExRemapDetails& Other):
-		bUseAbsoluteRange(Other.bUseAbsoluteRange),
-		bPreserveSign(Other.bPreserveSign),
-		bUseInMin(Other.bUseInMin),
-		InMin(Other.InMin),
-		CachedInMin(Other.InMin),
-		bUseInMax(Other.bUseInMax),
-		InMax(Other.InMax),
-		CachedInMax(Other.InMax),
-		RangeMethod(Other.RangeMethod),
-		Scale(Other.Scale),
-		RemapCurveObj(Other.RemapCurveObj),
-		TruncateOutput(Other.TruncateOutput),
-		PostTruncateScale(Other.PostTruncateScale)
-	{
+		LocalScoreCurve.EditorCurveData.AddKey(0, 0);
+		LocalScoreCurve.EditorCurveData.AddKey(1, 1);
 	}
 
 	~FPCGExRemapDetails()
@@ -106,7 +90,6 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 	/** Fixed In Min value. If disabled, will use the lowest input value.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bUseInMin"))
 	double InMin = 0;
-	double CachedInMin = 0;
 
 	/** Fixed In Max value. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
@@ -115,7 +98,6 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 	/** Fixed In Max value. If disabled, will use the highest input value.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bUseInMax"))
 	double InMax = 0;
-	double CachedInMax = 0;
 
 	/** How to remap before sampling the curve. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
@@ -125,12 +107,18 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	double Scale = 1;
 
-	UPROPERTY(EditAnywhere, Category = Settings, BlueprintReadWrite)
+	/** Whether to use in-editor curve or an external asset. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	bool bUseLocalCurve = false;
+
+	// TODO: DirtyCache for OnDependencyChanged when this float curve is an external asset
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NotOverridable, DisplayName="Remap Curve", EditCondition = "bUseLocalCurve", EditConditionHides))
+	FRuntimeFloatCurve LocalScoreCurve;
+
+	UPROPERTY(EditAnywhere, Category = Settings, BlueprintReadWrite, meta =(PCG_Overridable, DisplayName="Remap Curve", EditCondition = "!bUseLocalCurve", EditConditionHides))
 	TSoftObjectPtr<UCurveFloat> RemapCurve = TSoftObjectPtr<UCurveFloat>(PCGEx::WeightDistributionLinear);
 
-	UPROPERTY(Transient)
-	TObjectPtr<UCurveFloat> RemapCurveObj = nullptr;
-
+	const FRichCurve* RemapCurveObj = nullptr;
 
 	/** Whether and how to truncate output value. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
@@ -140,15 +128,16 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="TruncateOutput != EPCGExTruncateMode::None", EditConditionHides))
 	double PostTruncateScale = 1;
 
-	void LoadCurve()
+	void Init()
 	{
-		PCGEX_LOAD_SOFTOBJECT(UCurveFloat, RemapCurve, RemapCurveObj, PCGEx::WeightDistributionLinear)
+		if (!bUseLocalCurve) { LocalScoreCurve.ExternalCurve = RemapCurve.Get(); }
+		RemapCurveObj = LocalScoreCurve.GetRichCurveConst();
 	}
 
 	FORCEINLINE double GetRemappedValue(const double Value) const
 	{
 		return PCGEx::TruncateDbl(
-			RemapCurveObj->GetFloatValue(PCGExMath::Remap(Value, InMin, InMax, 0, 1)) * Scale,
+			RemapCurveObj->Eval(PCGExMath::Remap(Value, InMin, InMax, 0, 1)) * Scale,
 			TruncateOutput);
 	}
 };
@@ -178,8 +167,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExComponentRemapRule
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExClampDetails OutputClampDetails;
 
-	TArray<double> MinCache;
-	TArray<double> MaxCache;
+	TSharedPtr<PCGExMT::TScopedValue<double>> MinCache;
+	TSharedPtr<PCGExMT::TScopedValue<double>> MaxCache;
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
@@ -216,24 +205,24 @@ public:
 	FPCGExComponentRemapRule BaseRemap;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent2;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bOverrideComponent2", DisplayName="Remap (2nd Component)"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent2", DisplayName="Remap (2nd Component)"))
 	FPCGExComponentRemapRule Component2RemapOverride;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent3;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bOverrideComponent3", DisplayName="Remap (3rd Component)"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent3", DisplayName="Remap (3rd Component)"))
 	FPCGExComponentRemapRule Component3RemapOverride;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent4;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bOverrideComponent4", DisplayName="Remap (4th Component)"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent4", DisplayName="Remap (4th Component)"))
 	FPCGExComponentRemapRule Component4RemapOverride;
 
 private:
@@ -246,6 +235,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRemapContext final : FPCGExPoin
 
 	FPCGExComponentRemapRule RemapSettings[4];
 	int32 RemapIndices[4];
+
+	virtual void RegisterAssetDependencies() override;
 };
 
 class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRemapElement final : public FPCGExPointsProcessorElement
@@ -258,6 +249,7 @@ public:
 
 protected:
 	virtual bool Boot(FPCGExContext* InContext) const override;
+	virtual void PostLoadAssetsDependencies(FPCGExContext* InContext) const override;
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
 };
 
@@ -284,7 +276,7 @@ namespace PCGExAttributeRemap
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
 
 		template <typename T>
-		void RemapRange(const int32 StartIndex, const int32 Count, T DummyValue)
+		void RemapRange(const PCGExMT::FScope& Scope, T DummyValue)
 		{
 			TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExAttributeRemap::RemapRange);
 
@@ -300,7 +292,7 @@ namespace PCGExAttributeRemap
 				{
 					if (Rule.RemapDetails.bPreserveSign)
 					{
-						for (int i = StartIndex; i < StartIndex + Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
 							T& V = Writer->GetMutable(i);
 							VAL = PCGExMath::GetComponent(V, d);
@@ -312,7 +304,7 @@ namespace PCGExAttributeRemap
 					}
 					else
 					{
-						for (int i = StartIndex; i < StartIndex + Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
 							T& V = Writer->GetMutable(i);
 							VAL = PCGExMath::GetComponent(V, d);
@@ -327,7 +319,7 @@ namespace PCGExAttributeRemap
 				{
 					if (Rule.RemapDetails.bPreserveSign)
 					{
-						for (int i = StartIndex; i < StartIndex + Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
 							T& V = Writer->GetMutable(i);
 							VAL = PCGExMath::GetComponent(V, d);
@@ -339,7 +331,7 @@ namespace PCGExAttributeRemap
 					}
 					else
 					{
-						for (int i = StartIndex; i < StartIndex + Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
 							T& V = Writer->GetMutable(i);
 							VAL = PCGExMath::GetComponent(V, d);

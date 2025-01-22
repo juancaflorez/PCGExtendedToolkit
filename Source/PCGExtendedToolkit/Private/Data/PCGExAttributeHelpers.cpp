@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Data/PCGExAttributeHelpers.h"
@@ -31,6 +31,38 @@ bool FPCGExInputConfig::Validate(const UPCGPointData* InData)
 	return false;
 }
 
+bool FPCGExAttributeSourceToTargetDetails::ValidateNames(FPCGExContext* InContext) const
+{
+	PCGEX_VALIDATE_NAME_C(InContext, Source)
+	if (bOutputToDifferentName) { PCGEX_VALIDATE_NAME_C(InContext, Target) }
+	return true;
+}
+
+bool FPCGExAttributeSourceToTargetList::ValidateNames(FPCGExContext* InContext) const
+{
+	for (const FPCGExAttributeSourceToTargetDetails& Entry : Attributes) { if (!Entry.ValidateNames(InContext)) { return false; } }
+	return true;
+}
+
+void FPCGExAttributeSourceToTargetList::SetOutputTargetNames(const TSharedRef<PCGExData::FFacade>& InFacade) const
+{
+	for (const FPCGExAttributeSourceToTargetDetails& Entry : Attributes)
+	{
+		if (!Entry.bOutputToDifferentName) { continue; }
+
+		const TSharedPtr<PCGExData::FBufferBase> Buffer = InFacade->FindWritableAttributeBuffer(Entry.Source);
+		if (!Buffer) { continue; }
+
+		Buffer->SetTargetOutputName(Entry.Target);
+	}
+}
+
+void FPCGExAttributeSourceToTargetList::GetSources(TArray<FName>& OutNames) const
+{
+	OutNames.Reserve(OutNames.Num() + Attributes.Num());
+	for (const FPCGExAttributeSourceToTargetDetails& Entry : Attributes) { OutNames.Add(Entry.Source); }
+}
+
 namespace PCGEx
 {
 	void FAttributeIdentity::Get(const UPCGMetadata* InMetadata, TArray<FAttributeIdentity>& OutIdentities)
@@ -58,6 +90,21 @@ namespace PCGEx
 			FName Name = OutNames[i];
 			OutIdentities.Add(Name, FAttributeIdentity(Name, Types[i], InMetadata->GetConstAttribute(Name)->AllowsInterpolation()));
 		}
+	}
+
+	int32 FAttributeIdentity::ForEach(const UPCGMetadata* InMetadata, FForEachFunc&& Func)
+	{
+		if (!InMetadata) { return 0; }
+		TArray<FName> Names;
+		TArray<EPCGMetadataTypes> Types;
+		InMetadata->GetAttributes(Names, Types);
+		const int32 NumAttributes = Names.Num();
+		for (int i = 0; i < NumAttributes; i++)
+		{
+			const FAttributeIdentity Identity = FAttributeIdentity(Names[i], Types[i], InMetadata->GetConstAttribute(Names[i])->AllowsInterpolation());
+			Func(Identity, i);
+		}
+		return NumAttributes;
 	}
 
 	bool FAttributesInfos::Contains(const FName AttributeName, const EPCGMetadataTypes Type)
@@ -167,7 +214,7 @@ namespace PCGEx
 
 	TSharedPtr<FAttributesInfos> FAttributesInfos::Get(const UPCGMetadata* InMetadata, const TSet<FName>* IgnoredAttributes)
 	{
-		TSharedPtr<FAttributesInfos> NewInfos = MakeShared<FAttributesInfos>();
+		PCGEX_MAKE_SHARED(NewInfos, FAttributesInfos)
 		FAttributeIdentity::Get(InMetadata, NewInfos->Identities);
 
 		UPCGMetadata* MutableData = const_cast<UPCGMetadata*>(InMetadata);
@@ -183,7 +230,7 @@ namespace PCGEx
 
 	TSharedPtr<FAttributesInfos> FAttributesInfos::Get(const TSharedPtr<PCGExData::FPointIOCollection>& InCollection, TSet<FName>& OutTypeMismatch, const TSet<FName>* IgnoredAttributes)
 	{
-		TSharedPtr<FAttributesInfos> NewInfos = MakeShared<FAttributesInfos>();
+		PCGEX_MAKE_SHARED(NewInfos, FAttributesInfos)
 		for (const TSharedPtr<PCGExData::FPointIO>& IO : InCollection->Pairs)
 		{
 			TSharedPtr<FAttributesInfos> Infos = Get(IO->GetIn()->Metadata, IgnoredAttributes);

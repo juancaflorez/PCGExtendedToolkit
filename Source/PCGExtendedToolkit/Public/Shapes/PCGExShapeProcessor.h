@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,7 +12,7 @@
 
 #include "PCGExShapeProcessor.generated.h"
 
-class UPCGExFilterFactoryBase;
+class UPCGExFilterFactoryData;
 /**
  * 
  */
@@ -46,7 +46,7 @@ public:
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShapeProcessorContext : FPCGExPointsProcessorContext
 {
 	friend class FPCGExShapeProcessorElement;
-	TArray<TObjectPtr<const UPCGExShapeBuilderFactoryBase>> BuilderFactories;
+	TArray<TObjectPtr<const UPCGExShapeBuilderFactoryData>> BuilderFactories;
 };
 
 class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShapeProcessorElement : public FPCGExPointsProcessorElement

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfinding.h"
@@ -78,7 +78,9 @@ namespace PCGExPathfinding
 			return;
 		}
 
-		if (SearchOperation->ResolveQuery(SharedThis(this), HeuristicsHandler, LocalFeedback))
+		PCGEX_SHARED_THIS_DECL
+
+		if (SearchOperation->ResolveQuery(ThisPtr, HeuristicsHandler, LocalFeedback))
 		{
 			SetResolution(HasValidPathPoints() ? EPathfindingResolution::Success : EPathfindingResolution::Fail);
 		}
@@ -154,7 +156,8 @@ namespace PCGExPathfinding
 		TSharedPtr<FPathQuery> PrevQuery = MakeShared<FPathQuery>(
 			Cluster,
 			PlotFacade->Source->GetInPointRef(0),
-			PlotFacade->Source->GetInPointRef(1));
+			PlotFacade->Source->GetInPointRef(1),
+			0);
 
 		PrevQuery->ResolvePicks(SeedSelectionDetails, GoalSelectionDetails);
 
@@ -162,7 +165,7 @@ namespace PCGExPathfinding
 
 		for (int i = 2; i < PlotFacade->GetNum(); i++)
 		{
-			TSharedPtr<FPathQuery> NextQuery = MakeShared<FPathQuery>(Cluster, PrevQuery, PlotFacade->Source->GetInPointRef(i));
+			TSharedPtr<FPathQuery> NextQuery = MakeShared<FPathQuery>(Cluster, PrevQuery, PlotFacade->Source->GetInPointRef(i), i - 1);
 			NextQuery->ResolvePicks(SeedSelectionDetails, GoalSelectionDetails);
 
 			SubQueries.Add(NextQuery);
@@ -171,7 +174,7 @@ namespace PCGExPathfinding
 
 		if (bIsClosedLoop)
 		{
-			TSharedPtr<FPathQuery> WrapQuery = MakeShared<FPathQuery>(Cluster, SubQueries.Last(), SubQueries[0]);
+			TSharedPtr<FPathQuery> WrapQuery = MakeShared<FPathQuery>(Cluster, SubQueries.Last(), SubQueries[0], PlotFacade->GetNum());
 			WrapQuery->ResolvePicks(SeedSelectionDetails, GoalSelectionDetails);
 			SubQueries.Add(WrapQuery);
 		}
@@ -187,23 +190,18 @@ namespace PCGExPathfinding
 		LocalFeedbackHandler = HeuristicsHandler->MakeLocalFeedbackHandler(Cluster);
 
 		PlotTasks->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FPlotQuery>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (const TSharedPtr<FPlotQuery> This = WeakThis.Pin())
-				{
-					This->LocalFeedbackHandler.Reset();
-					if (This->OnCompleteCallback) { This->OnCompleteCallback(This); }
-				}
+				PCGEX_ASYNC_THIS
+				This->LocalFeedbackHandler.Reset();
+				if (This->OnCompleteCallback) { This->OnCompleteCallback(This); }
 			};
 
 		PlotTasks->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FPlotQuery>(SharedThis(this)), SearchOperation, HeuristicsHandler]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE, SearchOperation, HeuristicsHandler](const PCGExMT::FScope& Scope)
 			{
-				TSharedPtr<FPlotQuery> This = WeakThis.Pin();
-				if (!This) { return; }
-
-				This->SubQueries[StartIndex]->FindPath(SearchOperation, HeuristicsHandler, This->LocalFeedbackHandler);
+				PCGEX_ASYNC_THIS
+				This->SubQueries[Scope.Start]->FindPath(SearchOperation, HeuristicsHandler, This->LocalFeedbackHandler);
 			};
 
 		PlotTasks->StartSubLoops(SubQueries.Num(), 1, HeuristicsHandler->HasAnyFeedback());

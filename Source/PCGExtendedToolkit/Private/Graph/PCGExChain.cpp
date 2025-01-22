@@ -1,10 +1,8 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExChain.h"
-
 #include "Graph/PCGExCluster.h"
-#include "Geometry/PCGExGeo.h"
 
 namespace PCGExCluster
 {
@@ -144,7 +142,7 @@ namespace PCGExCluster
 			if (Node->IsEmpty()) { continue; }
 			if (Node->IsLeaf())
 			{
-				TSharedPtr<FNodeChain> NewChain = MakeShared<FNodeChain>(FLink(Node->Index, Node->Links[0].Edge));
+				PCGEX_MAKE_SHARED(NewChain, FNodeChain, FLink(Node->Index, Node->Links[0].Edge))
 				Chains.Add(NewChain);
 				continue;
 			}
@@ -158,7 +156,7 @@ namespace PCGExCluster
 					// Skip immediately known leaves or already seeded nodes. Avoid double-sampling simple cases
 					if (Cluster->GetNode(Lk.Node)->IsLeaf()) { continue; }
 
-					TSharedPtr<FNodeChain> NewChain = MakeShared<FNodeChain>(FLink(Node->Index, Lk.Edge));
+					PCGEX_MAKE_SHARED(NewChain, FNodeChain, FLink(Node->Index, Lk.Edge))
 					Chains.Add(NewChain);
 				}
 			}
@@ -179,7 +177,7 @@ namespace PCGExCluster
 			ensure(!Node->IsEmpty());
 			if (!Node->IsLeaf() || Node->IsEmpty()) { continue; }
 
-			TSharedPtr<FNodeChain> NewChain = MakeShared<FNodeChain>(FLink(Node->Index, Node->Links[0].Edge));
+			PCGEX_MAKE_SHARED(NewChain, FNodeChain, FLink(Node->Index, Node->Links[0].Edge))
 			Chains.Add(NewChain);
 		}
 
@@ -193,21 +191,21 @@ namespace PCGExCluster
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, ChainSearchTask)
 
 		ChainSearchTask->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FNodeChainBuilder>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (const TSharedPtr<FNodeChainBuilder> This = WeakThis.Pin()) { This->Dedupe(); }
-			};
-		ChainSearchTask->OnIterationCallback =
-			[WeakThis = TWeakPtr<FNodeChainBuilder>(SharedThis(this))]
-			(const int32 Index, const int32 Count, const int32 LoopIdx)
-			{
-				if (const TSharedPtr<FNodeChainBuilder> This = WeakThis.Pin())
-				{
-					This->Chains[Index]->BuildChain(This->Cluster, This->Breakpoints);
-				}
+				PCGEX_ASYNC_THIS
+				This->Dedupe();
 			};
 
-		ChainSearchTask->StartIterations(Chains.Num(), 64, false, false);
+		ChainSearchTask->OnIterationCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE]
+			(const int32 Index, const PCGExMT::FScope& Scope)
+			{
+				PCGEX_ASYNC_THIS
+				This->Chains[Index]->BuildChain(This->Cluster, This->Breakpoints);
+			};
+
+		ChainSearchTask->StartIterations(Chains.Num(), 64, false);
 		return true;
 	}
 

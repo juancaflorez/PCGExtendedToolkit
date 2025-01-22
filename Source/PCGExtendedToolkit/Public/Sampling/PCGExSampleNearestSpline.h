@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -21,13 +21,14 @@ MACRO(LookAtTransform, FTransform, FTransform::Identity)\
 MACRO(Distance, double, 0)\
 MACRO(Depth, double, -1)\
 MACRO(SignedDistance, double, 0)\
+MACRO(ComponentWiseDistance, FVector, FVector::ZeroVector)\
 MACRO(Angle, double, 0)\
 MACRO(Time, double, 0)\
 MACRO(NumInside, int32, 0)\
 MACRO(NumSamples, int32, 0)\
 MACRO(ClosedLoop, bool, false)
 
-class UPCGExFilterFactoryBase;
+class UPCGExFilterFactoryData;
 
 UENUM()
 enum class EPCGExSplineSamplingIncludeMode : uint8
@@ -43,6 +44,14 @@ enum class EPCGExSplineDepthMode : uint8
 	Min     = 0 UMETA(DisplayName = "Min", ToolTip="..."),
 	Max     = 1 UMETA(DisplayName = "Max", ToolTip="..."),
 	Average = 2 UMETA(DisplayName = "Average", ToolTip="..."),
+};
+
+UENUM()
+enum class EPCGExSplineSampleAlphaMode : uint8
+{
+	Alpha    = 0 UMETA(DisplayName = "Alpha", ToolTip="0 - 1 value"),
+	Time     = 1 UMETA(DisplayName = "Time", ToolTip="0 - N value, where N is the number of segments"),
+	Distance = 2 UMETA(DisplayName = "Distance", ToolTip="Distance on the simple to sample value at"),
 };
 
 namespace PCGExPolyLine
@@ -90,7 +99,7 @@ namespace PCGExPolyLine
  * Use PCGExSampling to manipulate the outgoing attributes instead of handling everything here.
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
-UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
+UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
 class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleNearestSplineSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
@@ -112,7 +121,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	virtual int32 GetPreferredChunkSize() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -152,6 +160,32 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, EditCondition="bUseLocalRangeMax"))
 	FPCGAttributePropertyInputSelector LocalRangeMax;
 
+
+	/** Whether spline should be sampled at a specific alpha */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable))
+	bool bSampleSpecificAlpha = false;
+
+	/** Where to read the sampling alpha from. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, EditCondition="bSampleSpecificAlpha", EditConditionHides))
+	EPCGExInputValueType SampleAlphaInput = EPCGExInputValueType::Constant;
+
+	/** How to interpret the sample alpha value. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Mode", EditCondition="bSampleSpecificAlpha", EditConditionHides))
+	EPCGExSplineSampleAlphaMode SampleAlphaMode = EPCGExSplineSampleAlphaMode::Alpha;
+
+	/** Whether to wrap out of bounds value on closed loops. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Wrap Closed Loops", EditCondition="bSampleSpecificAlpha", EditConditionHides))
+	bool bWrapClosedLoopAlpha = true;
+
+	/** Per-point sample alpha -- Will be translated to `double` under the hood. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha (Attr)", EditCondition="bSampleSpecificAlpha&&SampleAlphaInput!=EPCGExInputValueType::Constant", EditConditionHides))
+	FPCGAttributePropertyInputSelector SampleAlphaAttribute;
+
+	/** Constant sample alpha. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha", EditCondition="bSampleSpecificAlpha&&SampleAlphaInput==EPCGExInputValueType::Constant", EditConditionHides))
+	double SampleAlphaConstant = 0.5;
+
+
 	/** Distance method to be used for source points. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable))
 	EPCGExDistance DistanceSettings = EPCGExDistance::Center;
@@ -160,8 +194,17 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Weighting", meta=(PCG_Overridable))
 	EPCGExRangeType WeightMethod = EPCGExRangeType::FullRange;
 
+	/** Whether to use in-editor curve or an external asset. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_NotOverridable))
+	bool bUseLocalCurve = false;
+
+	// TODO: DirtyCache for OnDependencyChanged when this float curve is an external asset
 	/** Curve that balances weight over distance */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Weighting", meta=(PCG_Overridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta = (PCG_NotOverridable, DisplayName="Weight Over Distance", EditCondition = "bUseLocalCurve", EditConditionHides))
+	FRuntimeFloatCurve LocalWeightOverDistance;
+
+	/** Curve that balances weight over distance */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, EditCondition="!bUseLocalCurve", EditConditionHides))
 	TSoftObjectPtr<UCurveFloat> WeightOverDistance;
 
 	/** Write whether the sampling was sucessful or not to a boolean attribute. */
@@ -217,6 +260,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="Distance", PCG_Overridable, EditCondition="bWriteDistance"))
 	FName DistanceAttributeName = FName("WeightedDistance");
 
+	/** Whether to output normalized distance or not*/
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Normalized", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
+	bool bOutputNormalizedDistance = false;
+
 	/** Write the sampled Signed distance. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteSignedDistance = false;
@@ -232,6 +279,18 @@ public:
 	/** Only sign the distance if at least one sampled spline is a bClosedLoop spline. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Only if Closed Spline", EditCondition="bWriteSignedDistance && SampleInputs==EPCGExSplineSamplingIncludeMode::All", EditConditionHides, HideEditConditionToggle))
 	bool bOnlySignIfClosed = false;
+
+	/** Write the sampled component-wise distance. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bWriteComponentWiseDistance = false;
+
+	/** Name of the 'FVector' attribute to write component-wise distance to.*/
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="Component Wise Distance", PCG_Overridable, EditCondition="bWriteComponentWiseDistance"))
+	FName ComponentWiseDistanceAttributeName = FName("CWDistance");
+
+	/** Whether to output absolute or signed component wise distances */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Absolute", EditCondition="bWriteComponentWiseDistance", EditConditionHides, HideEditConditionToggle))
+	bool bAbsoluteComponentWiseDistance = true;
 
 	/** Write the sampled angle. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -305,18 +364,18 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" └─ Mode", EditCondition="bWriteDepth", EditConditionHides, HideEditConditionToggle))
 	EPCGExSplineDepthMode DepthMode = EPCGExSplineDepthMode::Min;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
 	bool bTagIfHasSuccesses = false;
 
 	/** If enabled, add the specified tag to the output data if at least a single spline has been sampled.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, EditCondition="bTagIfHasSuccesses"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagIfHasSuccesses"))
 	FString HasSuccessesTag = TEXT("HasSuccesses");
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
 	bool bTagIfHasNoSuccesses = false;
 
 	/** If enabled, add the specified tag to the output data if no spline was found within range.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, EditCondition="bTagIfHasNoSuccesses"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagIfHasNoSuccesses"))
 	FString HasNoSuccessesTag = TEXT("HasNoSuccesses");
 
 	//
@@ -337,14 +396,18 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSplineContext final : FPCGE
 	TSharedPtr<PCGExDetails::FDistances> DistanceDetails;
 
 	TArray<const UPCGSplineData*> Targets;
-	TArray<const FPCGSplineStruct*> Splines;
+	TArray<FPCGSplineStruct> Splines;
 	TArray<double> SegmentCounts;
+	TArray<double> Lengths;
 
 	int64 NumTargets = 0;
 
-	TObjectPtr<UCurveFloat> WeightCurve = nullptr;
+	FRuntimeFloatCurve RuntimeWeightCurve;
+	const FRichCurve* WeightCurve = nullptr;
 
 	PCGEX_FOREACH_FIELD_NEARESTPOLYLINE(PCGEX_OUTPUT_DECL_TOGGLE)
+
+	virtual void RegisterAssetDependencies() override;
 };
 
 class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSplineElement final : public FPCGExPointsProcessorElement
@@ -357,6 +420,7 @@ public:
 
 protected:
 	virtual bool Boot(FPCGExContext* InContext) const override;
+	virtual void PostLoadAssetsDependencies(FPCGExContext* InContext) const override;
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
 };
 
@@ -364,14 +428,19 @@ namespace PCGExSampleNearestSpline
 {
 	class FProcessor final : public PCGExPointsMT::TPointsProcessor<FPCGExSampleNearestSplineContext, UPCGExSampleNearestSplineSettings>
 	{
+		TSharedPtr<PCGExDetails::FDistances> DistanceDetails;
+
 		TArray<int8> SampleState;
-		
+
 		TSharedPtr<PCGExData::TBuffer<double>> RangeMinGetter;
 		TSharedPtr<PCGExData::TBuffer<double>> RangeMaxGetter;
+		TSharedPtr<PCGExData::TBuffer<double>> SampleAlphaGetter;
 		TSharedPtr<PCGExData::TBuffer<FVector>> LookAtUpGetter;
 
 		FVector SafeUpVector = FVector::UpVector;
 		int8 bAnySuccess = 0;
+
+		TSharedPtr<PCGExMT::TScopedValue<double>> MaxDistanceValue;
 
 		bool bSingleSample = false;
 		bool bClosestSample = false;
@@ -389,11 +458,12 @@ namespace PCGExSampleNearestSpline
 		virtual ~FProcessor() override;
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count) override;
-		
+		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
+		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
+
 		void SamplingFailed(const int32 Index, const FPCGPoint& Point, double InDepth = 0);
-		
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count) override;
+
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 	};

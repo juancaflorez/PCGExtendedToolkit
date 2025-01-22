@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Sampling/Neighbors/PCGExNeighborSampleFactoryProvider.h"
@@ -94,10 +94,10 @@ void UPCGExNeighborSampleOperation::ProcessNode(const int32 NodeIndex) const
 				LocalWeight = SamplingConfig.BlendOver == EPCGExBlendOver::Index ? 1 - (CurrentDepth / (SamplingConfig.MaxDepth)) : SamplingConfig.FixedBlend;
 			}
 
-			LocalWeight = SampleCurve(LocalWeight);
+			LocalWeight = WeightCurveObj->Eval(LocalWeight);
 
-			if (SamplingConfig.NeighborSource == EPCGExClusterComponentSource::Vtx) { BlendNodePoint(Node, Lk, LocalWeight); }
-			else { BlendNodeEdge(Node, Lk, LocalWeight); }
+			if (SamplingConfig.NeighborSource == EPCGExClusterComponentSource::Vtx) { SampleNeighborNode(Node, Lk, LocalWeight); }
+			else { SampleNeighborEdge(Node, Lk, LocalWeight); }
 
 			Count++;
 			TotalWeight += LocalWeight;
@@ -161,24 +161,30 @@ FString UPCGExNeighborSampleProviderSettings::GetDisplayName() const
 }
 #endif
 
-UPCGExNeighborSampleOperation* UPCGExNeighborSamplerFactoryBase::CreateOperation(FPCGExContext* InContext) const
+UPCGExNeighborSampleOperation* UPCGExNeighborSamplerFactoryData::CreateOperation(FPCGExContext* InContext) const
 {
 	UPCGExNeighborSampleOperation* NewOperation = InContext->ManagedObjects->New<UPCGExNeighborSampleOperation>();
 	PCGEX_SAMPLER_CREATE
 	return NewOperation;
 }
 
+void UPCGExNeighborSamplerFactoryData::RegisterAssetDependencies(FPCGExContext* InContext) const
+{
+	Super::RegisterAssetDependencies(InContext);
+	InContext->AddAssetDependency(SamplingConfig.WeightCurve.ToSoftObjectPath());
+}
+
 TArray<FPCGPinProperties> UPCGExNeighborSampleProviderSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	PCGEX_PIN_PARAMS(PCGEx::SourcePointFilters, "Filters used to check which node will be processed by the sampler or not.", Advanced, {})
-	PCGEX_PIN_PARAMS(PCGEx::SourceUseValueIfFilters, "Filters used to check if a node can be used as a value source or not.", Advanced, {})
+	PCGEX_PIN_FACTORIES(PCGEx::SourcePointFilters, "Filters used to check which node will be processed by the sampler or not.", Advanced, {})
+	PCGEX_PIN_FACTORIES(PCGEx::SourceUseValueIfFilters, "Filters used to check if a node can be used as a value source or not.", Advanced, {})
 	return PinProperties;
 }
 
-UPCGExParamFactoryBase* UPCGExNeighborSampleProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+UPCGExFactoryData* UPCGExNeighborSampleProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
-	UPCGExNeighborSamplerFactoryBase* SamplerFactory = Cast<UPCGExNeighborSamplerFactoryBase>(InFactory);
+	UPCGExNeighborSamplerFactoryData* SamplerFactory = Cast<UPCGExNeighborSamplerFactoryData>(InFactory);
 
 	SamplerFactory->Priority = Priority;
 	SamplerFactory->SamplingConfig = SamplingConfig;

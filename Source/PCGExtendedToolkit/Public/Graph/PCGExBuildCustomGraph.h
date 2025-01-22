@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExBufferHelper.h"
+
 
 #include "Graph/PCGExGraph.h"
 #include "PCGExBuildCustomGraph.generated.h"
@@ -103,7 +104,7 @@ public:
 
 #pragma region Node Attributes
 
-	TSharedPtr<PCGExData::FBufferHelper> VtxBuffers;
+	TSharedPtr<PCGExData::TBufferHelper<PCGExData::EBufferHelperMode::Write>> VtxBuffers;
 
 #pragma region Init
 
@@ -395,7 +396,7 @@ struct FNewGraphSettingsResult
 	bool bIsValid = false;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Result")
-	UPCGExCustomGraphSettings* Settings = nullptr;
+	TObjectPtr<UPCGExCustomGraphSettings> Settings = nullptr;
 };
 
 /**
@@ -417,7 +418,7 @@ public:
 	void InitializeWithContext(UPARAM(ref)const FPCGContext& InContext, bool& OutSuccess);
 
 	/**
-	 * Create an edge between two nodes in an indexed graph. This method is executed in a multi-threaded context
+	 * Create a Graph Setting object that will be processed individually and generate its own cluster(s)
 	 * @param SettingsClass
 	 * @param OutSettings
 	 */
@@ -496,12 +497,16 @@ public:
 	TObjectPtr<UPCGExCustomGraphBuilder> Builder;
 
 	/** Graph & Edges output properties */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
-	bool bMuteUnprocessedSettingsWarning = false;
-
-	/** Graph & Edges output properties */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Cluster Output Settings"))
 	FPCGExGraphBuilderDetails GraphBuilderDetails;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors")
+	bool bQuietUnprocessedSettingsWarning = false;
+
+	/**  */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors")
+	bool bQuietFailedBuildGraphWarning = false;
 };
 
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildCustomGraphContext final : FPCGExPointsProcessorContext
@@ -527,16 +532,22 @@ namespace PCGExBuildCustomGraph
 {
 	const FName SourceOverridesBuilder = TEXT("Overrides : Graph Builder");
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildGraph final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildGraph final : public PCGExMT::FTask
 	{
 	public:
+		PCGEX_ASYNC_TASK_NAME(FBuildGraph)
+
 		FBuildGraph(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
 		            UPCGExCustomGraphSettings* InGraphSettings) :
-			FPCGExTask(InPointIO), GraphSettings(InGraphSettings)
+			FTask(),
+			PointIO(InPointIO),
+			GraphSettings(InGraphSettings)
 		{
 		}
 
+		TSharedPtr<PCGExData::FPointIO> PointIO;
 		UPCGExCustomGraphSettings* GraphSettings = nullptr;
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 }

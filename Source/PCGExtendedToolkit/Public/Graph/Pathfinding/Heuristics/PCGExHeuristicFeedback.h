@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -62,6 +62,8 @@ public:
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal) const override
 	{
+		FReadScopeLock ReadScopeLock(FeedbackLock);
+
 		const uint32* N = NodeFeedbackNum.Find(From.Index);
 		return N ? GetScoreInternal(NodeScale) * *N : GetScoreInternal(0);
 	}
@@ -74,6 +76,8 @@ public:
 		const PCGExCluster::FNode& Goal,
 		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
 	{
+		FReadScopeLock ReadScopeLock(FeedbackLock);
+
 		const uint32* N = NodeFeedbackNum.Find(To.Index);
 		const uint32* E = EdgeFeedbackNum.Find(Edge.Index);
 
@@ -85,6 +89,8 @@ public:
 
 	FORCEINLINE void FeedbackPointScore(const PCGExCluster::FNode& Node)
 	{
+		FWriteScopeLock WriteScopeLock(FeedbackLock);
+
 		uint32& N = NodeFeedbackNum.FindOrAdd(Node.Index, 0);
 		N++;
 
@@ -100,6 +106,8 @@ public:
 
 	FORCEINLINE void FeedbackScore(const PCGExCluster::FNode& Node, const PCGExGraph::FEdge& Edge)
 	{
+		FWriteScopeLock WriteScopeLock(FeedbackLock);
+
 		uint32& N = NodeFeedbackNum.FindOrAdd(Node.Index, 0);
 		N++;
 
@@ -124,15 +132,18 @@ public:
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryFeedback : public UPCGExHeuristicsFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryFeedback : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
 public:
+	UPROPERTY()
+	FPCGExHeuristicConfigFeedback Config;
+
 	virtual bool IsGlobal() const { return Config.bGlobalFeedback; }
 
-	FPCGExHeuristicConfigFeedback Config;
 	virtual UPCGExHeuristicOperation* CreateOperation(FPCGExContext* InContext) const override;
+	PCGEX_HEURISTIC_FACTORY_BOILERPLATE
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
@@ -154,7 +165,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ShowOnlyInnerProperties))
 	FPCGExHeuristicConfigFeedback Config;
 
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
 
 #if WITH_EDITOR
 	virtual FString GetDisplayName() const override;

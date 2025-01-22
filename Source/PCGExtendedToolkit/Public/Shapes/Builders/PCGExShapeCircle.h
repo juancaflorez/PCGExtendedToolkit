@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -24,26 +24,26 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShapeCircleConfig : public FPCGExShapeCo
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NotOverridable))
 	EPCGExInputValueType StartAngleInput = EPCGExInputValueType::Constant;
 
+	/** Start angle attribute, in degrees. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Start Angle (Attr)", EditCondition="StartAngleInput != EPCGExInputValueType::Constant", EditConditionHides))
+	FPCGAttributePropertyInputSelector StartAngleAttribute;
+
 	/** Start angle constant, in degrees. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Start Angle", EditCondition="StartAngleInput == EPCGExInputValueType::Constant", EditConditionHides, Units="Degrees"))
 	double StartAngleConstant = 0;
-
-	/** Start angle attribute, in degrees. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Start Angle", EditCondition="StartAngleInput == EPCGExInputValueType::Attribute", EditConditionHides))
-	FPCGAttributePropertyInputSelector StartAngleAttribute;
 
 
 	/** End angle source. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NotOverridable))
 	EPCGExInputValueType EndAngleInput = EPCGExInputValueType::Constant;
 
+	/** End angle attribute, in degrees. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="End Angle (Attr)", EditCondition="EndAngleInput != EPCGExInputValueType::Constant", EditConditionHides))
+	FPCGAttributePropertyInputSelector EndAngleAttribute;
+
 	/** End angle constant, in degrees. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="End Angle", EditCondition="EndAngleInput == EPCGExInputValueType::Constant", EditConditionHides, Units="Degrees"))
 	double EndAngleConstant = 360;
-
-	/** End angle attribute, in degrees. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="End Angle", EditCondition="EndAngleInput == EPCGExInputValueType::Attribute", EditConditionHides))
-	FPCGAttributePropertyInputSelector EndAngleAttribute;
 };
 
 namespace PCGExShapes
@@ -92,12 +92,14 @@ protected:
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExShapeCircleFactory : public UPCGExShapeBuilderFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExShapeCircleFactory : public UPCGExShapeBuilderFactoryData
 {
 	GENERATED_BODY()
 
 public:
+	UPROPERTY()
 	FPCGExShapeCircleConfig Config;
+
 	virtual UPCGExShapeBuilderOperation* CreateOperation(FPCGExContext* InContext) const override;
 };
 
@@ -118,5 +120,8 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ShowOnlyInnerProperties))
 	FPCGExShapeCircleConfig Config;
 
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
+
+protected:
+	virtual bool IsCacheable() const override { return true; }
 };

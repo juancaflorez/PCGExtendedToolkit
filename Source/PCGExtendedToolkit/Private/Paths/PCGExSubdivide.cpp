@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExSubdivide.h"
@@ -115,13 +115,13 @@ namespace PCGExSubdivide
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
 
@@ -136,25 +136,33 @@ namespace PCGExSubdivide
 
 		if (!PointFilterCache[Index]) { return; }
 
-		const double Amount = AmountGetter ? AmountGetter->Read(Index) : ConstantAmount;
+		double Amount = AmountGetter ? AmountGetter->Read(Index) : ConstantAmount;
+		bool bRedistribute = bUseCount;
 
-		if (bUseCount)
+		if (!bRedistribute)
+		{
+			Sub.NumSubdivisions = FMath::Floor(Sub.Dist / Amount);
+			Sub.StepSize = Amount;
+			Sub.StartOffset = (Sub.Dist - (Sub.StepSize * (Sub.NumSubdivisions - 1))) * 0.5;
+
+			if (Settings->bRedistributeEvenly)
+			{
+				bRedistribute = true;
+				Amount = Sub.NumSubdivisions;
+			}
+		}
+
+		if (bRedistribute)
 		{
 			Sub.NumSubdivisions = FMath::Floor(Amount);
 			Sub.StepSize = Sub.Dist / static_cast<double>(Sub.NumSubdivisions + 1);
 			Sub.StartOffset = Sub.StepSize;
 		}
-		else
-		{
-			Sub.NumSubdivisions = FMath::Floor(Sub.Dist / Amount);
-			Sub.StepSize = Amount;
-			Sub.StartOffset = (Sub.Dist - (Sub.StepSize * (Sub.NumSubdivisions - 1))) * 0.5;
-		}
 
 		Sub.Dir = (Sub.End - Sub.Start).GetSafeNormal();
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		const FSubdivision& Sub = Subdivisions[Iteration];
 
@@ -208,13 +216,15 @@ namespace PCGExSubdivide
 
 		if (NumPoints == PointIO->GetNum())
 		{
-			PointIO->InitializeOutput(PCGExData::EIOInit::Duplicate);
+			PCGEX_INIT_IO_VOID(PointIO, PCGExData::EIOInit::Duplicate)
+
 			if (Settings->bFlagSubPoints) { WriteMark(PointIO, Settings->SubPointFlagName, false); }
 			if (Settings->bWriteAlpha) { WriteMark(PointIO, Settings->AlphaAttributeName, Settings->DefaultAlpha); }
 			return;
 		}
 
-		PointIO->InitializeOutput(PCGExData::EIOInit::New);
+		PCGEX_INIT_IO_VOID(PointIO, PCGExData::EIOInit::New)
+
 		TArray<FPCGPoint>& MutablePoints = PointIO->GetOut()->GetMutablePoints();
 		const TArray<FPCGPoint>& InPoints = PointIO->GetIn()->GetPoints();
 		UPCGMetadata* Metadata = PointIO->GetOut()->Metadata;

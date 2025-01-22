@@ -1,10 +1,40 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 #include "PCGExDetails.h"
 #include "Data/PCGExData.h"
 #include "PCGExTransform.generated.h"
+
+USTRUCT(BlueprintType)
+struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttachmentRules
+{
+	GENERATED_BODY()
+
+	FPCGExAttachmentRules() = default;
+	~FPCGExAttachmentRules() = default;
+
+	/** The rule to apply to location when attaching */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
+	EAttachmentRule LocationRule = EAttachmentRule::KeepWorld;
+
+	/** The rule to apply to rotation when attaching */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
+	EAttachmentRule RotationRule = EAttachmentRule::KeepWorld;
+
+	/** The rule to apply to scale when attaching */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
+	EAttachmentRule ScaleRule = EAttachmentRule::KeepWorld;
+
+	/** Whether to weld simulated bodies together when attaching */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
+	bool bWeldSimulatedBodies = false;
+
+	FAttachmentTransformRules GetRules() const
+	{
+		return FAttachmentTransformRules(LocationRule, RotationRule, ScaleRule, bWeldSimulatedBodies);
+	}
+};
 
 USTRUCT(BlueprintType)
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUVW
@@ -20,7 +50,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUVW
 	{
 	}
 
-	/** Overlap overlap test mode */
+	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExPointBoundsSource BoundsReference = EPCGExPointBoundsSource::ScaledBounds;
 
@@ -28,37 +58,37 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUVW
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
 	EPCGExInputValueType UInput = EPCGExInputValueType::Constant;
 
-	/** U Constant */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="U", EditCondition="UInput==EPCGExInputValueType::Constant", EditConditionHides, DisplayName="U"))
-	double UConstant = 0;
-
 	/** U Attribute */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="U", EditCondition="UInput==EPCGExInputValueType::Attribute", EditConditionHides, DisplayName="U"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="U (Attr)", EditCondition="UInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector UAttribute;
+
+	/** U Constant */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="U", EditCondition="UInput==EPCGExInputValueType::Constant", EditConditionHides))
+	double UConstant = 0;
 
 	/** V Source */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
 	EPCGExInputValueType VInput = EPCGExInputValueType::Constant;
 
-	/** V Constant */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="V", EditCondition="VInput==EPCGExInputValueType::Constant", EditConditionHides, DisplayName="V"))
-	double VConstant = 0;
-
 	/** V Attribute */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="V", EditCondition="VInput==EPCGExInputValueType::Attribute", EditConditionHides, DisplayName="V"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="V (Attr)", EditCondition="VInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector VAttribute;
+
+	/** V Constant */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="V", EditCondition="VInput==EPCGExInputValueType::Constant", EditConditionHides))
+	double VConstant = 0;
 
 	/** W Source */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
 	EPCGExInputValueType WInput = EPCGExInputValueType::Constant;
 
-	/** W Constant */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="W", EditCondition="WInput==EPCGExInputValueType::Constant", EditConditionHides, DisplayName="W"))
-	double WConstant = 0;
-
 	/** W Attribute */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="W", EditCondition="WInput==EPCGExInputValueType::Attribute", EditConditionHides, DisplayName="W"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="W (Attr)", EditCondition="WInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector WAttribute;
+
+	/** W Constant */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="W", EditCondition="WInput==EPCGExInputValueType::Constant", EditConditionHides))
+	double WConstant = 0;
 
 	TSharedPtr<PCGExData::TBuffer<double>> UGetter;
 	TSharedPtr<PCGExData::TBuffer<double>> VGetter;

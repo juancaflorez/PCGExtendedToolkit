@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -8,6 +8,8 @@
 #include "PCGEx.h"
 
 #include "PCGExMath.generated.h"
+
+#define MIN_dbl_neg MAX_dbl *-1
 
 UENUM()
 enum class EPCGExMeanMeasure : uint8
@@ -173,6 +175,47 @@ namespace PCGExMath
 				std::is_same_v<T, FVector> ||
 				std::is_same_v<T, FVector4>, "Can't tile type.");
 			return T{};
+		}
+	}
+
+	template <typename T>
+	FORCEINLINE static T Abs(const T& A)
+	{
+		if constexpr (std::is_same_v<T, bool>)
+		{
+			return A;
+		}
+		else if constexpr (std::is_same_v<T, FVector2D>)
+		{
+			return FVector2D(FMath::Abs(A.X), FMath::Abs(A.Y));
+		}
+		else if constexpr (std::is_same_v<T, FVector>)
+		{
+			return FVector(FMath::Abs(A.X), FMath::Abs(A.Y), FMath::Abs(A.Z));
+		}
+		else if constexpr (std::is_same_v<T, FVector4>)
+		{
+			return FVector4(FMath::Abs(A.X), FMath::Abs(A.Y), FMath::Abs(A.Z), FMath::Abs(A.W));
+		}
+		else if constexpr (std::is_same_v<T, FQuat>)
+		{
+			return Abs(A.Rotator()).Quaternion().GetNormalized();
+		}
+		else if constexpr (std::is_same_v<T, FRotator>)
+		{
+			return FRotator(FMath::Abs(A.Pitch), FMath::Abs(A.Yaw), FMath::Abs(A.Roll));
+		}
+		else if constexpr (std::is_same_v<T, FTransform>)
+		{
+			return FTransform(Abs(A.GetRotation()), Abs(A), Abs(A.GetScale3D()));
+		}
+		else if constexpr (std::is_same_v<T, FString> || std::is_same_v<T, FName> || std::is_same_v<T, FSoftClassPath> || std::is_same_v<T, FSoftObjectPath>)
+		{
+			return Max(A, A);
+		}
+		else
+		{
+			return FMath::Abs(A);
 		}
 	}
 
@@ -545,7 +588,7 @@ namespace PCGExMath
 		}
 		else if constexpr (std::is_same_v<T, FTransform>)
 		{
-			return FTransform(WeightedSub(A.GetRotation(), B.GetRotation(), W), WeightedSub(A.GetLocation(), B.GetLocation(), W), WeightedSub(A.GetScale3D(), B.GetScale3D(), W));
+			return FTransform(WeightedSub(A.GetRotation(), B.GetRotation(), W).GetNormalized(), WeightedSub(A.GetLocation(), B.GetLocation(), W), WeightedSub(A.GetScale3D(), B.GetScale3D(), W));
 		}
 		else if constexpr (
 			std::is_same_v<T, bool> ||
@@ -755,7 +798,7 @@ namespace PCGExMath
 		}
 		else if constexpr (std::is_same_v<T, FTransform>)
 		{
-			return FTransform(Lerp(A.GetRotation(), B.GetRotation(), W), Lerp(A.GetLocation(), B.GetLocation(), W), Lerp(A.GetScale3D(), B.GetScale3D(), W));
+			return FTransform(Lerp(A.GetRotation(), B.GetRotation(), W).GetNormalized(), Lerp(A.GetLocation(), B.GetLocation(), W), Lerp(A.GetScale3D(), B.GetScale3D(), W));
 		}
 		else if constexpr (
 			std::is_same_v<T, bool> ||
@@ -781,7 +824,7 @@ namespace PCGExMath
 		}
 		else if constexpr (std::is_same_v<T, FTransform>)
 		{
-			return FTransform(Div(A.GetRotation(), Divider), Div(A.GetLocation(), Divider), Div(A.GetScale3D(), Divider));
+			return FTransform(Div(A.GetRotation(), Divider).GetNormalized(), Div(A.GetLocation(), Divider), Div(A.GetScale3D(), Divider));
 		}
 		else if constexpr (
 			std::is_same_v<T, bool> ||
@@ -802,7 +845,8 @@ namespace PCGExMath
 	template <typename CompilerSafety = void>
 	FORCEINLINE static FQuat Div(const FQuat& A, const double Divider)
 	{
-		return Div(A.Rotator(), Divider).Quaternion();
+		const double R = 1.0 / Divider;
+		return FQuat(A.X * R, A.Y * R, A.Z * R, A.W * R).GetNormalized();
 	}
 
 	template <typename T>
@@ -831,6 +875,110 @@ namespace PCGExMath
 
 	template <typename T>
 	FORCEINLINE static T NoBlend(const T& A, const T& B) { return A; }
+
+	template <typename T>
+	FORCEINLINE static T NaiveHash(const T& A, const T& B)
+	{
+		if constexpr (std::is_same_v<T, bool>)
+		{
+			return A || B;
+		}
+		else if constexpr (std::is_same_v<T, FVector2D>)
+		{
+			return FVector2D(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y));
+		}
+		else if constexpr (std::is_same_v<T, FVector>)
+		{
+			return FVector(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y), NaiveHash(A.Z, B.Z));
+		}
+		else if constexpr (std::is_same_v<T, FVector4>)
+		{
+			return FVector4(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y), NaiveHash(A.Z, B.Z), NaiveHash(A.W, B.W));
+		}
+		else if constexpr (std::is_same_v<T, FColor>)
+		{
+			return FColor(NaiveHash(A.R, B.R), NaiveHash(A.G, B.G), NaiveHash(A.B, B.B), NaiveHash(A.A, B.A));
+		}
+		else if constexpr (std::is_same_v<T, FQuat>)
+		{
+			return NaiveHash(A.Rotator(), B.Rotator()).Quaternion();
+		}
+		else if constexpr (std::is_same_v<T, FRotator>)
+		{
+			return FRotator(NaiveHash(A.Pitch, B.Pitch), NaiveHash(A.Yaw, B.Yaw), NaiveHash(A.Roll, B.Roll));
+		}
+		else if constexpr (std::is_same_v<T, FTransform>)
+		{
+			return FTransform(NaiveHash(A.GetRotation(), B.GetRotation()), NaiveHash(A.GetLocation(), B.GetLocation()), NaiveHash(A.GetScale3D(), B.GetScale3D()));
+		}
+		else if constexpr (std::is_same_v<T, FString>)
+		{
+			return FString::Printf(TEXT("%d"), NaiveHash(GetTypeHash(A), GetTypeHash(B)));
+		}
+		else if constexpr (
+			std::is_same_v<T, FName> ||
+			std::is_same_v<T, FSoftClassPath> ||
+			std::is_same_v<T, FSoftObjectPath>)
+		{
+			return T(NaiveHash(A.ToString(), B.ToString()));
+		}
+		else
+		{
+			return static_cast<T>(HashCombineFast(GetTypeHash(A), GetTypeHash(B)));
+		}
+	}
+
+	template <typename T>
+	FORCEINLINE static T NaiveUnsignedHash(const T& A, const T& B)
+	{
+		if constexpr (std::is_same_v<T, bool>)
+		{
+			return A || B;
+		}
+		else if constexpr (std::is_same_v<T, FVector2D>)
+		{
+			return FVector2D(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y));
+		}
+		else if constexpr (std::is_same_v<T, FVector>)
+		{
+			return FVector(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y), NaiveUnsignedHash(A.Z, B.Z));
+		}
+		else if constexpr (std::is_same_v<T, FVector4>)
+		{
+			return FVector4(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y), NaiveUnsignedHash(A.Z, B.Z), NaiveUnsignedHash(A.W, B.W));
+		}
+		else if constexpr (std::is_same_v<T, FColor>)
+		{
+			return FColor(NaiveUnsignedHash(A.R, B.R), NaiveUnsignedHash(A.G, B.G), NaiveUnsignedHash(A.B, B.B), NaiveUnsignedHash(A.A, B.A));
+		}
+		else if constexpr (std::is_same_v<T, FQuat>)
+		{
+			return NaiveUnsignedHash(A.Rotator(), B.Rotator()).Quaternion();
+		}
+		else if constexpr (std::is_same_v<T, FRotator>)
+		{
+			return FRotator(NaiveUnsignedHash(A.Pitch, B.Pitch), NaiveUnsignedHash(A.Yaw, B.Yaw), NaiveUnsignedHash(A.Roll, B.Roll));
+		}
+		else if constexpr (std::is_same_v<T, FTransform>)
+		{
+			return FTransform(NaiveUnsignedHash(A.GetRotation(), B.GetRotation()), NaiveUnsignedHash(A.GetLocation(), B.GetLocation()), NaiveUnsignedHash(A.GetScale3D(), B.GetScale3D()));
+		}
+		else if constexpr (std::is_same_v<T, FString>)
+		{
+			return FString::Printf(TEXT("%d"), NaiveUnsignedHash(GetTypeHash(A), GetTypeHash(B)));
+		}
+		else if constexpr (
+			std::is_same_v<T, FName> ||
+			std::is_same_v<T, FSoftClassPath> ||
+			std::is_same_v<T, FSoftObjectPath>)
+		{
+			return T(NaiveUnsignedHash(A.ToString(), B.ToString()));
+		}
+		else
+		{
+			return static_cast<T>(GetTypeHash(PCGEx::H64U(GetTypeHash(A), GetTypeHash(B))));
+		}
+	}
 
 #pragma endregion
 
@@ -1207,32 +1355,32 @@ namespace PCGExMath
 		else if constexpr (std::is_same_v<T, FVector2D>)
 		{
 			Min = FVector2D(MAX_dbl);
-			Max = FVector2D(MIN_dbl);
+			Max = FVector2D(MIN_dbl_neg);
 		}
 		else if constexpr (std::is_same_v<T, FVector>)
 		{
 			Min = FVector(MAX_dbl);
-			Max = FVector(MIN_dbl);
+			Max = FVector(MIN_dbl_neg);
 		}
 		else if constexpr (std::is_same_v<T, FVector4>)
 		{
 			Min = FVector4(MAX_dbl, MAX_dbl, MAX_dbl, MAX_dbl);
-			Max = FVector4(MIN_dbl, MIN_dbl, MIN_dbl, MIN_dbl);
+			Max = FVector4(MIN_dbl_neg, MIN_dbl_neg, MIN_dbl_neg, MIN_dbl_neg);
 		}
 		else if constexpr (std::is_same_v<T, FQuat>)
 		{
 			Min = FRotator(MAX_dbl, MAX_dbl, MAX_dbl).Quaternion();
-			Max = FRotator(MIN_dbl, MIN_dbl, MIN_dbl).Quaternion();
+			Max = FRotator(MIN_dbl_neg, MIN_dbl_neg, MIN_dbl_neg).Quaternion();
 		}
 		else if constexpr (std::is_same_v<T, FRotator>)
 		{
 			Min = FRotator(MAX_dbl, MAX_dbl, MAX_dbl);
-			Max = FRotator(MIN_dbl, MIN_dbl, MIN_dbl);
+			Max = FRotator(MIN_dbl_neg, MIN_dbl_neg, MIN_dbl_neg);
 		}
 		else if constexpr (std::is_same_v<T, FTransform>)
 		{
 			Min = FTransform(FRotator(MAX_dbl, MAX_dbl, MAX_dbl).Quaternion(), FVector(MAX_dbl), FVector(MAX_dbl));
-			Max = FTransform(FRotator(MIN_dbl, MIN_dbl, MIN_dbl).Quaternion(), FVector(MIN_dbl), FVector(MIN_dbl));
+			Max = FTransform(FRotator(MIN_dbl_neg, MIN_dbl_neg, MIN_dbl_neg).Quaternion(), FVector(MIN_dbl_neg), FVector(MIN_dbl_neg));
 		}
 		else
 		{

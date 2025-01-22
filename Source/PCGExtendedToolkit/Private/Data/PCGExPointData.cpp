@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -25,22 +25,4 @@ void UPCGExPointData::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-#if PCGEX_ENGINE_VERSION < 505
-UPCGSpatialData* UPCGExPointData::CopyInternal() const
-{
-	UPCGExPointData* NewPointData = nullptr;
-	{
-		FGCScopeGuard GCGuard;
-		NewObject<UPCGExPointData>();
-	}
-	NewPointData->CopyFrom(this);
-	return NewPointData;
-}
-#else
-UPCGSpatialData* UPCGExPointData::CopyInternal(FPCGContext* Context) const
-{
-	UPCGExPointData* NewPointData = FPCGContext::NewObject_AnyThread<UPCGExPointData>(Context);
-	NewPointData->CopyFrom(this);
-	return NewPointData;
-}
-#endif
+PCGEX_DATA_COPY_INTERNAL_IMPL(UPCGExPointData)

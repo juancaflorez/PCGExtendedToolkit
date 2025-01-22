@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Shapes/Builders/PCGExShapeCircle.h"
@@ -28,7 +28,7 @@ bool UPCGExShapeCircleBuilder::PrepareForSeeds(FPCGExContext* InContext, const T
 
 void UPCGExShapeCircleBuilder::PrepareShape(const PCGExData::FPointRef& Seed)
 {
-	TSharedPtr<PCGExShapes::FCircle> Circle = MakeShared<PCGExShapes::FCircle>(Seed);
+	PCGEX_MAKE_SHARED(Circle, PCGExShapes::FCircle, Seed)
 
 	Circle->ComputeFit(BaseConfig);
 

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -11,6 +11,12 @@
 
 PCGExData::EIOInit UPCGExAttributeRemapSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
+void FPCGExAttributeRemapContext::RegisterAssetDependencies()
+{
+	FPCGExPointsProcessorContext::RegisterAssetDependencies();
+	for (const FPCGExComponentRemapRule& Rule : RemapSettings) { AddAssetDependency(Rule.RemapDetails.RemapCurve.ToSoftObjectPath()); }
+}
+
 PCGEX_INITIALIZE_ELEMENT(AttributeRemap)
 
 bool FPCGExAttributeRemapElement::Boot(FPCGExContext* InContext) const
@@ -19,7 +25,7 @@ bool FPCGExAttributeRemapElement::Boot(FPCGExContext* InContext) const
 
 	PCGEX_CONTEXT_AND_SETTINGS(AttributeRemap)
 
-	PCGEX_VALIDATE_NAME(Settings->SourceAttributeName)
+	PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->SourceAttributeName)
 	PCGEX_VALIDATE_NAME(Settings->TargetAttributeName)
 
 	Context->RemapSettings[0] = Settings->BaseRemap;
@@ -27,14 +33,21 @@ bool FPCGExAttributeRemapElement::Boot(FPCGExContext* InContext) const
 	Context->RemapSettings[2] = Settings->Component3RemapOverride;
 	Context->RemapSettings[3] = Settings->Component4RemapOverride;
 
-	for (int i = 0; i < 4; i++) { Context->RemapSettings[i].RemapDetails.LoadCurve(); }
+	return true;
+}
+
+void FPCGExAttributeRemapElement::PostLoadAssetsDependencies(FPCGExContext* InContext) const
+{
+	FPCGExPointsProcessorElement::PostLoadAssetsDependencies(InContext);
+
+	PCGEX_CONTEXT_AND_SETTINGS(AttributeRemap)
+
+	for (int i = 0; i < 4; i++) { Context->RemapSettings[i].RemapDetails.Init(); }
 
 	Context->RemapIndices[0] = 0;
 	Context->RemapIndices[1] = Settings->bOverrideComponent2 ? 1 : 0;
 	Context->RemapIndices[2] = Settings->bOverrideComponent3 ? 2 : 0;
 	Context->RemapIndices[3] = Settings->bOverrideComponent4 ? 3 : 0;
-
-	return true;
 }
 
 bool FPCGExAttributeRemapElement::ExecuteInternal(FPCGContext* InContext) const
@@ -125,9 +138,8 @@ namespace PCGExAttributeRemap
 			return false;
 		}
 
-
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(UnderlyingType), [&](auto DummyValue) -> void
+		PCGEx::ExecuteWithRightType(
+			UnderlyingType, [&](auto DummyValue)
 			{
 				using RawT = decltype(DummyValue);
 				CacheWriter = PointDataFacade->GetWritable<RawT>(Settings->TargetAttributeName, PCGExData::EBufferInit::New);
@@ -137,68 +149,79 @@ namespace PCGExAttributeRemap
 		Rules.Reserve(Dimensions);
 		for (int i = 0; i < Dimensions; i++)
 		{
-			FPCGExComponentRemapRule Rule = Rules.Add_GetRef(FPCGExComponentRemapRule(Context->RemapSettings[Context->RemapIndices[i]]));
+			FPCGExComponentRemapRule& Rule = Rules.Add_GetRef(FPCGExComponentRemapRule(Context->RemapSettings[Context->RemapIndices[i]]));
 			Rule.RemapDetails.InMin = MAX_dbl;
-			Rule.RemapDetails.InMax = MIN_dbl;
+			Rule.RemapDetails.InMax = MIN_dbl_neg;
 		}
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FetchTask)
-		FetchTask->OnCompleteCallback =
-			[&]()
-			{
-				// Fix min/max range
-				for (FPCGExComponentRemapRule& Rule : Rules)
-				{
-					if (Rule.RemapDetails.bUseInMin) { Rule.RemapDetails.InMin = Rule.RemapDetails.CachedInMin; }
-					else { for (const double Min : Rule.MinCache) { Rule.RemapDetails.InMin = FMath::Min(Rule.RemapDetails.InMin, Min); } }
 
-					if (Rule.RemapDetails.bUseInMax) { Rule.RemapDetails.InMax = Rule.RemapDetails.CachedInMax; }
-					else { for (const double Max : Rule.MaxCache) { Rule.RemapDetails.InMax = FMath::Max(Rule.RemapDetails.InMax, Max); } }
+		FetchTask->OnCompleteCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE]()
+			{
+				PCGEX_ASYNC_THIS
+
+				// Fix min/max range
+				for (FPCGExComponentRemapRule& Rule : This->Rules)
+				{
+					if (!Rule.RemapDetails.bUseInMin)
+					{
+						Rule.RemapDetails.InMin = Rule.MinCache->Flatten([&](const double& In, const double& Out) { return FMath::Min(In, Out); });
+					}
+
+					if (!Rule.RemapDetails.bUseInMax)
+					{
+						Rule.RemapDetails.InMax = Rule.MaxCache->Flatten([&](const double& In, const double& Out) { return FMath::Max(In, Out); });
+					}
 
 					if (Rule.RemapDetails.RangeMethod == EPCGExRangeType::FullRange) { Rule.RemapDetails.InMin = 0; }
 				}
 
-				OnPreparationComplete();
+				This->OnPreparationComplete();
 			};
 
 		FetchTask->OnPrepareSubLoopsCallback =
-			[&](const TArray<uint64>& Loops)
+			[PCGEX_ASYNC_THIS_CAPTURE](const TArray<PCGExMT::FScope>& Loops)
 			{
-				for (FPCGExComponentRemapRule& Rule : Rules)
+				PCGEX_ASYNC_THIS
+
+				for (FPCGExComponentRemapRule& Rule : This->Rules)
 				{
-					Rule.MinCache.Init(MAX_dbl, Loops.Num());
-					Rule.MaxCache.Init(MIN_dbl, Loops.Num());
+					Rule.MinCache = MakeShared<PCGExMT::TScopedValue<double>>(Loops, MAX_dbl);
+					Rule.MaxCache = MakeShared<PCGExMT::TScopedValue<double>>(Loops, MIN_dbl_neg);
 				}
 			};
 
 		FetchTask->OnSubLoopStartCallback =
-			[&](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
 				TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExAttributeRemap::Fetch);
 
-				PointDataFacade->Fetch(StartIndex, Count);
-				PCGMetadataAttribute::CallbackWithRightType(
-					static_cast<uint16>(UnderlyingType), [&](auto DummyValue) -> void
+				PCGEX_ASYNC_THIS
+
+				This->PointDataFacade->Fetch(Scope);
+				PCGEx::ExecuteWithRightType(
+					This->UnderlyingType, [&](auto DummyValue)
 					{
 						using RawT = decltype(DummyValue);
-						TSharedPtr<PCGExData::TBuffer<RawT>> Writer = StaticCastSharedPtr<PCGExData::TBuffer<RawT>>(CacheWriter);
-						TSharedPtr<PCGExData::TBuffer<RawT>> Reader = StaticCastSharedPtr<PCGExData::TBuffer<RawT>>(CacheReader);
+						TSharedPtr<PCGExData::TBuffer<RawT>> Writer = StaticCastSharedPtr<PCGExData::TBuffer<RawT>>(This->CacheWriter);
+						TSharedPtr<PCGExData::TBuffer<RawT>> Reader = StaticCastSharedPtr<PCGExData::TBuffer<RawT>>(This->CacheReader);
 
 						// TODO : Swap for a scoped accessor since we don't need to keep readable values in memory
-						for (int i = StartIndex; i < StartIndex + Count; i++) { Writer->GetMutable(i) = Reader->Read(i); } // Copy range to writer
+						for (int i = Scope.Start; i < Scope.End; i++) { Writer->GetMutable(i) = Reader->Read(i); } // Copy range to writer
 
 						// Find min/max & clamp values
 
-						for (int d = 0; d < Dimensions; d++)
+						for (int d = 0; d < This->Dimensions; d++)
 						{
-							FPCGExComponentRemapRule& Rule = Rules[d];
+							FPCGExComponentRemapRule& Rule = This->Rules[d];
 
 							double Min = MAX_dbl;
-							double Max = MIN_dbl;
+							double Max = MIN_dbl_neg;
 
 							if (Rule.RemapDetails.bUseAbsoluteRange)
 							{
-								for (int i = StartIndex; i < StartIndex + Count; i++)
+								for (int i = Scope.Start; i < Scope.End; i++)
 								{
 									RawT& V = Writer->GetMutable(i);
 									const double VAL = Rule.InputClampDetails.GetClampedValue(PCGExMath::GetComponent(V, d));
@@ -210,7 +233,7 @@ namespace PCGExAttributeRemap
 							}
 							else
 							{
-								for (int i = StartIndex; i < StartIndex + Count; i++)
+								for (int i = Scope.Start; i < Scope.End; i++)
 								{
 									RawT& V = Writer->GetMutable(i);
 									const double VAL = Rule.InputClampDetails.GetClampedValue(PCGExMath::GetComponent(V, d));
@@ -221,8 +244,8 @@ namespace PCGExAttributeRemap
 								}
 							}
 
-							Rule.MinCache[LoopIdx] = Min;
-							Rule.MaxCache[LoopIdx] = Max;
+							Rule.MinCache->Set(Scope, Min);
+							Rule.MaxCache->Set(Scope, Max);
 						}
 					});
 			};
@@ -236,16 +259,14 @@ namespace PCGExAttributeRemap
 	{
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, RemapTask)
 		RemapTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				TSharedPtr<FProcessor> This = WeakThis.Pin();
-				if (!This) { return; }
+				PCGEX_ASYNC_THIS
 
-				PCGMetadataAttribute::CallbackWithRightType(
-					static_cast<uint16>(This->UnderlyingType), [&](auto DummyValue) -> void
+				PCGEx::ExecuteWithRightType(
+					This->UnderlyingType, [&](auto DummyValue)
 					{
-						This->RemapRange(StartIndex, Count, DummyValue);
+						This->RemapRange(Scope, DummyValue);
 					});
 			};
 

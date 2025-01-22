@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Topology/PCGExTopologyEdgesProcessor.h"
@@ -17,9 +17,21 @@ TArray<FPCGPinProperties> UPCGExTopologyEdgesProcessorSettings::InputPinProperti
 	PCGEX_PIN_POINT(PCGExTopology::SourceHolesLabel, "Omit cells that contain any points from this dataset", Normal, {})
 	if (SupportsEdgeConstraints())
 	{
-		PCGEX_PIN_PARAMS(PCGExTopology::SourceEdgeConstrainsFiltersLabel, "Constrained edges filters.", Normal, {})
+		PCGEX_PIN_FACTORIES(PCGExTopology::SourceEdgeConstrainsFiltersLabel, "Constrained edges filters.", Normal, {})
 	}
 	return PinProperties;
+}
+
+void FPCGExTopologyEdgesProcessorContext::RegisterAssetDependencies()
+{
+	PCGEX_SETTINGS_LOCAL(TopologyEdgesProcessor)
+
+	FPCGExEdgesProcessorContext::RegisterAssetDependencies();
+
+	if (Settings->Topology.Material.ToSoftObjectPath().IsValid())
+	{
+		AddAssetDependency(Settings->Topology.Material.ToSoftObjectPath());
+	}
 }
 
 bool FPCGExTopologyEdgesProcessorElement::Boot(FPCGExContext* InContext) const

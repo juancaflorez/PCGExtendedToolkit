@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfindingFindContours.h"
@@ -40,8 +40,8 @@ bool FPCGExFindContoursElement::Boot(FPCGExContext* InContext) const
 	PCGEX_CONTEXT_AND_SETTINGS(FindContours)
 
 	PCGEX_FWD(ProjectionDetails)
-
-	if (Settings->bFlagLeaves) { PCGEX_VALIDATE_NAME(Settings->LeafAttributeName); }
+	PCGEX_FWD(Artifacts)
+	if (!Context->Artifacts.Init(Context)) { return false; }
 
 	Context->SeedsDataFacade = PCGExData::TryGetSingleFacade(Context, PCGExGraph::SourceSeedsLabel, true);
 	if (!Context->SeedsDataFacade) { return false; }
@@ -87,10 +87,7 @@ bool FPCGExFindContoursElement::ExecuteInternal(
 			[](const TSharedPtr<PCGExData::FPointIOTaggedEntries>& Entries) { return true; },
 			[&](const TSharedPtr<PCGExFindContours::FBatch>& NewBatch)
 			{
-				if (Settings->bFlagLeaves)
-				{
-					NewBatch->bRequiresWriteStep = true;
-				}
+				//NewBatch->bRequiresWriteStep = Settings->Artifacts.WriteAny();
 			}))
 		{
 			return Context->CancelExecution(TEXT("Could not build any clusters."));
@@ -145,7 +142,7 @@ namespace PCGExFindContours
 		return true;
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(int32 Iteration, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleRangeIteration(int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		const FVector SeedWP = Context->SeedsDataFacade->Source->GetInPoint(Iteration).Transform.GetLocation();
 
@@ -154,22 +151,42 @@ namespace PCGExFindContours
 
 		if (Result != PCGExTopology::ECellResult::Success)
 		{
-			if (Result == PCGExTopology::ECellResult::WrapperCell) { FPlatformAtomics::InterlockedExchange(&WrapperSeed, Iteration); }
+			if (Result == PCGExTopology::ECellResult::WrapperCell ||
+				(CellsConstraints->WrapperCell && CellsConstraints->WrapperCell->GetCellHash() == Cell->GetCellHash()))
+			{
+				// Only track the seed closest to bound center as being associated with the wrapper.
+				// There may be edge cases where we don't want that to happen
+
+				const double DistToSeed = FVector::DistSquared(SeedWP, Cluster->Bounds.GetCenter());
+				{
+					FReadScopeLock ReadScopeLock(WrappedSeedLock);
+					if (ClosestSeedDist < DistToSeed) { return; }
+				}
+				{
+					FReadScopeLock WriteScopeLock(WrappedSeedLock);
+					if (ClosestSeedDist < DistToSeed) { return; }
+					ClosestSeedDist = DistToSeed;
+					WrapperSeed = Iteration;
+				}
+			}
 			return;
 		}
 
 		ProcessCell(Iteration, Cell);
 	}
 
-	void FProcessor::ProcessCell(const int32 SeedIndex, const TSharedPtr<PCGExTopology::FCell>& InCell) const
+	void FProcessor::ProcessCell(const int32 SeedIndex, const TSharedPtr<PCGExTopology::FCell>& InCell)
 	{
-		TSharedRef<PCGExData::FPointIO> PathIO = Context->Paths->Emplace_GetRef<UPCGPointData>(VtxDataFacade->Source, PCGExData::EIOInit::New).ToSharedRef();
-		PathIO->IOIndex = SeedIndex; // Enforce seed order for collection output
+		TSharedPtr<PCGExData::FPointIO> PathIO = Context->Paths->Emplace_GetRef<UPCGPointData>(VtxDataFacade->Source, PCGExData::EIOInit::New);
+		if (!PathIO) { return; }
 
-		PCGExGraph::CleanupClusterTags(PathIO, true);
+		PathIO->Tags->Reset();                              // Tag forwarding handled by artifacts
+		PathIO->IOIndex = BatchIndex * 1000000 + SeedIndex; // Enforce seed order for collection output
+
+		PCGExGraph::CleanupClusterTags(PathIO);
 		PCGExGraph::CleanupVtxData(PathIO);
 
-		TSharedPtr<PCGExData::FFacade> PathDataFacade = MakeShared<PCGExData::FFacade>(PathIO);
+		PCGEX_MAKE_SHARED(PathDataFacade, PCGExData::FFacade, PathIO.ToSharedRef())
 
 		TArray<FPCGPoint> MutablePoints;
 		MutablePoints.Reserve(InCell->Nodes.Num());
@@ -183,18 +200,7 @@ namespace PCGExFindContours
 		Context->SeedAttributesToPathTags.Tag(SeedIndex, PathIO);
 		Context->SeedForwardHandler->Forward(SeedIndex, PathDataFacade);
 
-		if (Settings->bFlagLeaves)
-		{
-			const TSharedPtr<PCGExData::TBuffer<bool>> LeavesBuffer = PathDataFacade->GetWritable(Settings->LeafAttributeName, false, true, PCGExData::EBufferInit::New);
-			TArray<bool>& OutValues = *LeavesBuffer->GetOutValues();
-			for (int i = 0; i < InCell->Nodes.Num(); i++) { OutValues[i] = Cluster->GetNode(InCell->Nodes[i])->Num() == 1; }
-		}
-
-		if (Settings->bTagIfClosedLoop) { PathIO->Tags->Add(Settings->IsClosedLoopTag); }
-
-		if (InCell->bIsConvex) { if (Settings->bTagConvex) { PathIO->Tags->Add(Settings->ConvexTag); } }
-		else { if (Settings->bTagConcave) { PathIO->Tags->Add(Settings->ConcaveTag); } }
-
+		Context->Artifacts.Process(Cluster, PathDataFacade, InCell);
 		PathDataFacade->Write(AsyncManager);
 
 		if (Settings->bOutputFilteredSeeds)
@@ -204,18 +210,20 @@ namespace PCGExFindContours
 			Settings->SeedMutations.ApplyToPoint(InCell.Get(), SeedPoint, MutablePoints);
 			Context->UdpatedSeedPoints[SeedIndex] = SeedPoint;
 		}
+
+		FPlatformAtomics::InterlockedIncrement(&OutputPathNum);
 	}
 
 	void FProcessor::CompleteWork()
 	{
 		if (!CellsConstraints->WrapperCell) { return; }
-		if (Context->Paths->IsEmpty() && WrapperSeed != -1 && Settings->Constraints.bKeepWrapperIfSolePath) { ProcessCell(WrapperSeed, CellsConstraints->WrapperCell); }
+		if (OutputPathNum == 0 && WrapperSeed != -1 && Settings->Constraints.bKeepWrapperIfSolePath) { ProcessCell(WrapperSeed, CellsConstraints->WrapperCell); }
 	}
 
 	void FProcessor::Cleanup()
 	{
 		TProcessor<FPCGExFindContoursContext, UPCGExFindContoursSettings>::Cleanup();
-		CellsConstraints->Cleanup();
+		if (CellsConstraints) { CellsConstraints->Cleanup(); }
 	}
 
 	void FBatch::Process()
@@ -225,30 +233,23 @@ namespace PCGExFindContours
 		// Project positions
 		ProjectionDetails = Settings->ProjectionDetails;
 		if (!ProjectionDetails.Init(Context, VtxDataFacade)) { return; }
-
 		PCGEx::InitArray(ProjectedPositions, VtxDataFacade->GetNum());
 
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, ProjectionTaskGroup)
 
 		ProjectionTaskGroup->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FBatch>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (TSharedPtr<FBatch> This = WeakThis.Pin()) { This->OnProjectionComplete(); }
+				PCGEX_ASYNC_THIS
+				This->OnProjectionComplete();
 			};
 
 		ProjectionTaskGroup->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FBatch>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				TSharedPtr<FBatch> This = WeakThis.Pin();
-				if (!This) { return; }
-
-				const int32 MaxIndex = StartIndex + Count;
-
-				for (int i = StartIndex; i < MaxIndex; i++)
-				{
-					This->ProjectedPositions[i] = This->ProjectionDetails.ProjectFlat(This->VtxDataFacade->Source->GetInPoint(i).Transform.GetLocation(), i);
-				}
+				PCGEX_ASYNC_THIS
+				TArray<FVector>& PP = *This->ProjectedPositions;
+				This->ProjectionDetails.ProjectFlat(This->VtxDataFacade, PP, Scope);
 			};
 
 		ProjectionTaskGroup->StartSubLoops(VtxDataFacade->GetNum(), GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());
@@ -256,7 +257,7 @@ namespace PCGExFindContours
 
 	bool FBatch::PrepareSingle(const TSharedPtr<FProcessor>& ClusterProcessor)
 	{
-		ClusterProcessor->ProjectedPositions = &ProjectedPositions;
+		ClusterProcessor->ProjectedPositions = ProjectedPositions;
 		TBatch<FProcessor>::PrepareSingle(ClusterProcessor);
 		return true;
 	}

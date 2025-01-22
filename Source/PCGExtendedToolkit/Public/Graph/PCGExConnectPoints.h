@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -9,7 +9,7 @@
 #include "Graph/PCGExGraph.h"
 #include "PCGExConnectPoints.generated.h"
 
-class UPCGExProbeFactoryBase;
+class UPCGExProbeFactoryData;
 class UPCGExProbeOperation;
 
 /**
@@ -63,9 +63,9 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectPointsContext final : FPCGExPoint
 {
 	friend class FPCGExConnectPointsElement;
 
-	TArray<TObjectPtr<const UPCGExProbeFactoryBase>> ProbeFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> GeneratorsFiltersFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> ConnectablesFiltersFactories;
+	TArray<TObjectPtr<const UPCGExProbeFactoryData>> ProbeFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> GeneratorsFiltersFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> ConnectablesFiltersFactories;
 
 	FVector CWCoincidenceTolerance = FVector::OneVector;
 };
@@ -92,21 +92,23 @@ namespace PCGExConnectPoints
 
 		TSharedPtr<PCGExGraph::FGraphBuilder> GraphBuilder;
 
-		TArray<UPCGExProbeOperation*> ProbeOperations;
-		TArray<UPCGExProbeOperation*> DirectProbeOperations;
+		TArray<UPCGExProbeOperation*> SearchProbes;
+		TArray<UPCGExProbeOperation*> DirectProbes;
 		TArray<UPCGExProbeOperation*> ChainProbeOperations;
 		TArray<UPCGExProbeOperation*> SharedProbeOperations;
 		bool bUseVariableRadius = false;
 		int32 NumChainedOps = 0;
-		double SharedSearchRadius = MIN_dbl;
+		double SharedSearchRadius = 0;
 
 		TArray<int8> CanGenerate;
+		TArray<int8> AcceptConnections;
 		TUniquePtr<PCGEx::FIndexedItemOctree> Octree;
 
 		const TArray<FPCGPoint>* InPoints = nullptr;
 		TArray<FTransform> CachedTransforms;
 
-		TArray<TSharedPtr<TSet<uint64>>> DistributedEdgesSet;
+		TSharedPtr<PCGExMT::TScopedSet<uint64>> DistributedEdgesSet;
+
 		FPCGExGeo2DProjectionDetails ProjectionDetails;
 
 		bool bPreventCoincidence = false;
@@ -123,9 +125,9 @@ namespace PCGExConnectPoints
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
 		void OnPreparationComplete();
-		virtual void PrepareLoopScopesForPoints(const TArray<uint64>& Loops) override;
-		virtual void PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count) override;
+		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
+		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 	};

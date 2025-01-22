@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -58,13 +58,17 @@ protected:
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefreshSeedTask final : public PCGExMT::FPCGExTask
+class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefreshSeedTask final : public PCGExMT::FPCGExIndexedTask
 {
 public:
-	explicit FPCGExRefreshSeedTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO) :
-		FPCGExTask(InPointIO)
+	explicit FPCGExRefreshSeedTask(const int32 InPointIndex,
+	                               const TSharedPtr<PCGExData::FPointIO>& InPointIO)
+		: FPCGExIndexedTask(InPointIndex),
+		  PointIO(InPointIO)
 	{
 	}
 
-	virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+	const TSharedPtr<PCGExData::FPointIO> PointIO;
+
+	virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 };

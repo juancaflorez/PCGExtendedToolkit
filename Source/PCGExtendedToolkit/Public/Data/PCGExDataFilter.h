@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -81,7 +81,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
 		case EPCGExAttributeFilter::All:
 			return true;
 		case EPCGExAttributeFilter::Exclude:
-			if (bPreservePCGExData && Name.StartsWith(TEXT("PCGEx/"))) { return !bFilterToRemove; }
+			if (bPreservePCGExData && Name.StartsWith(PCGEx::PCGExPrefix)) { return !bFilterToRemove; }
 			for (const TPair<FString, EPCGExStringMatchMode>& Filter : Matches)
 			{
 				switch (Filter.Value)
@@ -103,7 +103,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
 			}
 			return true;
 		case EPCGExAttributeFilter::Include:
-			if (bPreservePCGExData && Name.StartsWith(TEXT("PCGEx/"))) { return !bFilterToRemove; }
+			if (bPreservePCGExData && Name.StartsWith(PCGEx::PCGExPrefix)) { return !bFilterToRemove; }
 			for (const TPair<FString, EPCGExStringMatchMode>& Filter : Matches)
 			{
 				switch (Filter.Value)
@@ -160,6 +160,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
 
 	void Prune(TSet<FName>& Names, bool bInvert = false) const
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExNameFiltersDetails::Prune);
 		TArray<FName> ValidNames;
 		ValidNames.Reserve(Names.Num());
 		if (bInvert) { for (FName Name : Names) { if (!Test(Name.ToString())) { ValidNames.Add(Name); } } }
@@ -168,8 +169,9 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
 		Names.Append(ValidNames);
 	}
 
-	void Prune(PCGEx::FAttributesInfos& InAttributeInfos, bool bInvert = false) const
+	void Prune(PCGEx::FAttributesInfos& InAttributeInfos, const bool bInvert = false) const
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExNameFiltersDetails::Prune);
 		if (bInvert) { InAttributeInfos.Filter([&](const FName& InName) { return Test(InName.ToString()); }); }
 		else { InAttributeInfos.Filter([&](const FName& InName) { return !Test(InName.ToString()); }); }
 	}
@@ -196,16 +198,65 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCarryOverDetails
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExNameFiltersDetails Tags = FPCGExNameFiltersDetails(false);
 
+	/** If enabled, will test full tag value on value tags ('Tag:Value'), otherwise only test the left part. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
+	bool bTestTagValues = false;
+
 	void Init()
 	{
 		Attributes.Init();
 		Tags.Init();
 	}
 
-	void Filter(const PCGExData::FPointIO* PointIO) const
+	void Prune(TSet<FString>& InValues) const
 	{
-		Filter(PointIO->GetOut()->Metadata);
-		Filter(PointIO->Tags.Get());
+		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return; }
+		for (TArray<FString> TagList = InValues.Array(); const FString& Tag : TagList) { if (!Tags.Test(Tag)) { InValues.Remove(Tag); } }
+	}
+
+	void Prune(TArray<FString>& InValues) const
+	{
+		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return; }
+
+		int32 WriteIndex = 0;
+		for (int32 i = 0; i < InValues.Num(); i++) { if (Tags.Test(InValues[i])) { InValues[WriteIndex++] = InValues[i]; } }
+		InValues.SetNum(WriteIndex);
+	}
+
+	void Prune(const PCGExData::FPointIO* PointIO) const
+	{
+		Prune(PointIO->GetOut()->Metadata);
+		Prune(PointIO->Tags.Get());
+	}
+
+	void Prune(TArray<PCGEx::FAttributeIdentity>& Identities) const
+	{
+		if (Attributes.FilterMode == EPCGExAttributeFilter::All) { return; }
+
+		int32 WriteIndex = 0;
+		for (int32 i = 0; i < Identities.Num(); i++) { if (Attributes.Test(Identities[i].Name.ToString())) { Identities[WriteIndex++] = Identities[i]; } }
+		Identities.SetNum(WriteIndex);
+	}
+
+	void Prune(PCGExData::FTags* InTags) const
+	{
+		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return; }
+
+		TSet<FString> ToBeRemoved;
+		ToBeRemoved.Reserve(InTags->Num());
+
+		if (bTestTagValues)
+		{
+			// Test flattened tags; this is rather expensive.
+			for (TSet<FString> Flattened = InTags->Flatten(); const FString& Tag : Flattened) { if (!Tags.Test(Tag)) { ToBeRemoved.Add(Tag); } }
+		}
+		else
+		{
+			for (const FString& Tag : InTags->RawTags) { if (!Tags.Test(Tag)) { ToBeRemoved.Add(Tag); } }
+			for (const TPair<FString, TSharedPtr<PCGExTags::FTagValue>>& Pair : InTags->ValueTags) { if (!Tags.Test(Pair.Key)) { ToBeRemoved.Add(Pair.Key); } }
+		}
+
+		InTags->Remove(ToBeRemoved);
 	}
 
 	bool Test(const PCGExData::FPointIO* PointIO) const
@@ -215,46 +266,25 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCarryOverDetails
 		return true;
 	}
 
-	void Filter(TArray<PCGEx::FAttributeIdentity>& Identities) const
-	{
-		if (Attributes.FilterMode == EPCGExAttributeFilter::All) { return; }
-
-		for (int i = 0; i < Identities.Num(); i++)
-		{
-			if (!Attributes.Test(Identities[i].Name.ToString()))
-			{
-				Identities.RemoveAt(i);
-				i--;
-			}
-		}
-	}
-
-	void Filter(PCGExData::FTags* InTags) const
-	{
-		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return; }
-
-		TSet<FString> ToBeRemoved;
-		for (const FString& Tag : InTags->RawTags) { if (!Tags.Test(Tag)) { ToBeRemoved.Add(Tag); } }
-		for (const TPair<FString, FString>& Pair : InTags->Tags) { if (!Tags.Test((Pair.Key + PCGExData::TagSeparator + Pair.Value))) { ToBeRemoved.Add(Pair.Key); } }
-		InTags->Remove(ToBeRemoved);
-	}
-
 	bool Test(PCGExData::FTags* InTags) const
 	{
 		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return true; }
 
-		for (const FString& Tag : InTags->RawTags) { if (!Tags.Test(Tag)) { return false; } }
-		for (const TPair<FString, FString>& Pair : InTags->Tags) { if (!Tags.Test((Pair.Key + PCGExData::TagSeparator + Pair.Value))) { return false; } }
+		if (bTestTagValues)
+		{
+			// Test flattened tags; this is rather expensive.
+			for (TSet<FString> Flattened = InTags->Flatten(); const FString& Tag : Flattened) { if (!Tags.Test(Tag)) { return false; } }
+		}
+		else
+		{
+			for (const FString& Tag : InTags->RawTags) { if (!Tags.Test(Tag)) { return false; } }
+			for (const TPair<FString, TSharedPtr<PCGExTags::FTagValue>>& Pair : InTags->ValueTags) { if (!Tags.Test(Pair.Key)) { return false; } }
+		}
+
 		return true;
 	}
 
-	void Reduce(TSet<FString>& InTags) const
-	{
-		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return; }
-		for (TArray<FString> TagList = InTags.Array(); const FString& Tag : TagList) { if (!Tags.Test(Tag)) { InTags.Remove(Tag); } }
-	}
-
-	void Filter(UPCGMetadata* Metadata) const
+	void Prune(UPCGMetadata* Metadata) const
 	{
 		if (Attributes.FilterMode == EPCGExAttributeFilter::All) { return; }
 

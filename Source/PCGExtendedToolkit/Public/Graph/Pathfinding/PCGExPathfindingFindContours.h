@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -59,6 +59,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExCellConstraintsDetails Constraints = FPCGExCellConstraintsDetails(true);
 
+	/** Cell artifacts. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
+	FPCGExCellArtifactsDetails Artifacts;
+
 	/** Output a filtered set of points containing only seeds that generated a valid path */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	bool bOutputFilteredSeeds = false;
@@ -70,38 +74,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExGeo2DProjectionDetails ProjectionDetails;
 
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
-	bool bTagConcave = false;
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagConcave"))
-	FString ConcaveTag = TEXT("Concave");
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
-	bool bTagConvex = false;
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagConvex"))
-	FString ConvexTag = TEXT("Convex");
-
-	/** Whether to flag path points generated from "dead ends" */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(InlineEditConditionToggle))
-	bool bFlagLeaves = false;
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(DisplayName="Leaf Flag", EditCondition="bFlagLeaves"))
-	FName LeafAttributeName = TEXT("IsLeaf");
-
-	/** */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, InlineEditConditionToggle))
-	bool bTagIfClosedLoop = true;
-
-	/** ... */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(PCG_Overridable, EditCondition="bTagIfClosedLoop"))
-	FString IsClosedLoopTag = TEXT("ClosedLoop");
-
 	/** TBD */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Forwarding")
 	FPCGExAttributeToTagDetails SeedAttributesToPathTags;
@@ -111,7 +83,7 @@ public:
 	FPCGExForwardDetails SeedForwarding;
 
 	/** Whether or not to search for closest node using an octree. Depending on your dataset, enabling this may be either much faster, or much slower. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Performance", meta=(PCG_NotOverridable, AdvancedDisplay))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
 	bool bUseOctreeSearch = false;
 
 private:
@@ -122,6 +94,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindContoursContext final : FPCGExEdgesP
 {
 	friend class FPCGExFindContoursElement;
 	friend class FPCGExCreateBridgeTask;
+
+	FPCGExCellArtifactsDetails Artifacts;
 
 	FPCGExGeo2DProjectionDetails ProjectionDetails;
 	TSharedPtr<PCGExData::FFacade> SeedsDataFacade;
@@ -157,13 +131,18 @@ namespace PCGExFindContours
 		friend class FBatch;
 
 	protected:
-		bool bBuildExpandedNodes = false;
+		FRWLock WrappedSeedLock;
+
+		double ClosestSeedDist = MAX_dbl;
 		int32 WrapperSeed = -1;
+
+		bool bBuildExpandedNodes = false;
+		int32 OutputPathNum = 0;
 		TSharedPtr<PCGExTopology::FCell> WrapperCell;
 
 	public:
 		TSharedPtr<PCGExTopology::FCellConstraints> CellsConstraints;
-		TArray<FVector>* ProjectedPositions = nullptr;
+		TSharedPtr<TArray<FVector>> ProjectedPositions;
 
 		FProcessor(const TSharedRef<PCGExData::FFacade>& InVtxDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade):
 			TProcessor(InVtxDataFacade, InEdgeDataFacade)
@@ -173,8 +152,8 @@ namespace PCGExFindContours
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleRangeIteration(int32 Iteration, const int32 LoopIdx, const int32 Count) override;
-		void ProcessCell(const int32 SeedIndex, const TSharedPtr<PCGExTopology::FCell>& InCell) const;
+		virtual void ProcessSingleRangeIteration(int32 Iteration, const PCGExMT::FScope& Scope) override;
+		void ProcessCell(const int32 SeedIndex, const TSharedPtr<PCGExTopology::FCell>& InCell);
 		virtual void CompleteWork() override;
 		virtual void Cleanup() override;
 	};
@@ -185,7 +164,7 @@ namespace PCGExFindContours
 
 	protected:
 		FPCGExGeo2DProjectionDetails ProjectionDetails;
-		TArray<FVector> ProjectedPositions;
+		TSharedPtr<TArray<FVector>> ProjectedPositions;
 
 	public:
 		FBatch(FPCGExContext* InContext, const TSharedRef<PCGExData::FPointIO>& InVtx, const TArrayView<TSharedRef<PCGExData::FPointIO>> InEdges):

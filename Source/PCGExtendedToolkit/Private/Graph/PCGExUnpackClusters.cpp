@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExUnpackClusters.h"
@@ -49,7 +49,8 @@ bool FPCGExUnpackClustersElement::ExecuteInternal(
 	PCGEX_EXECUTION_CHECK
 	PCGEX_ON_INITIAL_EXECUTION
 	{
-		while (Context->AdvancePointsIO(false)) { Context->GetAsyncManager()->Start<FPCGExUnpackClusterTask>(-1, Context->CurrentIO); }
+		TSharedPtr<PCGExMT::FTaskManager> AsyncManager = Context->GetAsyncManager();
+		while (Context->AdvancePointsIO(false)) { PCGEX_LAUNCH(FPCGExUnpackClusterTask, Context->CurrentIO) }
 		Context->SetAsyncState(PCGEx::State_WaitingOnAsyncWork);
 	}
 
@@ -64,7 +65,7 @@ bool FPCGExUnpackClustersElement::ExecuteInternal(
 	return Context->TryComplete();
 }
 
-bool FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
+void FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
 {
 	const FPCGExUnpackClustersContext* Context = AsyncManager->GetContext<FPCGExUnpackClustersContext>();
 	PCGEX_SETTINGS(UnpackClusters)
@@ -73,7 +74,7 @@ bool FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager
 	if (!EdgeCount)
 	{
 		PCGE_LOG_C(Warning, GraphAndLog, Context, FTEXT("Some input points have no packing metadata."));
-		return false;
+		return;
 	}
 
 	const int32 NumEdges = EdgeCount->GetValue(PCGDefaultValueKey);
@@ -82,7 +83,7 @@ bool FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager
 	if (NumEdges > PointIO->GetNum() || NumVtx <= 0)
 	{
 		PCGE_LOG_C(Warning, GraphAndLog, Context, FTEXT("Some input points have could not be unpacked correctly (wrong number of vtx or edges)."));
-		return false;
+		return;
 	}
 
 	const TArray<FPCGPoint>& PackedPoints = PointIO->GetIn()->GetPoints();
@@ -94,7 +95,7 @@ bool FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager
 
 	NewEdges->DeleteAttribute(PCGExGraph::Tag_PackedClusterEdgeCount);
 	NewEdges->DeleteAttribute(PCGExGraph::Tag_PackedClusterPointCount);
-	NewEdges->DeleteAttribute(PCGExGraph::Tag_VtxEndpoint);
+	NewEdges->DeleteAttribute(PCGExGraph::Attr_PCGExVtxIdx);
 
 	const TSharedPtr<PCGExData::FPointIO> NewVtx = Context->OutPoints->Emplace_GetRef(PointIO, PCGExData::EIOInit::New);
 	TArray<FPCGPoint> MutableVtxPoints = NewVtx->GetOut()->GetMutablePoints();
@@ -103,15 +104,12 @@ bool FPCGExUnpackClusterTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager
 
 	NewVtx->DeleteAttribute(PCGExGraph::Tag_PackedClusterEdgeCount);
 	NewVtx->DeleteAttribute(PCGExGraph::Tag_PackedClusterPointCount);
-	NewVtx->DeleteAttribute(PCGExGraph::Tag_EdgeEndpoints);
+	NewVtx->DeleteAttribute(PCGExGraph::Attr_PCGExEdgeIdx);
 
-	FString OutPairId;
-	PointIO->Tags->GetValue(PCGExGraph::TagStr_ClusterPair, OutPairId);
+	const PCGExTags::IDType PairId = PointIO->Tags->GetTypedValue<int32>(PCGExGraph::TagStr_PCGExCluster);
 
-	PCGExGraph::MarkClusterVtx(NewVtx, OutPairId);
-	PCGExGraph::MarkClusterEdges(NewEdges, OutPairId);
-
-	return true;
+	PCGExGraph::MarkClusterVtx(NewVtx, PairId);
+	PCGExGraph::MarkClusterEdges(NewEdges, PairId);
 }
 
 #undef LOCTEXT_NAMESPACE

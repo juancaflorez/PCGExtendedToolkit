@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExCreateSpline.h"
@@ -33,8 +33,8 @@ bool FPCGExCreateSplineElement::Boot(FPCGExContext* InContext) const
 
 	if (Settings->bApplyCustomTangents)
 	{
-		PCGEX_VALIDATE_NAME(Settings->ArriveTangentAttribute);
-		PCGEX_VALIDATE_NAME(Settings->LeaveTangentAttribute);
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->ArriveTangentAttribute);
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->LeaveTangentAttribute);
 	}
 
 	return true;
@@ -135,13 +135,13 @@ namespace PCGExCreateSpline
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		TPointsProcessor<FPCGExCreateSplineContext, UPCGExCreateSplineSettings>::PrepareSingleLoopScopeForPoints(StartIndex, Count);
-		PointDataFacade->Fetch(StartIndex, Count);
+		TPointsProcessor<FPCGExCreateSplineContext, UPCGExCreateSplineSettings>::PrepareSingleLoopScopeForPoints(Scope);
+		PointDataFacade->Fetch(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		FVector OutArrive = FVector::ZeroVector;
 		FVector OutLeave = FVector::ZeroVector;
@@ -198,7 +198,7 @@ namespace PCGExCreateSpline
 
 		// Output spline data
 		SplineData->Initialize(SplinePoints, bClosedLoop, FTransform(PositionOffset));
-		Context->StageOutput(Settings->GetMainOutputPin(), SplineData, PointDataFacade->Source->Tags->ToSet(), true, false);
+		Context->StageOutput(Settings->GetMainOutputPin(), SplineData, PointDataFacade->Source->Tags->Flatten(), true, false);
 
 		// Output spline component
 		if (Settings->Mode != EPCGCreateSplineMode::CreateDataOnly)
@@ -216,10 +216,7 @@ namespace PCGExCreateSpline
 
 			SplineData->ApplyTo(SplineComponent);
 
-			Context->AttachManagedComponent(
-				SplineActor, SplineComponent,
-				FAttachmentTransformRules(EAttachmentRule::KeepRelative, EAttachmentRule::KeepWorld, EAttachmentRule::KeepWorld, false));
-
+			Context->AttachManagedComponent(SplineActor, SplineComponent, Settings->AttachmentRules.GetRules());
 			Context->NotifyActors.Add(SplineActor);
 		}
 	}

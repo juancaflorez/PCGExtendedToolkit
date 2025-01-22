@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Edges/Properties/PCGExVtxPropertyEdgeMatch.h"
@@ -53,9 +53,9 @@ void UPCGExVtxPropertyEdgeMatch::ProcessNode(PCGExCluster::FNode& Node, const TA
 {
 	const FPCGPoint& Point = PrimaryDataFacade->Source->GetInPoint(Node.PointIndex);
 
-	double BestDot = MIN_dbl;
+	double BestDot = MIN_dbl_neg;
 	int32 IBest = -1;
-	const double DotB = Config.DotComparisonDetails.GetDot(Node.PointIndex);
+	const double DotThreshold = Config.DotComparisonDetails.GetComparisonThreshold(Node.PointIndex);
 
 	FVector NodeDirection = DirCache ? DirCache->Read(Node.PointIndex).GetSafeNormal() : Config.DirectionConstant;
 	if (Config.bTransformDirection) { NodeDirection = Point.Transform.TransformVectorNoScale(NodeDirection); }
@@ -65,7 +65,7 @@ void UPCGExVtxPropertyEdgeMatch::ProcessNode(PCGExCluster::FNode& Node, const TA
 		const PCGExCluster::FAdjacencyData& A = Adjacency[i];
 		const double DotA = FVector::DotProduct(NodeDirection, A.Direction);
 
-		if (Config.DotComparisonDetails.Test(DotA, DotB))
+		if (Config.DotComparisonDetails.Test(DotA, DotThreshold))
 		{
 			if (DotA > BestDot)
 			{
@@ -108,7 +108,7 @@ TArray<FPCGPinProperties> UPCGExVtxPropertyEdgeMatchSettings::InputPinProperties
 	return PinProperties;
 }
 
-UPCGExParamFactoryBase* UPCGExVtxPropertyEdgeMatchSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+UPCGExFactoryData* UPCGExVtxPropertyEdgeMatchSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
 	UPCGExVtxPropertyEdgeMatchFactory* NewFactory = InContext->ManagedObjects->New<UPCGExVtxPropertyEdgeMatchFactory>();
 	NewFactory->Config = Config;

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfindingGrowPaths.h"
@@ -101,7 +101,6 @@ namespace PCGExGrowPaths
 		const TArray<PCGExCluster::FNode>& NodesRef = *Processor->Cluster->Nodes;
 		const TArray<PCGExGraph::FEdge>& EdgesRef = *Processor->Cluster->Edges;
 
-		const PCGExCluster::FNode& CurrentNode = NodesRef[LastGrowthIndex];
 		const PCGExCluster::FNode& NextNode = NodesRef[NextGrowthIndex];
 
 		Metrics.Add(Processor->Cluster->GetPos(NextNode));
@@ -154,14 +153,15 @@ namespace PCGExGrowPaths
 	{
 		const TSharedPtr<PCGExData::FPointIO> VtxIO = Processor->Cluster->VtxIO.Pin();
 		const TSharedPtr<PCGExData::FPointIO> PathIO = Processor->GetContext()->OutputPaths->Emplace_GetRef<UPCGPointData>(VtxIO->GetIn(), PCGExData::EIOInit::New);
-		const TSharedPtr<PCGExData::FFacade> PathDataFacade = MakeShared<PCGExData::FFacade>(PathIO.ToSharedRef());
+		if (!VtxIO || !PathIO) { return; }
+
+		PCGEX_MAKE_SHARED(PathDataFacade, PCGExData::FFacade, PathIO.ToSharedRef())
 
 		UPCGPointData* OutData = PathIO->GetOut();
 
 		PCGExGraph::CleanupVtxData(PathIO);
 
 		TArray<FPCGPoint>& MutablePoints = OutData->GetMutablePoints();
-		const TArray<FPCGPoint>& InPoints = VtxIO->GetIn()->GetPoints();
 
 		MutablePoints.Reserve(Path.Num());
 
@@ -194,7 +194,7 @@ TArray<FPCGPinProperties> UPCGExPathfindingGrowPathsSettings::InputPinProperties
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 	PCGEX_PIN_POINT(PCGExGraph::SourceSeedsLabel, "Seed points to start growth from.", Required, {})
-	PCGEX_PIN_PARAMS(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
 	return PinProperties;
 }
 
@@ -309,6 +309,8 @@ namespace PCGExGrowPaths
 
 		// Prepare growth points
 
+		PCGEX_SHARED_THIS_DECL
+
 		// Find all growth points
 		const int32 SeedCount = Context->SeedsDataFacade->Source->GetNum();
 		for (int i = 0; i < SeedCount; i++)
@@ -392,7 +394,7 @@ namespace PCGExGrowPaths
 
 			for (int j = 0; j < StartGrowthNumBranches; j++)
 			{
-				TSharedPtr<FGrowth> NewGrowth = MakeShared<FGrowth>(SharedThis(this), StartNumIterations, Node.Index, StartGrowthDirection);
+				PCGEX_MAKE_SHARED(NewGrowth, FGrowth, ThisPtr, StartNumIterations, Node.Index, StartGrowthDirection)
 				NewGrowth->MaxDistance = StartGrowthMaxDistance;
 				NewGrowth->SeedPointIndex = i;
 
@@ -404,7 +406,7 @@ namespace PCGExGrowPaths
 		}
 
 		if (IsTrivial()) { Grow(); }
-		else { AsyncManager->Start<FGrowTask>(BatchIndex, nullptr, SharedThis(this)); }
+		else { PCGEX_LAUNCH(FGrowTask, ThisPtr) }
 
 		return true;
 	}
@@ -447,10 +449,9 @@ namespace PCGExGrowPaths
 		}
 	}
 
-	bool FGrowTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
+	void FGrowTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
 	{
 		Processor->Grow();
-		return true;
 	}
 }
 

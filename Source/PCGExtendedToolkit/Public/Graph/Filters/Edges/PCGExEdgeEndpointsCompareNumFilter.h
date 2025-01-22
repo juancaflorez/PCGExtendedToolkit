@@ -1,11 +1,10 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "PCGExCompare.h"
-#include "PCGExConstants.h"
 
 
 #include "Graph/PCGExCluster.h"
@@ -15,10 +14,12 @@
 #include "PCGExEdgeEndpointsCompareNumFilter.generated.h"
 
 UENUM()
-enum class EPCGExRefineEdgeCompareAgainstMode : uint8
+enum class EPCGExEdgeEndpointCompareAgainstMode : uint8
 {
-	EndEnd  = 0 UMETA(DisplayName = "Endpoints", Tooltip="Numeric comparison"),
-	EndEdge = 1 UMETA(DisplayName = "Endpoints vs Edge", Tooltip="String comparison"),
+	AgainstEach     = 0 UMETA(DisplayName = "Start <-> End", Tooltip="Compare Edge's start point value against Edge's end point value."),
+	AgainstStart    = 1 UMETA(DisplayName = "Edge <-> Start", Tooltip="Compare the Edge's start point value against the Edge itself."),
+	AgainstEnd      = 2 UMETA(DisplayName = "Edge <-> End", Tooltip="Compare the Edge's end point value against the Edge itself."),
+	AgainstSelfBoth = 3 UMETA(DisplayName = "Edge <-> Start, End", Tooltip="Compare the Edge's value against each of its end points."),
 };
 
 
@@ -52,11 +53,12 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgeEndpointsCompareNumFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExEdgeEndpointsCompareNumFilterFactory : public UPCGExEdgeFilterFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExEdgeEndpointsCompareNumFilterFactory : public UPCGExEdgeFilterFactoryData
 {
 	GENERATED_BODY()
 
 public:
+	UPROPERTY()
 	FPCGExEdgeEndpointsCompareNumFilterConfig Config;
 
 	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const override;
@@ -111,9 +113,12 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ShowOnlyInnerProperties))
 	FPCGExEdgeEndpointsCompareNumFilterConfig Config;
 
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
 
 #if WITH_EDITOR
 	virtual FString GetDisplayName() const override;
 #endif
+
+protected:
+	virtual bool IsCacheable() const override { return true; }
 };

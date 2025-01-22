@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -17,6 +17,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "StaticMeshResources.h"
 
+#include "PCGExHelpers.h"
 #include "PCGComponent.h"
 #include "PCGContext.h"
 #include "PCGExH.h"
@@ -26,6 +27,54 @@
 #include "PCGExMacros.h"
 
 #include "PCGEx.generated.h"
+
+#ifndef PCGEX_CONSTANTS
+#define PCGEX_CONSTANTS
+
+#define DBL_INTERSECTION_TOLERANCE 1
+#define DBL_COLLOCATION_TOLERANCE 1
+#define DBL_COMPARE_TOLERANCE 0.01
+
+#endif
+
+using PCGExTypeHash = uint32;
+
+UENUM()
+enum class EPCGExOptionState : uint8
+{
+	Default  = 0 UMETA(DisplayName = "Default", Tooltip="Uses the default value selected in settings"),
+	Enabled  = 1 UMETA(DisplayName = "Enabled", Tooltip="Option is enabled, if supported."),
+	Disabled = 2 UMETA(DisplayName = "Disabled", Tooltip="Option is disabled, if supported.")
+};
+
+UENUM()
+enum class EPCGExTransformMode : uint8
+{
+	Absolute = 0 UMETA(DisplayName = "Absolute", ToolTip="Absolute, ignores source transform."),
+	Relative = 1 UMETA(DisplayName = "Relative", ToolTip="Relative to source transform."),
+};
+
+UENUM()
+enum class EPCGExAttributeSetPackingMode : uint8
+{
+	PerInput = 0 UMETA(DisplayName = "Per Input", ToolTip="..."),
+	Merged   = 1 UMETA(DisplayName = "Merged", ToolTip="..."),
+};
+
+UENUM()
+enum class EPCGExWinding : uint8
+{
+	Clockwise        = 1 UMETA(DisplayName = "Clockwise", ToolTip="..."),
+	CounterClockwise = 2 UMETA(DisplayName = "Counter Clockwise", ToolTip="..."),
+};
+
+UENUM()
+enum class EPCGExWindingMutation : uint8
+{
+	Unchanged        = 0 UMETA(DisplayName = "Unchanged", ToolTip="..."),
+	Clockwise        = 1 UMETA(DisplayName = "Clockwise", ToolTip="..."),
+	CounterClockwise = 2 UMETA(DisplayName = "CounterClockwise", ToolTip="..."),
+};
 
 UENUM()
 enum class EPCGExTransformComponent : uint8
@@ -47,11 +96,12 @@ enum class EPCGExMinimalAxis : uint8
 UENUM()
 enum class EPCGExSingleField : uint8
 {
-	X      = 0 UMETA(DisplayName = "X/Roll", ToolTip="X/Roll component if it exist, raw value otherwise."),
-	Y      = 1 UMETA(DisplayName = "Y/Pitch", ToolTip="Y/Pitch component if it exist, fallback to previous value otherwise."),
-	Z      = 2 UMETA(DisplayName = "Z/Yaw", ToolTip="Z/Yaw component if it exist, fallback to previous value otherwise."),
-	W      = 3 UMETA(DisplayName = "W", ToolTip="W component if it exist, fallback to previous value otherwise."),
-	Length = 4 UMETA(DisplayName = "Length", ToolTip="Length if vector, raw value otherwise."),
+	X             = 0 UMETA(DisplayName = "X/Roll", ToolTip="X/Roll component if it exist, raw value otherwise."),
+	Y             = 1 UMETA(DisplayName = "Y/Pitch", ToolTip="Y/Pitch component if it exist, fallback to previous value otherwise."),
+	Z             = 2 UMETA(DisplayName = "Z/Yaw", ToolTip="Z/Yaw component if it exist, fallback to previous value otherwise."),
+	W             = 3 UMETA(DisplayName = "W", ToolTip="W component if it exist, fallback to previous value otherwise."),
+	Length        = 4 UMETA(DisplayName = "Length", ToolTip="Length if vector, raw value otherwise."),
+	SquaredLength = 5 UMETA(DisplayName = "SquaredLength", ToolTip="SquaredLength if vector, raw value otherwise."),
 };
 
 UENUM()
@@ -261,6 +311,8 @@ namespace PCGEx
 		{TEXT("L"), EPCGExSingleField::Length},
 		{TEXT("LEN"), EPCGExSingleField::Length},
 		{TEXT("LENGTH"), EPCGExSingleField::Length},
+		{TEXT("SQUAREDLENGTH"), EPCGExSingleField::SquaredLength},
+		{TEXT("LENSQR"), EPCGExSingleField::SquaredLength}
 	};
 
 	static const TMap<FString, EPCGExAxis> STRMAP_AXIS = {

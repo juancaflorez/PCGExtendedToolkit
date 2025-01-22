@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExPathCrossings.h"
@@ -14,8 +14,8 @@
 TArray<FPCGPinProperties> UPCGExPathCrossingsSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	PCGEX_PIN_PARAMS(PCGExPaths::SourceCanCutFilters, "Fiter which edges can 'cut' other edges. Leave empty so all edges are can cut other edges.", Normal, {})
-	PCGEX_PIN_PARAMS(PCGExPaths::SourceCanBeCutFilters, "Fiter which edges can be 'cut' by other edges. Leave empty so all edges are can cut other edges.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExPaths::SourceCanCutFilters, "Fiter which edges can 'cut' other edges. Leave empty so all edges are can cut other edges.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExPaths::SourceCanBeCutFilters, "Fiter which edges can be 'cut' by other edges. Leave empty so all edges are can cut other edges.", Normal, {})
 	PCGEX_PIN_OPERATION_OVERRIDES(PCGExDataBlending::SourceOverridesBlendingOps)
 	return PinProperties;
 }
@@ -74,8 +74,8 @@ bool FPCGExPathCrossingsElement::ExecuteInternal(FPCGContext* InContext) const
 					Entry->InitializeOutput(PCGExData::EIOInit::Forward); // TODO : This is no good as we'll be missing template attributes
 					bHasInvalidInputs = true;
 
-					if (bIsCanBeCutTagValid) { if (Settings->bTagIfHasNoCrossings && Entry->Tags->IsTagged(Context->CanBeCutTag)) { Entry->Tags->Add(Settings->HasNoCrossingsTag); } }
-					else if (Settings->bTagIfHasNoCrossings) { Entry->Tags->Add(Settings->HasNoCrossingsTag); }
+					if (bIsCanBeCutTagValid) { if (Settings->bTagIfHasNoCrossings && Entry->Tags->IsTagged(Context->CanBeCutTag)) { Entry->Tags->AddRaw(Settings->HasNoCrossingsTag); } }
+					else if (Settings->bTagIfHasNoCrossings) { Entry->Tags->AddRaw(Settings->HasNoCrossingsTag); }
 
 					return false;
 				}
@@ -143,55 +143,59 @@ namespace PCGExPathCrossings
 		bCanCut = PCGEx::IsValidStringTag(Context->CanCutTag) ? PointDataFacade->Source->Tags->IsTagged(Context->CanCutTag) : true;
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, Preparation)
+
 		Preparation->OnCompleteCallback =
-			[&]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				CanCutFilterManager.Reset();
-				CanBeCutFilterManager.Reset();
-				Path->BuildPartialEdgeOctree(CanCut);
-				CanCut.Empty();
+				PCGEX_ASYNC_THIS
+
+				This->CanCutFilterManager.Reset();
+				This->CanBeCutFilterManager.Reset();
+				This->Path->BuildPartialEdgeOctree(This->CanCut);
+				This->CanCut.Empty();
 			};
 
 		Preparation->OnSubLoopStartCallback =
-			[&](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				PointDataFacade->Fetch(StartIndex, Count);
-				const int32 MaxIndex = StartIndex + Count;
+				PCGEX_ASYNC_THIS
 
-				if (CanCutFilterManager && CanBeCutFilterManager)
+				This->PointDataFacade->Fetch(Scope);
+
+				if (This->CanCutFilterManager && This->CanBeCutFilterManager)
 				{
-					for (int i = StartIndex; i < MaxIndex; i++)
+					for (int i = Scope.Start; i < Scope.End; i++)
 					{
-						CanCut[i] = CanCutFilterManager->Test(i);
-						CanBeCut[i] = CanBeCutFilterManager->Test(i);
-						Path->ComputeEdgeExtra(i);
+						This->CanCut[i] = This->CanCutFilterManager->Test(i);
+						This->CanBeCut[i] = This->CanBeCutFilterManager->Test(i);
+						This->Path->ComputeEdgeExtra(i);
 					}
 				}
-				else if (CanCutFilterManager)
+				else if (This->CanCutFilterManager)
 				{
-					for (int i = StartIndex; i < MaxIndex; i++)
+					for (int i = Scope.Start; i < Scope.End; i++)
 					{
-						CanCut[i] = CanCutFilterManager->Test(i);
-						CanBeCut[i] = true;
-						Path->ComputeEdgeExtra(i);
+						This->CanCut[i] = This->CanCutFilterManager->Test(i);
+						This->CanBeCut[i] = true;
+						This->Path->ComputeEdgeExtra(i);
 					}
 				}
-				else if (CanBeCutFilterManager)
+				else if (This->CanBeCutFilterManager)
 				{
-					for (int i = StartIndex; i < MaxIndex; i++)
+					for (int i = Scope.Start; i < Scope.End; i++)
 					{
-						CanCut[i] = true;
-						CanBeCut[i] = CanBeCutFilterManager->Test(i);
-						Path->ComputeEdgeExtra(i);
+						This->CanCut[i] = true;
+						This->CanBeCut[i] = This->CanBeCutFilterManager->Test(i);
+						This->Path->ComputeEdgeExtra(i);
 					}
 				}
 				else
 				{
-					for (int i = StartIndex; i < MaxIndex; i++)
+					for (int i = Scope.Start; i < Scope.End; i++)
 					{
-						CanCut[i] = true;
-						CanBeCut[i] = true;
-						Path->ComputeEdgeExtra(i);
+						This->CanCut[i] = true;
+						This->CanBeCut[i] = true;
+						This->Path->ComputeEdgeExtra(i);
 					}
 				}
 			};
@@ -201,12 +205,13 @@ namespace PCGExPathCrossings
 		return true;
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		Crossings[Iteration] = nullptr;
 		if (!CanBeCut[Iteration]) { return; }
 
 		const PCGExPaths::FPathEdge& Edge = Path->Edges[Iteration];
+		if (!Path->IsEdgeValid(Edge)) { return; }
 
 		const PCGExPaths::FPath* OtherPath = nullptr;
 
@@ -214,12 +219,12 @@ namespace PCGExPathCrossings
 
 		const TSharedPtr<FCrossing> NewCrossing = MakeShared<FCrossing>(Iteration);
 
-		auto FindSplit = [&](const PCGExPaths::FPathEdge& E1, const PCGExPaths::FPathEdge& E2)
+		auto FindSplit = [&](const PCGExPaths::FPathEdge& E2)
 		{
-			if (!Path->IsEdgeValid(E1) || !OtherPath->IsEdgeValid(E2)) { return; }
+			if (!OtherPath->IsEdgeValid(E2)) { return; }
 
-			const FVector& A1 = Path->GetPos(E1.Start);
-			const FVector& B1 = Path->GetPos(E1.End);
+			const FVector& A1 = Path->GetPos(Edge.Start);
+			const FVector& B1 = Path->GetPos(Edge.End);
 			const FVector& A2 = OtherPath->GetPos(E2.Start);
 			const FVector& B2 = OtherPath->GetPos(E2.End);
 			if (A1 == A2 || A1 == B2 || A2 == B1 || B2 == B1) { return; }
@@ -241,7 +246,7 @@ namespace PCGExPathCrossings
 			NewCrossing->Crossings.Add(PCGEx::H64(E2.Start, CurrentIOIndex));
 			NewCrossing->Positions.Add(FMath::Lerp(A, B, 0.5));
 			NewCrossing->CrossingDirections.Add(CrossDir);
-			NewCrossing->Alphas.Add(FVector::Dist(A1, A) / PathLength->Get(E1));
+			NewCrossing->Alphas.Add(FVector::Dist(A1, A) / PathLength->Get(Edge));
 		};
 
 		// Find crossings
@@ -252,27 +257,28 @@ namespace PCGExPathCrossings
 				Edge.Bounds.GetBox(), [&](const PCGExPaths::FPathEdge* OtherEdge)
 				{
 					if (Edge.ShareIndices(OtherEdge)) { return; }
-					FindSplit(Edge, *OtherEdge);
+					FindSplit(*OtherEdge);
 				});
-			return;
 		}
-
-		for (const TSharedPtr<PCGExPointsMT::FPointsProcessorBatchBase> Parent = ParentBatch.Pin();
-		     const TSharedRef<PCGExData::FFacade>& Facade : Parent->ProcessorFacades)
+		else
 		{
-			const TSharedRef<FPointsProcessor>* OtherProcessorPtr = Parent->SubProcessorMap->Find(&Facade->Source.Get());
-			if (!OtherProcessorPtr) { continue; }
+			for (const TSharedPtr<PCGExPointsMT::FPointsProcessorBatchBase> Parent = ParentBatch.Pin();
+			     const TSharedRef<PCGExData::FFacade>& Facade : Parent->ProcessorFacades)
+			{
+				const TSharedRef<FPointsProcessor>* OtherProcessorPtr = Parent->SubProcessorMap->Find(&Facade->Source.Get());
+				if (!OtherProcessorPtr) { continue; }
 
-			TSharedRef<FPointsProcessor> OtherProcessor = *OtherProcessorPtr;
-			if (!Details.bEnableSelfIntersection && &OtherProcessor.Get() == this) { continue; }
+				TSharedRef<FPointsProcessor> OtherProcessor = *OtherProcessorPtr;
+				if (!Details.bEnableSelfIntersection && &OtherProcessor.Get() == this) { continue; }
 
-			const TSharedRef<FProcessor> TypedProcessor = StaticCastSharedRef<FProcessor>(OtherProcessor);
-			if (!TypedProcessor->bCanCut) { return; }
+				const TSharedRef<FProcessor> TypedProcessor = StaticCastSharedRef<FProcessor>(OtherProcessor);
+				if (!TypedProcessor->bCanCut) { return; }
 
-			CurrentIOIndex = TypedProcessor->PointDataFacade->Source->IOIndex;
+				CurrentIOIndex = TypedProcessor->PointDataFacade->Source->IOIndex;
 
-			OtherPath = TypedProcessor->Path.Get();
-			TypedProcessor->GetEdgeOctree()->FindElementsWithBoundsTest(Edge.Bounds.GetBox(), [&](const PCGExPaths::FPathEdge* OtherEdge) { FindSplit(Edge, *OtherEdge); });
+				OtherPath = TypedProcessor->Path.Get();
+				TypedProcessor->GetEdgeOctree()->FindElementsWithBoundsTest(Edge.Bounds.GetBox(), [&](const PCGExPaths::FPathEdge* OtherEdge) { FindSplit(*OtherEdge); });
+			}
 		}
 
 		if (!NewCrossing->Crossings.IsEmpty()) { Crossings[Iteration] = NewCrossing; }
@@ -282,6 +288,7 @@ namespace PCGExPathCrossings
 	void FProcessor::OnRangeProcessingComplete()
 	{
 		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
+		PCGEX_INIT_IO_VOID(PointIO, PCGExData::EIOInit::New)
 
 		int32 NumPointsFinal = 0;
 
@@ -296,8 +303,6 @@ namespace PCGExPathCrossings
 
 			NumPointsFinal += Crossing->Crossings.Num();
 		}
-
-		PointIO->InitializeOutput(PCGExData::EIOInit::New);
 
 		const TArray<FPCGPoint>& InPoints = PointIO->GetIn()->GetPoints();
 		TArray<FPCGPoint>& OutPoints = PointIO->GetOut()->GetMutablePoints();
@@ -353,24 +358,22 @@ namespace PCGExPathCrossings
 
 		Blending->PrepareForData(PointDataFacade, PointDataFacade, PCGExData::ESource::Out, &ProtectedAttributes);
 
-		if (PointIO->GetIn()->GetPoints().Num() != PointIO->GetOut()->GetPoints().Num()) { if (Settings->bTagIfHasCrossing) { PointIO->Tags->Add(Settings->HasCrossingsTag); } }
-		else { if (Settings->bTagIfHasNoCrossings) { PointIO->Tags->Add(Settings->HasNoCrossingsTag); } }
+		if (PointIO->GetIn()->GetPoints().Num() != PointIO->GetOut()->GetPoints().Num()) { if (Settings->bTagIfHasCrossing) { PointIO->Tags->AddRaw(Settings->HasCrossingsTag); } }
+		else { if (Settings->bTagIfHasNoCrossings) { PointIO->Tags->AddRaw(Settings->HasNoCrossingsTag); } }
 
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, CollapseTask)
 		CollapseTask->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (const TSharedPtr<FProcessor> This = WeakThis.Pin()) { This->PointDataFacade->Write(This->AsyncManager); }
+				PCGEX_ASYNC_THIS
+				This->PointDataFacade->Write(This->AsyncManager);
 			};
-		CollapseTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-			{
-				const TSharedPtr<FProcessor> This = WeakThis.Pin();
-				if (!This) { return; }
 
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++) { This->CollapseCrossing(i); }
+		CollapseTask->OnSubLoopStartCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
+			{
+				PCGEX_ASYNC_THIS
+				for (int i = Scope.Start; i < Scope.End; i++) { This->CollapseCrossing(i); }
 			};
 		CollapseTask->StartSubLoops(Path->NumEdges, GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());
 	}
@@ -465,7 +468,7 @@ namespace PCGExPathCrossings
 	{
 		if (!bCanBeCut)
 		{
-			PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward);
+			PCGEX_INIT_IO_VOID(PointDataFacade->Source, PCGExData::EIOInit::Forward)
 			return;
 		}
 
@@ -480,14 +483,10 @@ namespace PCGExPathCrossings
 
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, CrossBlendTask)
 		CrossBlendTask->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FProcessor>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				const TSharedPtr<FProcessor> This = WeakThis.Pin();
-				if (!This) { return; }
-
-				const int32 MaxIndex = StartIndex + Count;
-				for (int i = StartIndex; i < MaxIndex; i++)
+				PCGEX_ASYNC_THIS
+				for (int i = Scope.Start; i < Scope.End; i++)
 				{
 					if (!This->Crossings[i]) { continue; }
 					This->CrossBlendPoint(i);

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExFindPointOnBoundsClusters.h"
@@ -113,7 +113,6 @@ namespace PCGExFindPointOnBoundsClusters
 	{
 		if (!FClusterProcessor::Process(InAsyncManager)) { return false; }
 
-		const FVector E = Cluster->Bounds.GetExtent();
 		SearchPosition = Cluster->Bounds.GetCenter() + Cluster->Bounds.GetExtent() * Settings->UVW;
 		Cluster->RebuildOctree(Settings->SearchMode);
 
@@ -125,21 +124,30 @@ namespace PCGExFindPointOnBoundsClusters
 
 	void FProcessor::UpdateCandidate(const FVector& InPosition, const int32 InIndex)
 	{
-		if (const double Dist = FVector::Dist(InPosition, SearchPosition); Dist < BestDistance)
+		const double Dist = FVector::Dist(InPosition, SearchPosition);
+		
 		{
 			FWriteScopeLock WriteLock(BestIndexLock);
+			if (Dist > BestDistance) { return; }
+		}
+
+		{
+			FWriteScopeLock WriteLock(BestIndexLock);
+			
+			if (Dist > BestDistance) { return; }
+			
 			BestPosition = InPosition;
 			BestIndex = InIndex;
 			BestDistance = Dist;
 		}
 	}
 
-	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope)
 	{
 		UpdateCandidate(Cluster->GetPos(Node), Node.PointIndex);
 	}
 
-	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
 	{
 		UpdateCandidate(Cluster->GetClosestPointOnEdge(EdgeIndex, SearchPosition), EdgeIndex);
 	}
@@ -162,7 +170,7 @@ namespace PCGExFindPointOnBoundsClusters
 		}
 		else
 		{
-			IORef->InitializeOutput(PCGExData::EIOInit::New);
+			PCGEX_INIT_IO_VOID(IORef, PCGExData::EIOInit::New)
 			IORef->GetOut()->GetMutablePoints().SetNum(1);
 
 			FPCGPoint& OutPoint = (IORef->GetOut()->GetMutablePoints()[0] = IORef->GetInPoint(BestIndex));

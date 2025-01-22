@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -16,6 +16,7 @@
 #include "PCGEx.h"
 #include "PCGExHelpers.h"
 #include "PCGExMath.h"
+#include "PCGExMT.h"
 #include "PCGExPointIO.h"
 
 #include "Metadata/Accessors/PCGAttributeAccessor.h"
@@ -23,6 +24,11 @@
 #include "PCGExAttributeHelpers.generated.h"
 
 #pragma region Input Configs
+
+namespace PCGExData
+{
+	class FFacade;
+}
 
 struct FPCGExAttributeGatherDetails;
 
@@ -79,6 +85,50 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExInputConfig
 	FString ToString() const { return GetName().ToString(); }
 };
 
+USTRUCT(BlueprintType)
+struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeSourceToTargetDetails
+{
+	GENERATED_BODY()
+
+	FPCGExAttributeSourceToTargetDetails()
+	{
+	}
+
+	/** Attribute to read on input */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	FName Source = FName("SourceAttribute");
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bOutputToDifferentName = false;
+
+	/** Attribute to write on output, if different from input */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, EditCondition="bOutputToDifferentName"))
+	FName Target = FName("TargetAttribute");
+
+	bool ValidateNames(FPCGExContext* InContext) const;
+};
+
+USTRUCT(BlueprintType)
+struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeSourceToTargetList
+{
+	GENERATED_BODY()
+
+	FPCGExAttributeSourceToTargetList()
+	{
+	}
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, TitleProperty="{Source}"))
+	TArray<FPCGExAttributeSourceToTargetDetails> Attributes;
+
+	bool IsEmpty() const { return Attributes.IsEmpty(); }
+	int32 Num() const { return Attributes.Num(); }
+
+	bool ValidateNames(FPCGExContext* InContext) const;
+	void SetOutputTargetNames(const TSharedRef<PCGExData::FFacade>& InFacade) const;
+
+	void GetSources(TArray<FName>& OutNames) const;
+};
+
 #pragma endregion
 
 namespace PCGEx
@@ -108,17 +158,19 @@ namespace PCGEx
 
 	struct /*PCGEXTENDEDTOOLKIT_API*/ FAttributeIdentity
 	{
-		const FName Name = NAME_None;
-		const EPCGMetadataTypes UnderlyingType = EPCGMetadataTypes::Unknown;
-		const bool bAllowsInterpolation = true;
+		FName Name = NAME_None;
+		EPCGMetadataTypes UnderlyingType = EPCGMetadataTypes::Unknown;
+		bool bAllowsInterpolation = true;
+
+		FAttributeIdentity() = default;
 
 		FAttributeIdentity(const FAttributeIdentity& Other)
 			: Name(Other.Name), UnderlyingType(Other.UnderlyingType), bAllowsInterpolation(Other.bAllowsInterpolation)
 		{
 		}
 
-		FAttributeIdentity(const FName InName, const EPCGMetadataTypes InUnderlyingType, const bool AllowsInterpolation)
-			: Name(InName), UnderlyingType(InUnderlyingType), bAllowsInterpolation(AllowsInterpolation)
+		FAttributeIdentity(const FName InName, const EPCGMetadataTypes InUnderlyingType, const bool InAllowsInterpolation)
+			: Name(InName), UnderlyingType(InUnderlyingType), bAllowsInterpolation(InAllowsInterpolation)
 		{
 		}
 
@@ -131,6 +183,9 @@ namespace PCGEx
 
 		static void Get(const UPCGMetadata* InMetadata, TArray<FAttributeIdentity>& OutIdentities);
 		static void Get(const UPCGMetadata* InMetadata, TArray<FName>& OutNames, TMap<FName, FAttributeIdentity>& OutIdentities);
+
+		using FForEachFunc = std::function<void (const FAttributeIdentity&, const int32)>;
+		static int32 ForEach(const UPCGMetadata* InMetadata, FForEachFunc&& Func);
 	};
 
 	class FAttributesInfos : public TSharedFromThis<FAttributesInfos>
@@ -211,7 +266,7 @@ namespace PCGEx
 		const FPCGContext* InContext, const FName InputLabel,
 		const FPCGExAttributeGatherDetails& InDetails, TSet<FName>& Mismatches)
 	{
-		TSharedPtr<FAttributesInfos> OutInfos = MakeShared<FAttributesInfos>();
+		PCGEX_MAKE_SHARED(OutInfos, FAttributesInfos)
 		GatherAttributes(OutInfos, InContext, InputLabel, InDetails, Mismatches);
 		return OutInfos;
 	}
@@ -301,13 +356,13 @@ namespace PCGEx
 					Attribute = AsSpatial->Metadata->GetConstAttribute(InternalSelector.GetName());
 					if (Attribute)
 					{
-						PCGMetadataAttribute::CallbackWithRightType(
-							Attribute->GetTypeId(),
-							[&](auto DummyValue) -> void
-							{
-								using RawT = decltype(DummyValue);
-								InternalAccessor = MakeShared<FPCGAttributeAccessor<RawT>>(static_cast<const FPCGMetadataAttribute<RawT>*>(Attribute), AsSpatial->Metadata);
-							});
+						Attribute->GetTypeId(),
+							PCGEx::ExecuteWithRightType(
+								Attribute->GetTypeId(), [&](auto DummyValue)
+								{
+									using RawT = decltype(DummyValue);
+									InternalAccessor = MakeShared<FPCGAttributeAccessor<RawT>>(static_cast<const FPCGMetadataAttribute<RawT>*>(Attribute), AsSpatial->Metadata);
+								});
 
 						bValid = true;
 					}
@@ -321,6 +376,8 @@ namespace PCGEx
 		TAttributeBroadcaster()
 		{
 		}
+
+		FString GetName() { return InternalSelector.GetName().ToString(); }
 
 		virtual EPCGMetadataTypes GetType() const { return GetMetadataType<T>(); }
 		const FPCGMetadataAttributeBase* GetAttribute() const { return Attribute; }
@@ -357,38 +414,34 @@ namespace PCGEx
 		/**
 		 * Build and validate a property/attribute accessor for the selected
 		 * @param Dump
-		 * @param StartIndex
-		 * @param Count
 		 */
-		void Fetch(TArray<T>& Dump, const int32 StartIndex, const int32 Count)
+		void Fetch(TArray<T>& Dump, const PCGExMT::FScope& Scope)
 		{
 			check(bValid)
 			check(Dump.Num() == PointIO->GetNum(PCGExData::ESource::In)) // Dump target should be initialized at full length before using Fetch
 
 			const UPCGPointData* InData = PointIO->GetIn();
-			const int32 LastIndex = StartIndex + Count;
 
 			if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::Attribute)
 			{
-				PCGMetadataAttribute::CallbackWithRightType(
-					Attribute->GetTypeId(),
-					[&](auto DummyValue) -> void
+				PCGEx::ExecuteWithRightType(
+					Attribute->GetTypeId(), [&](auto DummyValue)
 					{
 						using RawT = decltype(DummyValue);
 
 						TArray<RawT> RawValues;
-						PCGEx::InitArray(RawValues, Count);
+						PCGEx::InitArray(RawValues, Scope.Count);
 
 						TArrayView<RawT> RawView(RawValues);
-						InternalAccessor->GetRange(RawView, StartIndex, *PointIO->GetInKeys().Get(), EPCGAttributeAccessorFlags::AllowBroadcast);
+						InternalAccessor->GetRange(RawView, Scope.Start, *PointIO->GetInKeys().Get(), EPCGAttributeAccessorFlags::AllowBroadcast);
 
-						for (int i = 0; i < Count; i++) { Dump[StartIndex + i] = Convert(RawValues[i]); }
+						for (int i = 0; i < Scope.Count; i++) { Dump[Scope.Start + i] = Convert(RawValues[i]); }
 					});
 			}
 			else if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::PointProperty)
 			{
 				const TArray<FPCGPoint>& InPoints = InData->GetPoints();
-#define PCGEX_GET_BY_ACCESSOR(_ENUM, _ACCESSOR) case _ENUM: for (int i = StartIndex; i < LastIndex; i++) { Dump[i] = Convert(InPoints[i]._ACCESSOR); } break;
+#define PCGEX_GET_BY_ACCESSOR(_ENUM, _ACCESSOR) case _ENUM: for (int i = Scope.Start; i < Scope.End; i++) { Dump[i] = Convert(InPoints[i]._ACCESSOR); } break;
 
 				switch (InternalSelector.GetPointProperty()) { PCGEX_FOREACH_POINTPROPERTY(PCGEX_GET_BY_ACCESSOR) }
 #undef PCGEX_GET_BY_ACCESSOR
@@ -398,7 +451,7 @@ namespace PCGEx
 				switch (InternalSelector.GetExtraProperty())
 				{
 				case EPCGExtraProperties::Index:
-					for (int i = StartIndex; i < LastIndex; i++) { Dump[i] = Convert(i); }
+					for (int i = Scope.Start; i < Scope.End; i++) { Dump[i] = Convert(i); }
 					break;
 				default: ;
 				}
@@ -429,9 +482,8 @@ namespace PCGEx
 
 			if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::Attribute)
 			{
-				PCGMetadataAttribute::CallbackWithRightType(
-					Attribute->GetTypeId(),
-					[&](auto DummyValue) -> void
+				PCGEx::ExecuteWithRightType(
+					Attribute->GetTypeId(), [&](auto DummyValue)
 					{
 						using RawT = decltype(DummyValue);
 						TArray<RawT> RawValues;
@@ -483,6 +535,55 @@ namespace PCGEx
 			}
 		}
 
+		void GrabUniqueValues(TSet<T>& Dump)
+		{
+			if (!bValid) { return; }
+
+			const UPCGPointData* InData = PointIO->GetIn();
+
+			int32 NumPoints = PointIO->GetNum(PCGExData::ESource::In);
+			Dump.Reserve(Dump.Num() + NumPoints);
+
+			if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::Attribute)
+			{
+				PCGEx::ExecuteWithRightType(
+					Attribute->GetTypeId(), [&](auto DummyValue)
+					{
+						using RawT = decltype(DummyValue);
+						TArray<RawT> RawValues;
+
+						PCGEx::InitArray(RawValues, NumPoints);
+
+						TArrayView<RawT> View(RawValues);
+						InternalAccessor->GetRange(View, 0, *PointIO->GetInKeys().Get(), EPCGAttributeAccessorFlags::AllowBroadcast);
+
+						for (int i = 0; i < NumPoints; i++) { Dump.Add(Convert(RawValues[i])); }
+
+						RawValues.Empty();
+					});
+			}
+			else if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::PointProperty)
+			{
+				const TArray<FPCGPoint>& InPoints = InData->GetPoints();
+
+#define PCGEX_GET_BY_ACCESSOR(_ENUM, _ACCESSOR) case _ENUM: for (int i = 0; i < NumPoints; i++) { Dump.Add(Convert(InPoints[i]._ACCESSOR)); } break;
+				switch (InternalSelector.GetPointProperty()) { PCGEX_FOREACH_POINTPROPERTY(PCGEX_GET_BY_ACCESSOR) }
+#undef PCGEX_GET_BY_ACCESSOR
+			}
+			else if (InternalSelector.GetSelection() == EPCGAttributePropertySelection::ExtraProperty)
+			{
+				switch (InternalSelector.GetExtraProperty())
+				{
+				case EPCGExtraProperties::Index:
+					for (int i = 0; i < NumPoints; i++) { Dump.Add(Convert(i)); }
+					break;
+				default: ;
+				}
+			}
+
+			Dump.Shrink();
+		}
+
 		void Grab(const bool bCaptureMinMax = false)
 		{
 			GrabAndDump(Values, bCaptureMinMax, Min, Max);
@@ -510,9 +611,9 @@ namespace PCGEx
 			for (int i = 0; i < Values.Num(); i++) { Values[i] = PCGExMath::Div(Values[i], Range); }
 		}
 
-		FORCEINLINE T SoftGet(const int32 Index, const FPCGPoint& Point, const T& fallback)
+		FORCEINLINE T SoftGet(const int32 Index, const FPCGPoint& Point, const T& Fallback) const
 		{
-			if (!bValid) { return fallback; }
+			if (!bValid) { return Fallback; }
 			switch (InternalSelector.GetSelection())
 			{
 			case EPCGAttributePropertySelection::Attribute:
@@ -536,25 +637,25 @@ namespace PCGEx
 				default: ;
 				}
 			default:
-				return fallback;
+				return Fallback;
 			}
 		}
 
-		FORCEINLINE T SoftGet(const PCGExData::FPointRef& PointRef, const T& fallback) { return SoftGet(PointRef.Index, *PointRef.Point, fallback); }
+		FORCEINLINE T SoftGet(const PCGExData::FPointRef& PointRef, const T& Fallback) const { return SoftGet(PointRef.Index, *PointRef.Point, Fallback); }
 
-		FORCEINLINE T SafeGet(const int32 Index, const T& fallback) const { return !bValid ? fallback : Values[Index]; }
+		FORCEINLINE T SafeGet(const int32 Index, const T& Fallback) const { return !bValid ? Fallback : Values[Index]; }
 		FORCEINLINE T operator[](int32 Index) const { return bValid ? Values[Index] : T{}; }
 
 		static TSharedPtr<TAttributeBroadcaster<T>> Make(const FName& InName, const TSharedRef<PCGExData::FPointIO>& InPointIO)
 		{
-			TSharedPtr<TAttributeBroadcaster<T>> Broadcaster = MakeShared<TAttributeBroadcaster<T>>();
+			PCGEX_MAKE_SHARED(Broadcaster, TAttributeBroadcaster<T>)
 			if (!Broadcaster->Prepare(InName, InPointIO)) { return nullptr; }
 			return Broadcaster;
 		}
 
 		static TSharedPtr<TAttributeBroadcaster<T>> Make(const FPCGAttributePropertyInputSelector& InSelector, const TSharedRef<PCGExData::FPointIO>& InPointIO)
 		{
-			TSharedPtr<TAttributeBroadcaster<T>> Broadcaster = MakeShared<TAttributeBroadcaster<T>>();
+			PCGEX_MAKE_SHARED(Broadcaster, TAttributeBroadcaster<T>)
 			if (!Broadcaster->Prepare(InSelector, InPointIO)) { return nullptr; }
 			return Broadcaster;
 		}
@@ -569,6 +670,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const bool Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>) { return Value; }
 			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return Value ? 1 : 0; }
@@ -602,6 +704,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const int32 Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>) { return Value > 0; }
 			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return static_cast<T>(Value); }
@@ -623,6 +726,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const int64 Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>) { return Value > 0; }
 			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return static_cast<T>(Value); }
@@ -644,6 +748,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const float Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>) { return Value > 0; }
 			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return static_cast<T>(Value); }
@@ -665,6 +770,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const double Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>) { return Value > 0; }
 			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return static_cast<T>(Value); }
@@ -686,6 +792,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FVector2D& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>)
 			{
@@ -699,6 +806,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Y > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return Value.SquaredLength() > 0;
 				}
 			}
@@ -714,6 +822,8 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Y;
 				case EPCGExSingleField::Length:
+					return Value.Length();
+				case EPCGExSingleField::SquaredLength:
 					return Value.SquaredLength();
 				}
 			}
@@ -735,6 +845,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FVector& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>)
 			{
@@ -749,6 +860,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Z > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return Value.SquaredLength() > 0;
 				}
 			}
@@ -765,6 +877,8 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Z;
 				case EPCGExSingleField::Length:
+					return Value.Length();
+				case EPCGExSingleField::SquaredLength:
 					return Value.SquaredLength();
 				}
 			}
@@ -786,6 +900,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FVector4& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>)
 			{
@@ -801,6 +916,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.W > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return FVector(Value).SquaredLength() > 0;
 				}
 			}
@@ -818,6 +934,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.W > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return FVector(Value).SquaredLength() > 0;
 				}
 			}
@@ -839,6 +956,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FQuat& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, bool>)
 			{
@@ -854,6 +972,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Dir.Z > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return Dir.SquaredLength() > 0;
 				}
 			}
@@ -871,6 +990,8 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Dir.Z;
 				case EPCGExSingleField::Length:
+					return Dir.Length();
+				case EPCGExSingleField::SquaredLength:
 					return Dir.SquaredLength();
 				}
 			}
@@ -896,6 +1017,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FRotator& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(FVector(Value.Pitch, Value.Roll, Value.Yaw)); }
 
 			else if constexpr (std::is_same_v<T, bool>)
 			{
@@ -910,6 +1032,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Roll > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return Value.Euler().SquaredLength() > 0;
 				}
 			}
@@ -926,6 +1049,7 @@ namespace PCGEx
 				case EPCGExSingleField::W:
 					return Value.Roll > 0;
 				case EPCGExSingleField::Length:
+				case EPCGExSingleField::SquaredLength:
 					return Value.Euler().SquaredLength() > 0;
 				}
 			}
@@ -947,6 +1071,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FTransform& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (
 				std::is_same_v<T, bool> ||
@@ -981,6 +1106,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FString& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, FString>) { return Value; }
 			else if constexpr (std::is_same_v<T, FName>) { return FName(Value); }
@@ -996,6 +1122,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FName& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, FString>) { return Value.ToString(); }
 			else if constexpr (std::is_same_v<T, FName>) { return Value; }
@@ -1011,6 +1138,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FSoftClassPath& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, FString>) { return Value.ToString(); }
 			else if constexpr (std::is_same_v<T, FName>) { return FName(Value.ToString()); }
@@ -1026,6 +1154,7 @@ namespace PCGEx
 		FORCEINLINE virtual T Convert(const FSoftObjectPath& Value) const
 		{
 			if constexpr (std::is_same_v<T, decltype(Value)>) { return Value; }
+			else if constexpr (std::is_same_v<T, PCGExTypeHash>) { return GetTypeHash(Value); }
 
 			else if constexpr (std::is_same_v<T, FString>) { return *Value.ToString(); }
 			else if constexpr (std::is_same_v<T, FName>) { return FName(*Value.ToString()); }
@@ -1046,19 +1175,24 @@ namespace PCGEx
 	static void CopyPoints(
 		const PCGExData::FPointIO* Source,
 		const PCGExData::FPointIO* Target,
-		const TArrayView<const int32>& SourceIndices,
+		const TSharedPtr<const TArray<int32>>& SourceIndices,
 		const int32 TargetIndex = 0,
 		const bool bKeepSourceMetadataEntry = false)
 	{
-		const int32 NumIndices = SourceIndices.Num();
-		const TArray<FPCGPoint>& SourcePoints = Source->GetIn()->GetPoints();
-		TArray<FPCGPoint>& TargetPoints = Target->GetMutablePoints();
+		const int32 NumIndices = SourceIndices->Num();
+		const TArray<FPCGPoint>& SourceContainer = Source->GetIn()->GetPoints();
+		TArray<FPCGPoint>& TargetContainer = Target->GetMutablePoints();
+
+		if (TargetContainer.Num() < TargetIndex + SourceIndices->Num())
+		{
+			TargetContainer.SetNumUninitialized(TargetContainer.Num() + TargetIndex + SourceIndices->Num());
+		}
 
 		if (bKeepSourceMetadataEntry)
 		{
 			for (int i = 0; i < NumIndices; i++)
 			{
-				TargetPoints[TargetIndex + i] = SourcePoints[SourceIndices[i]];
+				TargetContainer[TargetIndex + i] = SourceContainer[*(SourceIndices->GetData() + i)];
 			}
 		}
 		else
@@ -1066,10 +1200,10 @@ namespace PCGEx
 			for (int i = 0; i < NumIndices; i++)
 			{
 				const int32 WriteIndex = TargetIndex + i;
-				const PCGMetadataEntryKey Key = TargetPoints[WriteIndex].MetadataEntry;
+				const PCGMetadataEntryKey Key = TargetContainer[WriteIndex].MetadataEntry;
 
-				const FPCGPoint& SourcePt = SourcePoints[SourceIndices[i]];
-				FPCGPoint& TargetPt = TargetPoints[WriteIndex] = SourcePt;
+				const FPCGPoint& SourcePt = SourceContainer[*(SourceIndices->GetData() + i)];
+				FPCGPoint& TargetPt = TargetContainer[WriteIndex] = SourcePt;
 				TargetPt.MetadataEntry = Key;
 			}
 		}

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -40,19 +40,18 @@ namespace PCGExGraph
 	const FName SourceEdgeSortingRules = TEXT("Edge Sorting Rules");
 	const FName OutputPackedClustersLabel = TEXT("Packed Clusters");
 
-	const FName Tag_EdgeEndpoints = FName(PCGEx::PCGExPrefix + TEXT("EdgeEndpoints"));
-	const FName Tag_VtxEndpoint = FName(PCGEx::PCGExPrefix + TEXT("VtxEndpoint"));
-	const FName Tag_ClusterIndex = FName(PCGEx::PCGExPrefix + TEXT("ClusterIndex"));
+	const FName Attr_PCGExEdgeIdx = FName(PCGEx::PCGExPrefix + TEXT("EData"));
+	const FName Attr_PCGExVtxIdx = FName(PCGEx::PCGExPrefix + TEXT("VData"));
 
-	const FName Tag_ClusterPair = FName(PCGEx::PCGExPrefix + TEXT("ClusterPair"));
-	const FString TagStr_ClusterPair = Tag_ClusterPair.ToString();
+	const FName Tag_PCGExCluster = FName(PCGEx::PCGExPrefix + TEXT("Cluster"));
+	const FString TagStr_PCGExCluster = Tag_PCGExCluster.ToString();
 
-	const FName Tag_PCGExVtx = FName(PCGEx::PCGExPrefix + TEXT("ClusterVtx"));
+	const FName Tag_PCGExVtx = FName(PCGEx::PCGExPrefix + TEXT("Vtx"));
 	const FString TagStr_PCGExVtx = Tag_PCGExVtx.ToString();
-	const FName Tag_PCGExEdges = FName(PCGEx::PCGExPrefix + TEXT("ClusterEdges"));
+	const FName Tag_PCGExEdges = FName(PCGEx::PCGExPrefix + TEXT("Edges"));
 	const FString TagStr_PCGExEdges = Tag_PCGExEdges.ToString();
 
-	PCGEX_ASYNC_STATE(State_ReadyForNextEdges)
+	PCGEX_CTX_STATE(State_ReadyForNextEdges)
 
 	FORCEINLINE static uint32 NodeGUID(const uint32 Base, const int32 Index)
 	{
@@ -64,10 +63,12 @@ namespace PCGExGraph
 
 	struct FLink
 	{
-		uint32 Node;
-		uint32 Edge;
+		int32 Node = -1;
+		int32 Edge = -1;
 
-		constexpr FLink(const uint64 Hash) : Node(PCGEx::H64A(Hash)), Edge(PCGEx::H64A(Hash))
+		constexpr FLink() = default;
+
+		constexpr explicit FLink(const uint64 Hash) : Node(PCGEx::H64A(Hash)), Edge(PCGEx::H64A(Hash))
 		{
 		}
 
@@ -78,7 +79,7 @@ namespace PCGExGraph
 		FORCEINLINE uint64 H64() const { return PCGEx::H64U(Node, Edge); }
 
 		bool operator==(const FLink& Other) const { return Node == Other.Node && Edge == Other.Edge; }
-		FORCEINLINE uint32 GetTypeHash(const FLink& Key) { return HashCombineFast(Key.Node, Key.Edge); }
+		FORCEINLINE friend uint32 GetTypeHash(const FLink& Key) { return HashCombineFast(Key.Node, Key.Edge); }
 	};
 
 	struct /*PCGEXTENDEDTOOLKIT_API*/ FEdge
@@ -90,9 +91,9 @@ namespace PCGExGraph
 		int32 IOIndex = -1;
 		int8 bValid = 1;
 
-		FEdge() = default;
+		constexpr FEdge() = default;
 
-		FEdge(const int32 InIndex, const uint32 InStart, const uint32 InEnd, const int32 InPointIndex = -1, const int32 InIOIndex = -1)
+		constexpr FEdge(const int32 InIndex, const uint32 InStart, const uint32 InEnd, const int32 InPointIndex = -1, const int32 InIOIndex = -1)
 			: Start(InStart), End(InEnd), Index(InIndex), PointIndex(InPointIndex), IOIndex(InIOIndex)
 		{
 		}
@@ -111,41 +112,36 @@ namespace PCGExGraph
 		FORCEINLINE uint32 GetTypeHash(const FLink& Key) { return HashCombineFast(Key.Node, Key.Edge); }
 	};
 
-	static void SetClusterVtx(const TSharedPtr<PCGExData::FPointIO>& IO, FString& OutId)
+	static void SetClusterVtx(const TSharedPtr<PCGExData::FPointIO>& IO, PCGExTags::IDType& OutId)
 	{
-		IO->Tags->Add(TagStr_ClusterPair, IO->GetOutIn()->GetUniqueID(), OutId);
-		IO->Tags->Add(TagStr_PCGExVtx);
+		OutId = IO->Tags->Set<int32>(TagStr_PCGExCluster, IO->GetOutIn()->GetUniqueID());
+		IO->Tags->AddRaw(TagStr_PCGExVtx);
 		IO->Tags->Remove(TagStr_PCGExEdges);
 	}
 
-	static void MarkClusterVtx(const TSharedPtr<PCGExData::FPointIO>& IO, const FString& Id)
+	static void MarkClusterVtx(const TSharedPtr<PCGExData::FPointIO>& IO, const PCGExTags::IDType& Id)
 	{
-		IO->Tags->Add(TagStr_ClusterPair, Id);
-		IO->Tags->Add(TagStr_PCGExVtx);
+		IO->Tags->Set(TagStr_PCGExCluster, Id);
+		IO->Tags->AddRaw(TagStr_PCGExVtx);
 		IO->Tags->Remove(TagStr_PCGExEdges);
 	}
 
-	static void MarkClusterEdges(const TSharedPtr<PCGExData::FPointIO>& IO, const FString& Id)
+	static void MarkClusterEdges(const TSharedPtr<PCGExData::FPointIO>& IO, const PCGExTags::IDType& Id)
 	{
-		IO->Tags->Add(TagStr_ClusterPair, Id);
-		IO->Tags->Add(TagStr_PCGExEdges);
+		IO->Tags->Set(TagStr_PCGExCluster, Id);
+		IO->Tags->AddRaw(TagStr_PCGExEdges);
 		IO->Tags->Remove(TagStr_PCGExVtx);
 	}
 
-	static void MarkClusterEdges(const TArrayView<TSharedRef<PCGExData::FPointIO>> Edges, const FString& Id)
+	static void MarkClusterEdges(const TArrayView<TSharedRef<PCGExData::FPointIO>> Edges, const PCGExTags::IDType& Id)
 	{
 		for (const TSharedRef<PCGExData::FPointIO>& IO : Edges) { MarkClusterEdges(IO, Id); }
 	}
 
 	static void CleanupClusterTags(const TSharedPtr<PCGExData::FPointIO>& IO, const bool bKeepPairTag = false)
 	{
-		IO->Tags->Remove(TagStr_ClusterPair);
+		IO->Tags->Remove(TagStr_PCGExVtx);
 		IO->Tags->Remove(TagStr_PCGExEdges);
-		if (!bKeepPairTag) { IO->Tags->Remove(TagStr_PCGExVtx); }
-	}
-
-	static void CleanupClusterTags(const TArrayView<TSharedPtr<PCGExData::FPointIO>> IOs, const bool bKeepPairTag = false)
-	{
-		for (const TSharedPtr<PCGExData::FPointIO>& IO : IOs) { CleanupClusterTags(IO, bKeepPairTag); }
+		if (!bKeepPairTag) { IO->Tags->Remove(TagStr_PCGExCluster); }
 	}
 }

@@ -1,4 +1,7 @@
-﻿#pragma once
+﻿// Copyright 2025 Timothé Lapetite and contributors
+// Released under the MIT license https://opensource.org/license/MIT/
+
+#pragma once
 
 #include <queue>
 #include <vector>
@@ -49,7 +52,7 @@ namespace PCGExSearch
 		FORCEINLINE bool Enqueue(const int32 Index, const double InScore)
 		{
 			double& RegisteredScore = Scores[Index];
-			if (RegisteredScore <= InScore) { return false; }
+			if(RegisteredScore <= InScore){return false;}
 
 			RegisteredScore = InScore;
 			InternalQueue.push(FScoredNode(Index, InScore));

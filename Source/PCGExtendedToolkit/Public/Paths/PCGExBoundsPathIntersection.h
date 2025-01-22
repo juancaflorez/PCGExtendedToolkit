@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -85,17 +85,17 @@ namespace PCGExPathIntersections
 		void InsertIntersections(const int32 Index) const;
 		void OnInsertionComplete();
 
-		FORCEINLINE virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount) override
+		FORCEINLINE virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override
 		{
 			if (Details.InsideForwardHandler)
 			{
 				TArray<TSharedPtr<PCGExGeo::FPointBox>> Overlaps;
-				const bool bContained = Cloud->IsInsideMinusEpsilon(Point.Transform.GetLocation(), Overlaps); // Avoid intersections being captured
+				const bool bContained = Cloud->IsInside<EPCGExBoxCheckMode::ExpandedBox>(Point.Transform.GetLocation(), Overlaps); // Avoid intersections being captured
 				Details.SetIsInside(Index, bContained, bContained ? Overlaps[0]->Index : -1);
 			}
 			else
 			{
-				Details.SetIsInside(Index, Cloud->IsInsideMinusEpsilon(Point.Transform.GetLocation()));
+				Details.SetIsInside(Index, Cloud->IsInside<EPCGExBoxCheckMode::ExpandedBox>(Point.Transform.GetLocation()));
 			}
 		}
 

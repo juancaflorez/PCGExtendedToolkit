@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Filters/Edges/PCGExEdgeEndpointsCompareNumFilter.h"
@@ -48,7 +48,7 @@ PCGEX_CREATE_FILTER_FACTORY(EdgeEndpointsCompareNum)
 #if WITH_EDITOR
 FString UPCGExEdgeEndpointsCompareNumFilterProviderSettings::GetDisplayName() const
 {
-	return PCGEx::GetSelectorDisplayName(Config.Attribute) + PCGExCompare::ToString(Config.Comparison);
+	return TEXT("A' ") + PCGEx::GetSelectorDisplayName(Config.Attribute) + PCGExCompare::ToString(Config.Comparison) + TEXT(" B' ") + PCGEx::GetSelectorDisplayName(Config.Attribute);
 }
 #endif
 

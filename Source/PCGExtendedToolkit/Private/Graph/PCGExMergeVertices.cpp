@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExMergeVertices.h"
@@ -9,13 +9,13 @@
 #pragma region UPCGSettings interface
 
 PCGExData::EIOInit UPCGExMergeVerticesSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-PCGExData::EIOInit UPCGExMergeVerticesSettings::GetEdgeOutputInitMode() const { return PCGExData::EIOInit::None; }
+PCGExData::EIOInit UPCGExMergeVerticesSettings::GetEdgeOutputInitMode() const { return PCGExData::EIOInit::Forward; }
 
 #pragma endregion
 
 void FPCGExMergeVerticesContext::ClusterProcessing_InitialProcessingDone()
 {
-	Merger = MakeShared<FPCGExPointIOMerger>(CompositeIODataFacade.ToSharedRef());
+	Merger = MakeShared<FPCGExPointIOMerger>(CompositeDataFacade.ToSharedRef());
 
 	int32 StartOffset = 0;
 
@@ -28,13 +28,13 @@ void FPCGExMergeVerticesContext::ClusterProcessing_InitialProcessingDone()
 		StartOffset += Batch->VtxDataFacade->GetNum();
 	}
 
-	Merger->Merge(GetAsyncManager(), &CarryOverDetails);
-	PCGExGraph::SetClusterVtx(CompositeIODataFacade->Source, OutVtxId); // After merge since it forwards IDs
+	Merger->MergeAsync(GetAsyncManager(), &CarryOverDetails);
+	PCGExGraph::SetClusterVtx(CompositeDataFacade->Source, OutVtxId); // After merge since it forwards IDs
 }
 
 void FPCGExMergeVerticesContext::ClusterProcessing_WorkComplete()
 {
-	CompositeIODataFacade->Write(GetAsyncManager());
+	CompositeDataFacade->Write(GetAsyncManager());
 }
 
 PCGEX_INITIALIZE_ELEMENT(MergeVertices)
@@ -49,7 +49,7 @@ bool FPCGExMergeVerticesElement::Boot(FPCGExContext* InContext) const
 	Context->CarryOverDetails.Init();
 
 	TSharedPtr<PCGExData::FPointIO> CompositeIO = PCGExData::NewPointIO(Context, PCGExGraph::OutputVerticesLabel, 0);
-	Context->CompositeIODataFacade = MakeShared<PCGExData::FFacade>(CompositeIO.ToSharedRef());
+	Context->CompositeDataFacade = MakeShared<PCGExData::FFacade>(CompositeIO.ToSharedRef());
 	CompositeIO->InitializeOutput<UPCGExClusterNodesData>(PCGExData::EIOInit::New);
 
 	return true;
@@ -76,7 +76,7 @@ bool FPCGExMergeVerticesElement::ExecuteInternal(FPCGContext* InContext) const
 
 	PCGEX_CLUSTER_BATCH_PROCESSING(PCGEx::State_Done)
 
-	Context->CompositeIODataFacade->Source->StageOutput();
+	Context->CompositeDataFacade->Source->StageOutput();
 	Context->MainEdges->StageOutputs();
 
 	return Context->TryComplete();
@@ -107,12 +107,12 @@ namespace PCGExMergeVertices
 		return true;
 	}
 
-	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope)
 	{
 		Node.PointIndex += StartIndexOffset;
 	}
 
-	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
 	{
 		Edge.Start += StartIndexOffset;
 		Edge.End += StartIndexOffset;
@@ -126,10 +126,11 @@ namespace PCGExMergeVertices
 
 	void FProcessor::Write()
 	{
-		Cluster->VtxIO = Context->CompositeIODataFacade->Source;
-		Cluster->NumRawVtx = Context->CompositeIODataFacade->Source->GetNum(PCGExData::ESource::Out);
+		Cluster->VtxIO = Context->CompositeDataFacade->Source;
+		Cluster->NumRawVtx = Context->CompositeDataFacade->Source->GetNum(PCGExData::ESource::Out);
 
-		EdgeDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Duplicate);
+		PCGEX_INIT_IO_VOID(EdgeDataFacade->Source, PCGExData::EIOInit::Forward)
+
 		PCGExGraph::MarkClusterEdges(EdgeDataFacade->Source, Context->OutVtxId);
 
 		ForwardCluster();

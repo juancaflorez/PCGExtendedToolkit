@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExCopyClustersToPoints.h"
@@ -91,7 +91,7 @@ namespace PCGExCopyClusters
 			EdgesDupes[i] = EdgeDupe;
 			PCGExGraph::MarkClusterEdges(EdgeDupe, *(VtxTag->GetData() + i));
 
-			AsyncManager->Start<PCGExGeoTasks::FTransformPointIO>(i, Context->TargetsDataFacade->Source, EdgeDupe, &Context->TransformDetails);
+			PCGEX_LAUNCH(PCGExGeoTasks::FTransformPointIO, i, Context->TargetsDataFacade->Source, EdgeDupe, &Context->TransformDetails)
 		}
 
 		return true;
@@ -150,13 +150,13 @@ namespace PCGExCopyClusters
 			// Create a vtx copy per target point
 			TSharedPtr<PCGExData::FPointIO> VtxDupe = Context->MainPoints->Emplace_GetRef(VtxDataFacade->Source, PCGExData::EIOInit::Duplicate);
 
-			FString OutId;
+			PCGExTags::IDType OutId;
 			PCGExGraph::SetClusterVtx(VtxDupe, OutId);
 
 			VtxDupes[i] = VtxDupe;
 			VtxTag.Add(OutId);
 
-			AsyncManager->Start<PCGExGeoTasks::FTransformPointIO>(i, Context->TargetsDataFacade->Source, VtxDupe, &Context->TransformDetails);
+			PCGEX_LAUNCH(PCGExGeoTasks::FTransformPointIO, i, Context->TargetsDataFacade->Source, VtxDupe, &Context->TransformDetails)
 
 			Context->TargetsAttributesToPathTags.Tag(i, VtxDupe);
 			Context->TargetsForwardHandler->Forward(i, VtxDupe->GetOut()->Metadata);

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/PCGExCutClusters.h"
@@ -16,8 +16,8 @@ TArray<FPCGPinProperties> UPCGExCutEdgesSettings::InputPinProperties() const
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 
 	PCGEX_PIN_POINTS(PCGExGraph::SourcePathsLabel, "Cutting paths.", Required, {})
-	if (Mode != EPCGExCutEdgesMode::Edges) { PCGEX_PIN_PARAMS(PCGExCutEdges::SourceNodeFilters, "Node preservation filters.", Normal, {}) }
-	if (Mode != EPCGExCutEdgesMode::Nodes) { PCGEX_PIN_PARAMS(PCGExCutEdges::SourceEdgeFilters, "Edge preservation filters.", Normal, {}) }
+	if (Mode != EPCGExCutEdgesMode::Edges) { PCGEX_PIN_FACTORIES(PCGExCutEdges::SourceNodeFilters, "Node preservation filters.", Normal, {}) }
+	if (Mode != EPCGExCutEdgesMode::Nodes) { PCGEX_PIN_FACTORIES(PCGExCutEdges::SourceEdgeFilters, "Edge preservation filters.", Normal, {}) }
 
 	return PinProperties;
 }
@@ -49,8 +49,7 @@ bool FPCGExCutEdgesElement::Boot(FPCGExContext* InContext) const
 		GetInputFactories(Context, PCGExCutEdges::SourceNodeFilters, Context->NodeFilterFactories, PCGExFactories::ClusterNodeFilters, false);
 	}
 
-
-	TSharedPtr<PCGExData::FPointIOCollection> PathCollection = MakeShared<PCGExData::FPointIOCollection>(Context, PCGExGraph::SourcePathsLabel);
+	PCGEX_MAKE_SHARED(PathCollection, PCGExData::FPointIOCollection, Context, PCGExGraph::SourcePathsLabel)
 	if (PathCollection->IsEmpty())
 	{
 		PCGE_LOG(Error, GraphAndLog, FTEXT("Empty paths."));
@@ -70,7 +69,7 @@ bool FPCGExCutEdgesElement::Boot(FPCGExContext* InContext) const
 			continue;
 		}
 
-		TSharedPtr<PCGExData::FFacade> Facade = MakeShared<PCGExData::FFacade>(PathIO.ToSharedRef());
+		PCGEX_MAKE_SHARED(Facade, PCGExData::FFacade, PathIO.ToSharedRef())
 		Facade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		Context->PathFacades.Add(Facade.ToSharedRef());
@@ -106,17 +105,18 @@ bool FPCGExCutEdgesElement::ExecuteInternal(
 		Context->SetAsyncState(PCGExPaths::State_BuildingPaths);
 		PCGEX_ASYNC_GROUP_CHKD(Context->GetAsyncManager(), BuildPathsTask)
 
-		BuildPathsTask->OnSubLoopStartCallback = [Context](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-		{
-			TSharedRef<PCGExData::FFacade> PathFacade = Context->PathFacades[StartIndex];
-			TSharedPtr<PCGExPaths::FPath> Path = PCGExPaths::MakePath(
-				PathFacade->Source->GetIn()->GetPoints(), 0,
-				Context->ClosedLoop.IsClosedLoop(PathFacade->Source));
+		BuildPathsTask->OnSubLoopStartCallback =
+			[Context](const PCGExMT::FScope& Scope)
+			{
+				const TSharedRef<PCGExData::FFacade> PathFacade = Context->PathFacades[Scope.Start];
+				const TSharedPtr<PCGExPaths::FPath> Path = PCGExPaths::MakePath(
+					PathFacade->Source->GetIn()->GetPoints(), 0,
+					Context->ClosedLoop.IsClosedLoop(PathFacade->Source));
 
-			Path->BuildEdgeOctree();
+				Path->BuildEdgeOctree();
 
-			Context->Paths.Add(Path.ToSharedRef());
-		};
+				Context->Paths.Add(Path.ToSharedRef());
+			};
 
 		BuildPathsTask->StartSubLoops(Context->PathFacades.Num(), 1);
 	}
@@ -200,17 +200,15 @@ namespace PCGExCutEdges
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForEdges(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForEdges(const PCGExMT::FScope& Scope)
 	{
-		const int32 MaxIndex = StartIndex + Count;
-
-		EdgeDataFacade->Fetch(StartIndex, Count);
+		EdgeDataFacade->Fetch(Scope);
 
 		TArray<PCGExGraph::FEdge>& Edges = *Cluster->Edges;
-		if (EdgeFilterManager) { for (int i = StartIndex; i < MaxIndex; i++) { EdgeFilterCache[i] = EdgeFilterManager->Test(Edges[i]); } }
+		if (EdgeFilterManager) { for (int i = Scope.Start; i < Scope.End; i++) { EdgeFilterCache[i] = EdgeFilterManager->Test(Edges[i]); } }
 	}
 
-	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
 	{
 		if (EdgeFilterCache[EdgeIndex])
 		{
@@ -245,8 +243,8 @@ namespace PCGExCutEdges
 						}
 					}
 
-					const FVector A2 = Path->GetPosUnsafe(PathEdge->Start);
-					const FVector B2 = Path->GetPosUnsafe(PathEdge->End);
+					const FVector A2 = Path->GetPos_Unsafe(PathEdge->Start);
+					const FVector B2 = Path->GetPos_Unsafe(PathEdge->End);
 					FVector A = FVector::ZeroVector;
 					FVector B = FVector::ZeroVector;
 
@@ -281,15 +279,13 @@ namespace PCGExCutEdges
 		}
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForNodes(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForNodes(const PCGExMT::FScope& Scope)
 	{
-		const int32 MaxIndex = StartIndex + Count;
-
 		TArray<PCGExCluster::FNode>& Nodes = *Cluster->Nodes;
-		if (NodeFilterManager) { for (int i = StartIndex; i < MaxIndex; i++) { NodeFilterCache[i] = NodeFilterManager->Test(Nodes[i]); } }
+		if (NodeFilterManager) { for (int i = Scope.Start; i < Scope.End; i++) { NodeFilterCache[i] = NodeFilterManager->Test(Nodes[i]); } }
 	}
 
-	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope)
 	{
 		if (NodeFilterCache[Index])
 		{
@@ -313,8 +309,8 @@ namespace PCGExCutEdges
 					//if (Settings->bInvert) { if (Node.bValid) { return false; } }
 					//else if (!Node.bValid) { return false; }
 
-					const FVector A2 = Path->GetPosUnsafe(PathEdge->Start);
-					const FVector B2 = Path->GetPosUnsafe(PathEdge->End);
+					const FVector A2 = Path->GetPos_Unsafe(PathEdge->Start);
+					const FVector B2 = Path->GetPos_Unsafe(PathEdge->End);
 
 					const FVector B1 = FMath::ClosestPointOnSegment(A1, A2, B2);
 					const FVector C1 = Context->DistanceDetails->GetSourceCenter(NodePoint, A1, B1);
@@ -384,7 +380,7 @@ namespace PCGExCutEdges
 		}
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		PCGExGraph::FEdge& Edge = *Cluster->GetEdge(Iteration);
 

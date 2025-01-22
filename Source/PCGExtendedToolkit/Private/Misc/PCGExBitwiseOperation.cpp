@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/PCGExBitwiseOperation.h"
@@ -23,7 +23,7 @@ bool FPCGExBitwiseOperationElement::Boot(FPCGExContext* InContext) const
 
 	if (Settings->MaskInput == EPCGExInputValueType::Attribute)
 	{
-		PCGEX_VALIDATE_NAME(Settings->MaskAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->MaskAttribute)
 	}
 
 	return true;
@@ -93,7 +93,7 @@ namespace PCGExBitwiseOperation
 		return true;
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		PCGExBitmask::Do(Op, Writer->GetMutable(Index), Reader ? Reader->Read(Index) : Mask);
 	}

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -58,13 +58,13 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShapeConfigBase
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Resolution", meta = (PCG_NotOverridable))
 	EPCGExInputValueType ResolutionInput = EPCGExInputValueType::Constant;
 
+	/** Resolution Attribute. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Resolution", meta=(PCG_Overridable, DisplayName="Resolution (Attr)", EditCondition="ResolutionInput != EPCGExInputValueType::Constant", EditConditionHides))
+	FPCGAttributePropertyInputSelector ResolutionAttribute;
+
 	/** Resolution Constant. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Resolution", meta=(PCG_Overridable, DisplayName="Resolution", EditCondition="ResolutionInput == EPCGExInputValueType::Constant", EditConditionHides, ClampMin=0))
 	double ResolutionConstant = 10;
-
-	/** Resolution Attribute. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Resolution", meta=(PCG_Overridable, DisplayName="Resolution", EditCondition="ResolutionInput == EPCGExInputValueType::Attribute", EditConditionHides))
-	FPCGAttributePropertyInputSelector ResolutionAttribute;
 
 	/** Fitting details */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
@@ -182,7 +182,7 @@ namespace PCGExShapes
 		int32 NumPoints = 0;
 		int8 bValid = 1;
 
-		FBox Fit = FBox(ForceInitToZero);
+		FBox Fit = FBox(ForceInit);
 		FVector Extents = FVector::OneVector * 0.5;
 
 		bool IsValid() const { return bValid && Fit.IsValid && NumPoints > 0; }

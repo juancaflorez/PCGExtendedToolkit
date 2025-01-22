@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExWithinRangeFilter.h"
@@ -9,16 +9,10 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExWithinRangeFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::TWithinRangeFilter>(this);
+	return MakeShared<PCGExPointsFilter::FWithinRangeFilter>(this);
 }
 
-void UPCGExWithinRangeFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
-{
-	Super::RegisterConsumableAttributes(InContext);
-	//TODO : Implement Consumable
-}
-
-bool PCGExPointsFilter::TWithinRangeFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointsFilter::FWithinRangeFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "PCGExOperation.h"
@@ -52,18 +52,18 @@ void UPCGExOperation::ApplyOverrides()
 {
 	UClass* ObjectClass = GetClass();
 
-	for (TPair<FName, FPCGMetadataAttributeBase*> PossibleOverride : PossibleOverrides)
+	for (const TPair<FName, FPCGMetadataAttributeBase*>& PossibleOverride : PossibleOverrides)
 	{
 		// Find the property by name
 		FProperty* Property = ObjectClass->FindPropertyByName(PossibleOverride.Key);
 		if (!Property) { continue; }
 
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(PossibleOverride.Value->GetTypeId()), [&](auto DummyValue)
+		PCGEx::ExecuteWithRightType(
+			PossibleOverride.Value->GetTypeId(), [&](auto DummyValue)
 			{
 				using T = decltype(DummyValue);
 				const FPCGMetadataAttribute<T>* TypedAttribute = static_cast<FPCGMetadataAttribute<T>*>(PossibleOverride.Value);
-				bool bSuccess = PCGEx::TrySetFPropertyValue<T>(this, Property, TypedAttribute->GetValue(0));
+				PCGEx::TrySetFPropertyValue<T>(this, Property, TypedAttribute->GetValue(0));
 			});
 	}
 }
@@ -71,23 +71,10 @@ void UPCGExOperation::ApplyOverrides()
 void UPCGExOperation::CopySettingsFrom(const UPCGExOperation* Other)
 {
 	BindContext(Other->Context);
+	PCGExHelpers::CopyProperties(this, Other);
+}
 
-	check(GetClass() == Other->GetClass())
-
-	// Get the class type
-	UClass* Class = Other->GetClass();
-
-	// Iterate over properties
-	for (TFieldIterator<FProperty> It(Class); It; ++It)
-	{
-		const FProperty* Property = *It;
-
-		// Skip properties that shouldn't be copied (like transient properties)
-		if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_ConstParm | CPF_OutParm)) { continue; }
-
-		// Copy the value from source to target
-		const void* SourceValue = Property->ContainerPtrToValuePtr<void>(Other);
-		void* TargetValue = Property->ContainerPtrToValuePtr<void>(this);
-		Property->CopyCompleteValue(TargetValue, SourceValue);
-	}
+void UPCGExOperation::RegisterAssetDependencies(FPCGExContext* InContext)
+{
+	//InContext->AddAssetDependency();
 }

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/PCGExPartitionByValues.h"
@@ -18,7 +18,7 @@ namespace PCGExPartitionByValues
 
 namespace PCGExPartition
 {
-	FKPartition::FKPartition(const TWeakPtr<FKPartition>& InParent, const int64 InKey, FPCGExFilter::FRule* InRule, const int32 InPartitionIndex)
+	FKPartition::FKPartition(const TWeakPtr<FKPartition>& InParent, const int64 InKey, FRule* InRule, const int32 InPartitionIndex)
 		: Parent(InParent), PartitionIndex(InPartitionIndex), PartitionKey(InKey), Rule(InRule)
 	{
 	}
@@ -36,7 +36,7 @@ namespace PCGExPartition
 		return Num;
 	}
 
-	TSharedPtr<FKPartition> FKPartition::GetPartition(const int64 Key, FPCGExFilter::FRule* InRule)
+	TSharedPtr<FKPartition> FKPartition::GetPartition(const int64 Key, FRule* InRule)
 	{
 		TSharedPtr<FKPartition>* LayerPtr;
 
@@ -52,8 +52,8 @@ namespace PCGExPartition
 
 			if (LayerPtr) { return *LayerPtr; }
 
-			TSharedPtr<FKPartition> SharedThisPtr = SharedThis(this);
-			TSharedPtr<FKPartition> Partition = MakeShared<FKPartition>(SharedThisPtr, Key, InRule, SubLayers.Num());
+			PCGEX_SHARED_THIS_DECL
+			TSharedPtr<FKPartition> Partition = MakeShared<FKPartition>(ThisPtr, Key, InRule, SubLayers.Num());
 
 			UniquePartitionKeys.Add(Key);
 			SubLayers.Add(Key, Partition);
@@ -69,7 +69,8 @@ namespace PCGExPartition
 		}
 		else
 		{
-			Partitions.Add(SharedThis(this));
+			PCGEX_SHARED_THIS_DECL
+			Partitions.Add(ThisPtr);
 		}
 	}
 
@@ -205,31 +206,36 @@ namespace PCGExPartitionByValues
 
 		if (Settings->bWriteKeySum && !Settings->bSplitOutput) { PCGEx::InitArray(KeySums, NumPoints); }
 
+		FName Consumable = NAME_None;
+
 		for (FPCGExPartitonRuleConfig& Config : Context->RulesConfigs)
 		{
 			const TSharedPtr<PCGExData::TBuffer<double>> DataCache = PointDataFacade->GetScopedBroadcaster<double>(Config.Selector);
 			if (!DataCache) { continue; }
-			FPCGExFilter::FRule& NewRule = Rules.Emplace_GetRef(Config);
+
+			if (PCGExHelpers::TryGetAttributeName(Config.Selector, PointDataFacade->Source->GetIn(), Consumable)) { Context->AddConsumableAttributeName(Consumable); }
+
+			PCGExPartition::FRule& NewRule = Rules.Emplace_GetRef(Config);
 			NewRule.DataCache = DataCache;
 		}
 
 		// Prepare each rule so it cache the filter key by index
-		for (FPCGExFilter::FRule& Rule : Rules) { Rule.FilteredValues.SetNumZeroed(NumPoints); }
+		for (PCGExPartition::FRule& Rule : Rules) { Rule.FilteredValues.SetNumZeroed(NumPoints); }
 
 		StartParallelLoopForPoints(PCGExData::ESource::In);
 
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		TSharedPtr<PCGExPartition::FKPartition> Partition = RootPartition;
-		for (FPCGExFilter::FRule& Rule : Rules)
+		for (PCGExPartition::FRule& Rule : Rules)
 		{
 			const int64 KeyValue = Rule.Filter(Index);
 			Partition = Partition->GetPartition(KeyValue, &Rule);
@@ -239,7 +245,7 @@ namespace PCGExPartitionByValues
 		Partition->Add(Index);
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		TSharedPtr<PCGExPartition::FKPartition> Partition = Partitions[Iteration];
 
@@ -261,7 +267,7 @@ namespace PCGExPartitionByValues
 		int64 Sum = 0;
 		while (Partition->Parent.Pin())
 		{
-			const FPCGExFilter::FRule* Rule = Partition->Rule;
+			const PCGExPartition::FRule* Rule = Partition->Rule;
 			Sum += Partition->PartitionKey;
 
 			if (Rule->RuleConfig->bWriteKey)
@@ -274,11 +280,9 @@ namespace PCGExPartitionByValues
 
 			if (Rule->RuleConfig->bWriteTag)
 			{
-				FString TagValue;
-				PartitionIO->Tags->Add(
+				PartitionIO->Tags->Set<int64>(
 					Rule->RuleConfig->TagPrefixName.ToString(),
-					Rule->RuleConfig->bTagUsePartitionIndexAsKey ? Partition->PartitionIndex : Partition->PartitionKey,
-					TagValue);
+					Rule->RuleConfig->bTagUsePartitionIndexAsKey ? Partition->PartitionIndex : Partition->PartitionKey);
 			}
 
 			Partition = Partition->Parent.Pin();
@@ -316,7 +320,7 @@ namespace PCGExPartitionByValues
 		}
 
 		TMap<int64, int64> IndiceMap;
-		for (FPCGExFilter::FRule& Rule : Rules)
+		for (PCGExPartition::FRule& Rule : Rules)
 		{
 			if (!Rule.RuleConfig->bWriteKey) { continue; }
 

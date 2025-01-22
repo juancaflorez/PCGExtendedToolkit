@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Filters/Edges/PCGExIsoEdgeDirectionFilter.h"
@@ -33,8 +33,6 @@ bool FIsoEdgeDirectionFilter::Init(FPCGExContext* InContext, const TSharedRef<PC
 	if (DirectionSettings.RequiresEndpointsMetadata())
 	{
 		// Fetch attributes while processors are searching for chains
-
-		const int32 PLI = GetDefault<UPCGExGlobalSettings>()->GetClusterBatchChunkSize();
 	}
 
 	if (TypedFilterFactory->Config.CompareAgainst == EPCGExInputValueType::Attribute)
@@ -73,15 +71,12 @@ bool FIsoEdgeDirectionFilter::Test(const PCGExGraph::FEdge& Edge) const
 bool FIsoEdgeDirectionFilter::TestDot(const int32 PtIndex, const FVector& EdgeDir) const
 {
 	const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PtIndex);
-
-	FVector RefDir = OperandDirection ? OperandDirection->Read(PtIndex) : TypedFilterFactory->Config.DirectionConstant;
-	if (TypedFilterFactory->Config.bTransformDirection) { RefDir = Point.Transform.TransformVectorNoScale(RefDir).GetSafeNormal(); }
-
-	double B = 0;
-	if (DotComparison.bUnsignedDot) { B = FMath::Abs(FVector::DotProduct(RefDir, EdgeDir)); }
-	else { B = FVector::DotProduct(RefDir, EdgeDir); }
-
-	return DotComparison.Test(DotComparison.GetDot(PtIndex), B);
+	const FVector RefDir = (OperandDirection ? OperandDirection->Read(PtIndex) : TypedFilterFactory->Config.DirectionConstant).GetSafeNormal();
+	return DotComparison.Test(
+		FVector::DotProduct(
+			TypedFilterFactory->Config.bTransformDirection ? Point.Transform.TransformVectorNoScale(RefDir) : RefDir,
+			EdgeDir),
+		PtIndex);
 }
 
 bool FIsoEdgeDirectionFilter::TestHash(const int32 PtIndex, const FVector& EdgeDir) const
@@ -102,12 +97,12 @@ TArray<FPCGPinProperties> UPCGExIsoEdgeDirectionFilterProviderSettings::InputPin
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 	if (Config.DirectionSettings.DirectionMethod == EPCGExEdgeDirectionMethod::EndpointsSort)
 	{
-		PCGEX_PIN_PARAMS(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {})
+		PCGEX_PIN_FACTORIES(PCGExGraph::SourceEdgeSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {})
 	}
 	return PinProperties;
 }
 
-UPCGExParamFactoryBase* UPCGExIsoEdgeDirectionFilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+UPCGExFactoryData* UPCGExIsoEdgeDirectionFilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
 	UPCGExIsoEdgeDirectionFilterFactory* NewFactory = InContext->ManagedObjects->New<UPCGExIsoEdgeDirectionFilterFactory>();
 	Super::CreateFactory(InContext, InFactory);

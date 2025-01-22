@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -8,6 +8,7 @@
 #include "PCGExPathfindingNavmesh.h"
 #include "PCGExPointsProcessor.h"
 #include "AI/Navigation/NavigationTypes.h"
+
 
 #include "Paths/SubPoints/DataBlending/PCGExSubPointsBlendInterpolate.h"
 
@@ -137,14 +138,18 @@ protected:
 };
 
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPlotNavmeshTask final : public PCGExMT::FPCGExTask
+class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPlotNavmeshTask final : public PCGExMT::FTask
 {
 public:
+	PCGEX_ASYNC_TASK_NAME(FPCGExPlotNavmeshTask)
+
 	explicit FPCGExPlotNavmeshTask(
 		const TSharedPtr<PCGExData::FPointIO>& InPointIO) :
-		FPCGExTask(InPointIO)
+		FTask(),
+		PointIO(InPointIO)
 	{
 	}
 
-	virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+	TSharedPtr<PCGExData::FPointIO> PointIO;
+	virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 };

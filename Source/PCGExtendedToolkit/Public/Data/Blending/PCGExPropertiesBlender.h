@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -28,6 +28,8 @@ namespace PCGExDataBlending
 		false, //AbsoluteMax     
 		true,  //WeightedSubtract		
 		false, //CopyOther		
+		false, //Hash		
+		false, //UnsignedHash		
 	};
 
 	struct /*PCGEXTENDEDTOOLKIT_API*/ FPropertiesBlender

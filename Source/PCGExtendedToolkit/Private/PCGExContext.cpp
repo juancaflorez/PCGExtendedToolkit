@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "PCGExContext.h"
@@ -9,6 +9,7 @@
 #include "Data/PCGSpatialData.h"
 #include "Engine/AssetManager.h"
 #include "Helpers/PCGHelpers.h"
+#include "Async/Async.h"
 
 #define LOCTEXT_NAMESPACE "PCGExContext"
 
@@ -18,7 +19,6 @@ void FPCGExContext::StageOutput(const FName Pin, UPCGData* InData, const TSet<FS
 	{
 		FWriteScopeLock WriteScopeLock(StagedOutputLock);
 
-		AdditionsSinceLastReserve++;
 		FPCGTaggedData& Output = StagedOutputs.Emplace_GetRef();
 		Output.Pin = Pin;
 		Output.Data = InData;
@@ -26,7 +26,6 @@ void FPCGExContext::StageOutput(const FName Pin, UPCGData* InData, const TSet<FS
 	}
 	else
 	{
-		AdditionsSinceLastReserve++;
 		FPCGTaggedData& Output = StagedOutputs.Emplace_GetRef();
 		Output.Pin = Pin;
 		Output.Data = InData;
@@ -34,17 +33,25 @@ void FPCGExContext::StageOutput(const FName Pin, UPCGData* InData, const TSet<FS
 	}
 
 	if (bManaged) { ManagedObjects->Add(InData); }
-	if (bIsMutable && bDeleteConsumableAttributes)
+	if (bIsMutable && bCleanupConsumableAttributes)
 	{
 #if PCGEX_ENGINE_VERSION > 503
 		if (UPCGMetadata* Metadata = InData->MutableMetadata())
 		{
-			for (const FName ConsumableName : ConsumableAttributesSet) { Metadata->DeleteAttribute(ConsumableName); }
+			for (const FName ConsumableName : ConsumableAttributesSet)
+			{
+				if (!Metadata->HasAttribute(ConsumableName) || ProtectedAttributesSet.Contains(ConsumableName)) { continue; }
+				Metadata->DeleteAttribute(ConsumableName);
+			}
 		}
 #else
 		if(const UPCGSpatialData* SpatialData = Cast<UPCGSpatialData>(InData); SpatialData->Metadata)
 		{
-			for (const FName ConsumableName : ConsumableAttributesSet) { SpatialData->Metadata->DeleteAttribute(ConsumableName); }
+			for (const FName ConsumableName : ConsumableAttributesSet)
+			{
+				if (!SpatialData->Metadata->HasAttribute(ConsumableName) || !ProtectedAttributesSet.Contains(ConsumableName)) { continue; }
+				SpatialData->Metadata->DeleteAttribute(ConsumableName);
+			}
 		}
 #endif
 	}
@@ -55,15 +62,12 @@ void FPCGExContext::StageOutput(const FName Pin, UPCGData* InData, const bool bM
 	if (!IsInGameThread())
 	{
 		FWriteScopeLock WriteScopeLock(StagedOutputLock);
-
-		AdditionsSinceLastReserve++;
 		FPCGTaggedData& Output = StagedOutputs.Emplace_GetRef();
 		Output.Pin = Pin;
 		Output.Data = InData;
 	}
 	else
 	{
-		AdditionsSinceLastReserve++;
 		FPCGTaggedData& Output = StagedOutputs.Emplace_GetRef();
 		Output.Pin = Pin;
 		Output.Data = InData;
@@ -84,9 +88,6 @@ void FPCGExContext::UnpauseContext()
 
 void FPCGExContext::CommitStagedOutputs()
 {
-	// Must be executed on main thread
-	ensure(IsInGameThread());
-
 	TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExContext::WriteFutureOutputs);
 
 	OutputData.TaggedData.Reserve(OutputData.TaggedData.Num() + StagedOutputs.Num());
@@ -101,23 +102,22 @@ void FPCGExContext::CommitStagedOutputs()
 
 FPCGExContext::FPCGExContext()
 {
-	ManagedObjects = MakeShared<PCGEx::FManagedObjects>(this);
+	WorkPermit = MakeShared<PCGEx::FWorkPermit>();
+	ManagedObjects = MakeUnique<PCGEx::FManagedObjects>(this, WorkPermit);
+	UniqueNameGenerator = MakeShared<PCGEx::FUniqueNameGenerator>();
 }
 
 FPCGExContext::~FPCGExContext()
 {
+	WorkPermit.Reset();
 	CancelAssetLoading();
-
-	ManagedObjects->Flush();
-	ManagedObjects.Reset();
+	ManagedObjects->Flush(); // So cleanups can be recursively triggered while manager is still alive
 }
 
-void FPCGExContext::StagedOutputReserve(const int32 NumAdditions)
+void FPCGExContext::IncreaseStagedOutputReserve(const int32 InIncreaseNum)
 {
-	const int32 ConservativeAdditions = NumAdditions - FMath::Min(0, LastReserve - AdditionsSinceLastReserve);
 	FWriteScopeLock WriteScopeLock(StagedOutputLock);
-	LastReserve = ConservativeAdditions;
-	StagedOutputs.Reserve(StagedOutputs.Num() + ConservativeAdditions);
+	StagedOutputs.Reserve(StagedOutputs.Max() + InIncreaseNum);
 }
 
 void FPCGExContext::OnComplete()
@@ -139,7 +139,7 @@ void FPCGExContext::OnComplete()
 #pragma region State
 
 
-void FPCGExContext::SetAsyncState(const PCGEx::AsyncState WaitState)
+void FPCGExContext::SetAsyncState(const PCGEx::ContextState WaitState)
 {
 	if (!bAsyncEnabled)
 	{
@@ -149,7 +149,6 @@ void FPCGExContext::SetAsyncState(const PCGEx::AsyncState WaitState)
 
 	bWaitingForAsyncCompletion = true;
 	SetState(WaitState);
-	//PauseContext();
 }
 
 bool FPCGExContext::ShouldWaitForAsync()
@@ -168,11 +167,9 @@ void FPCGExContext::ReadyForExecution()
 	SetState(PCGEx::State_InitialExecution);
 }
 
-void FPCGExContext::SetState(const PCGEx::AsyncState StateId)
+void FPCGExContext::SetState(const PCGEx::ContextState StateId)
 {
-	if (CurrentState == StateId) { return; }
-	CurrentState = StateId;
-	//UnpauseContext();
+	CurrentState.store(StateId, std::memory_order_release);
 }
 
 void FPCGExContext::Done()
@@ -201,17 +198,26 @@ void FPCGExContext::CancelAssetLoading()
 {
 	if (LoadHandle.IsValid() && LoadHandle->IsActive()) { LoadHandle->CancelHandle(); }
 	LoadHandle.Reset();
-	RequiredAssets.Empty();
+	if (RequiredAssets) { RequiredAssets->Empty(); }
 	CancelExecution(TEXT("")); // Quiet cancel
+}
+
+TSet<FSoftObjectPath>& FPCGExContext::GetRequiredAssets()
+{
+	FWriteScopeLock WriteScopeLock(AssetDependenciesLock);
+	if (!RequiredAssets) { RequiredAssets = MakeShared<TSet<FSoftObjectPath>>(); }
+	return *RequiredAssets.Get();
 }
 
 void FPCGExContext::RegisterAssetDependencies()
 {
 }
 
-void FPCGExContext::RegisterAssetRequirement(const FSoftObjectPath& Dependency)
+void FPCGExContext::AddAssetDependency(const FSoftObjectPath& Dependency)
 {
-	RequiredAssets.Add(Dependency);
+	FWriteScopeLock WriteScopeLock(AssetDependenciesLock);
+	if (!RequiredAssets) { RequiredAssets = MakeShared<TSet<FSoftObjectPath>>(); }
+	RequiredAssets->Add(Dependency);
 }
 
 void FPCGExContext::LoadAssets()
@@ -221,7 +227,7 @@ void FPCGExContext::LoadAssets()
 
 	SetAsyncState(PCGEx::State_LoadingAssetDependencies);
 
-	if (RequiredAssets.IsEmpty())
+	if (!RequiredAssets || RequiredAssets->IsEmpty())
 	{
 		bAssetLoadError = true; // No asset to load, yet we required it?
 		return;
@@ -230,34 +236,71 @@ void FPCGExContext::LoadAssets()
 	if (!bForceSynchronousAssetLoad)
 	{
 		PauseContext();
-		LoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-			RequiredAssets.Array(), [&]()
+
+		// Dispatch the async load request to the game thread
+		TWeakPtr<FPCGContextHandle> CtxHandle = GetOrCreateHandle();
+
+		if (IsInGameThread())
+		{
+			LoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+				RequiredAssets->Array(), [CtxHandle]()
+				{
+					if (FPCGExContext* NestedThis = GetContextFromHandle<FPCGExContext>(CtxHandle)) { NestedThis->UnpauseContext(); }
+				});
+
+			if (!LoadHandle || !LoadHandle->IsActive())
 			{
 				UnpauseContext();
-			});
 
-		if (!LoadHandle || !LoadHandle->IsActive())
+				if (!LoadHandle || !LoadHandle->HasLoadCompleted())
+				{
+					bAssetLoadError = true;
+					CancelExecution("Error loading assets.");
+				}
+				else
+				{
+					// Resources were already loaded
+				}
+			}
+		}
+		else
 		{
-			UnpauseContext();
+			AsyncTask(
+				ENamedThreads::GameThread, [CtxHandle]()
+				{
+					FPCGExContext* This = GetContextFromHandle<FPCGExContext>(CtxHandle);
+					if (!This) { return; }
 
-			if (!LoadHandle || !LoadHandle->HasLoadCompleted())
-			{
-				bAssetLoadError = true;
-				CancelExecution("Error loading assets.");
-			}
-			else
-			{
-				// Resources were already loaded
-			}
+					This->LoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+						This->RequiredAssets->Array(), [CtxHandle]()
+						{
+							if (FPCGExContext* NestedThis = GetContextFromHandle<FPCGExContext>(CtxHandle)) { NestedThis->UnpauseContext(); }
+						});
+
+					if (!This->LoadHandle || !This->LoadHandle->IsActive())
+					{
+						This->UnpauseContext();
+
+						if (!This->LoadHandle || !This->LoadHandle->HasLoadCompleted())
+						{
+							This->bAssetLoadError = true;
+							This->CancelExecution("Error loading assets.");
+						}
+						else
+						{
+							// Resources were already loaded
+						}
+					}
+				});
 		}
 	}
 	else
 	{
-		LoadHandle = UAssetManager::GetStreamableManager().RequestSyncLoad(RequiredAssets.Array());
+		LoadHandle = UAssetManager::GetStreamableManager().RequestSyncLoad(RequiredAssets->Array());
 	}
 }
 
-void FPCGExContext::AttachManagedComponent(AActor* InParent, USceneComponent* InComponent, const FAttachmentTransformRules& AttachmentRules) const
+UPCGManagedComponent* FPCGExContext::AttachManagedComponent(AActor* InParent, UActorComponent* InComponent, const FAttachmentTransformRules& AttachmentRules) const
 {
 	UPCGComponent* SrcComp = SourceComponent.Get();
 
@@ -281,16 +324,68 @@ void FPCGExContext::AttachManagedComponent(AActor* InParent, USceneComponent* In
 	ManagedComponent->GeneratedComponent = InComponent;
 	SrcComp->AddToManagedResources(ManagedComponent);
 
+	if (InComponent->Implements<UPCGExManagedComponentInterface>())
+	{
+		if (IPCGExManagedComponentInterface* Managed = Cast<IPCGExManagedComponentInterface>(InComponent)) { Managed->SetManagedComponent(ManagedComponent); }
+	}
+
 	InParent->Modify(!bIsPreviewMode);
 
 	InComponent->RegisterComponent();
 	InParent->AddInstanceComponent(InComponent);
-	InComponent->AttachToComponent(InParent->GetRootComponent(), AttachmentRules);
+
+	if (USceneComponent* SceneComponent = Cast<USceneComponent>(InComponent))
+	{
+		SceneComponent->AttachToComponent(InParent->GetRootComponent(), AttachmentRules);
+	}
+
+	return ManagedComponent;
 }
 
 void FPCGExContext::AddConsumableAttributeName(const FName InName)
 {
-	ConsumableAttributesSet.Add(InName);
+	{
+		FReadScopeLock ReadScopeLock(ConsumableAttributesLock);
+		if (ConsumableAttributesSet.Contains(InName)) { return; }
+	}
+	{
+		FWriteScopeLock WriteScopeLock(ConsumableAttributesLock);
+		ConsumableAttributesSet.Add(InName);
+	}
+}
+
+void FPCGExContext::AddProtectedAttributeName(const FName InName)
+{
+	{
+		FReadScopeLock ReadScopeLock(ProtectedAttributesLock);
+		if (ProtectedAttributesSet.Contains(InName)) { return; }
+	}
+	{
+		FWriteScopeLock WriteScopeLock(ProtectedAttributesLock);
+		ProtectedAttributesSet.Add(InName);
+	}
+}
+
+void FPCGExContext::EDITOR_TrackPath(const FSoftObjectPath& Path, const bool bIsCulled) const
+{
+#if WITH_EDITOR && PCGEX_ENGINE_VERSION > 503
+	if (UPCGComponent* PCGComponent = SourceComponent.Get())
+	{
+		TPair<FPCGSelectionKey, bool> NewPair(FPCGSelectionKey::CreateFromPath(Path), bIsCulled);
+		PCGComponent->RegisterDynamicTracking(GetOriginalSettings<UPCGSettings>(), MakeArrayView(&NewPair, 1));
+	}
+#endif
+}
+
+void FPCGExContext::EDITOR_TrackClass(const TSubclassOf<UObject>& InSelectionClass, bool bIsCulled) const
+{
+#if WITH_EDITOR && PCGEX_ENGINE_VERSION > 503
+	if (UPCGComponent* PCGComponent = SourceComponent.Get())
+	{
+		TPair<FPCGSelectionKey, bool> NewPair(FPCGSelectionKey(InSelectionClass), bIsCulled);
+		PCGComponent->RegisterDynamicTracking(GetOriginalSettings<UPCGSettings>(), MakeArrayView(&NewPair, 1));
+	}
+#endif
 }
 
 bool FPCGExContext::CanExecute() const
@@ -300,7 +395,10 @@ bool FPCGExContext::CanExecute() const
 
 bool FPCGExContext::CancelExecution(const FString& InReason)
 {
+	if (bExecutionCancelled) { return true; }
+
 	bExecutionCancelled = true;
+	WorkPermit.Reset();
 	ResumeExecution();
 	if (!InReason.IsEmpty()) { PCGE_LOG_C(Error, GraphAndLog, this, FTEXT(InReason)); }
 	return true;

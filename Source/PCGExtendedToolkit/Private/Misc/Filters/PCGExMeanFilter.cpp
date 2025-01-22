@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExMeanFilter.h"
@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExMeanFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::TMeanFilter>(this);
+	return MakeShared<PCGExPointsFilter::FMeanFilter>(this);
 }
 
 void UPCGExMeanFilterFactory::RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
@@ -18,13 +18,17 @@ void UPCGExMeanFilterFactory::RegisterBuffersDependencies(FPCGExContext* InConte
 	//FacadePreloader.Register<double>(InContext, Config.Target); // TODO SUPPORT MIN MAX FETCH
 }
 
-void UPCGExMeanFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
+bool UPCGExMeanFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
 {
-	Super::RegisterConsumableAttributes(InContext);
-	//TODO : Implement Consumable
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_SELECTOR(Config.Target, Consumable)
+
+	return true;
 }
 
-bool PCGExPointsFilter::TMeanFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointsFilter::FMeanFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -45,7 +49,7 @@ bool PCGExPointsFilter::TMeanFilter::Init(FPCGExContext* InContext, const TShare
 	return true;
 }
 
-void PCGExPointsFilter::TMeanFilter::PostInit()
+void PCGExPointsFilter::FMeanFilter::PostInit()
 {
 	const int32 NumPoints = PointDataFacade->Source->GetNum();
 	Results.Init(false, NumPoints);
@@ -92,7 +96,7 @@ void PCGExPointsFilter::TMeanFilter::PostInit()
 		break;
 	}
 
-	const double RMin = TypedFilterFactory->Config.bDoExcludeBelowMean ? ReferenceValue - TypedFilterFactory->Config.ExcludeBelow : MIN_dbl;
+	const double RMin = TypedFilterFactory->Config.bDoExcludeBelowMean ? ReferenceValue - TypedFilterFactory->Config.ExcludeBelow : MIN_dbl_neg;
 	const double RMax = TypedFilterFactory->Config.bDoExcludeAboveMean ? ReferenceValue + TypedFilterFactory->Config.ExcludeAbove : MAX_dbl;
 
 	ReferenceMin = FMath::Min(RMin, RMax);

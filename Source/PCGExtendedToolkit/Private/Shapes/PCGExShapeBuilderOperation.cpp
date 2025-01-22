@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -9,9 +9,7 @@
 void UPCGExShapeBuilderOperation::CopySettingsFrom(const UPCGExOperation* Other)
 {
 	Super::CopySettingsFrom(Other);
-	if (const UPCGExShapeBuilderOperation* TypedOther = Cast<UPCGExShapeBuilderOperation>(Other))
-	{
-	}
+	//if (const UPCGExShapeBuilderOperation* TypedOther = Cast<UPCGExShapeBuilderOperation>(Other))	{	}
 }
 
 bool UPCGExShapeBuilderOperation::PrepareForSeeds(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InSeedDataFacade)

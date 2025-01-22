@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -8,7 +8,6 @@
 #include "PCGExDetailsData.h"
 #include "Data/PCGExAttributeHelpers.h"
 #include "Data/PCGExData.h"
-#include "Engine/AssetManager.h"
 #include "Engine/DataAsset.h"
 #include "PCGExFitting.h"
 
@@ -52,7 +51,14 @@ virtual bool BuildFromAttributeSet(FPCGExContext* InContext, const UPCGParamData
 virtual bool BuildFromAttributeSet(FPCGExContext* InContext, const FName InputPin, const FPCGExAssetAttributeSetDetails& Details, const bool bBuildStaging) override\
 { return BuildFromAttributeSetTpl(this, InContext, InputPin, Details, bBuildStaging);}\
 virtual void RebuildStagingData(const bool bRecursive) override{ for(int i = 0; i < Entries.Num(); i++){ _ENTRY_TYPE& Entry = Entries[i]; Entry.UpdateStaging(this, i, bRecursive); } Super::RebuildStagingData(bRecursive); }\
-virtual void BuildCache() override{ Super::BuildCache(Entries); }
+virtual void BuildCache() override{ Super::BuildCache(Entries); }\
+virtual void GetAssetPaths(TSet<FSoftObjectPath>& OutPaths, const PCGExAssetCollection::ELoadingFlags Flags) const override{\
+	const bool bCollectionOnly = Flags == PCGExAssetCollection::ELoadingFlags::RecursiveCollectionsOnly;\
+	const bool bRecursive = bCollectionOnly || Flags == PCGExAssetCollection::ELoadingFlags::Recursive;\
+	for (const _ENTRY_TYPE& Entry : Entries){\
+		if (Entry.bIsSubCollection){ if (bRecursive || bCollectionOnly){ if (Entry.InternalSubCollection){ Entry.InternalSubCollection->GetAssetPaths(OutPaths, Flags);}} continue; }\
+		if (bCollectionOnly) { continue; }\
+		Entry.GetAssetPaths(OutPaths); }}
 
 #if WITH_EDITOR
 #define PCGEX_ASSET_COLLECTION_BOILERPLATE(_TYPE, _ENTRY_TYPE)\
@@ -123,6 +129,13 @@ using EPCGExAssetTagInheritanceBitmask = TEnumAsByte<EPCGExAssetTagInheritance>;
 
 namespace PCGExAssetCollection
 {
+	enum class ELoadingFlags : uint8
+	{
+		Default = 0,
+		Recursive,
+		RecursiveCollectionsOnly,
+	};
+
 	const FName SourceAssetCollection = TEXT("AttributeSet");
 
 #if PCGEX_ENGINE_VERSION > 503
@@ -257,22 +270,16 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingData
 	FSoftObjectPath Path;
 
 	UPROPERTY(VisibleAnywhere, Category = Baked)
-	FBox Bounds = FBox(ForceInitToZero);
+	FBox Bounds = FBox(ForceInit);
 
 	template <typename T>
-	T* LoadSynchronous() const
+	T* LoadSync() const
 	{
-		UObject* LoadedAsset = UAssetManager::GetStreamableManager().RequestSyncLoad(Path)->GetLoadedAsset();
-		if (!LoadedAsset) { return nullptr; }
-		return Cast<T>(LoadedAsset);
+		return PCGExHelpers::LoadBlocking_AnyThread<T>(TSoftObjectPtr<T>(Path));
 	}
 
 	template <typename T>
-	T* TryGet() const
-	{
-		TSoftObjectPtr<T> SoftPtr = TSoftObjectPtr<T>(Path);
-		return SoftPtr.Get();
-	}
+	T* TryGet() const { return TSoftObjectPtr<T>(Path).Get(); }
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Asset Collection Entry")
@@ -306,7 +313,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionEntry
 	//UPROPERTY(EditAnywhere, Category = Settings, meta=(EditCondition="bSubCollection", EditConditionHides))
 	//TSoftObjectPtr<UPCGExDataCollection> SubCollection;
 
-	TObjectPtr<UPCGExAssetCollection> BaseSubCollectionPtr;
+	UPROPERTY()
+	TObjectPtr<UPCGExAssetCollection> InternalSubCollection;
+
+	template <typename T>
+	T* GetSubCollection() { return Cast<T>(InternalSubCollection); }
 
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(VisibleAnywhere, Category=Settings, meta=(HideInDetailPanel, EditCondition="false", EditConditionHides))
@@ -318,30 +329,16 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionEntry
 	{
 	}
 #endif
+
 	virtual bool Validate(const UPCGExAssetCollection* ParentCollection);
 	virtual void UpdateStaging(const UPCGExAssetCollection* OwningCollection, int32 InInternalIndex, const bool bRecursive);
-	virtual void SetAssetPath(const FSoftObjectPath& InPath) PCGEX_NOT_IMPLEMENTED(SetAssetPath(const FSoftObjectPath& InPath))
+	virtual void SetAssetPath(const FSoftObjectPath& InPath);
 
-protected:
-	template <typename T>
-	void LoadSubCollection(TSoftObjectPtr<T> SoftPtr)
-	{
-		BaseSubCollectionPtr = SoftPtr.LoadSynchronous();
-		if (BaseSubCollectionPtr) { OnSubCollectionLoaded(); }
-	}
-
-	virtual void OnSubCollectionLoaded();
+	virtual void GetAssetPaths(TSet<FSoftObjectPath>& OutPaths) const;
 };
 
 namespace PCGExAssetCollection
 {
-	enum class ELoadingFlags : uint8
-	{
-		Default = 0,
-		Recursive,
-		RecursiveCollectionsOnly,
-	};
-
 	class /*PCGEXTENDEDTOOLKIT_API*/ FCategory : public TSharedFromThis<FCategory>
 	{
 	public:
@@ -453,17 +450,58 @@ namespace PCGExAssetCollection
 
 #pragma region Staging bounds update
 
-	static void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const AActor* InActor)
+
+	static void GetBoundingBoxBySpawning(const TSoftClassPtr<AActor>& InActorClass, FVector& Origin, FVector& BoxExtent, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true)
 	{
-		if (!InActor)
+#if WITH_EDITOR
+		UWorld* World = GWorld;
+		if (!World)
 		{
-			InStaging.Bounds = FBox(ForceInitToZero);
+			UE_LOG(LogTemp, Error, TEXT("No world to compute actor bounds!"));
 			return;
 		}
 
+		if (IsInGameThread())
+		{
+			UClass* ActorClass = InActorClass.LoadSynchronous();
+			if (!ActorClass) { return; }
+
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.bNoFail = true;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			AActor* TempActor = World->SpawnActor<AActor>(ActorClass, FTransform(), SpawnParams);
+			if (!TempActor)
+			{
+				UE_LOG(LogTemp, Error, TEXT("Failed to create temp actor!"));
+				return;
+			}
+
+			// Compute the bounds
+			TempActor->GetActorBounds(bOnlyCollidingComponents, Origin, BoxExtent, bIncludeFromChildActors);
+
+			// Hide the actor to ensure it doesn't affect gameplay or rendering
+			TempActor->SetActorHiddenInGame(true);
+			TempActor->SetActorEnableCollision(false);
+
+			// Destroy the temporary actor
+			TempActor->Destroy();
+		}
+		else
+		{
+			// If this throw, it's because a collection has been initialized outside of game thread, which is bad.
+			UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning executed outside of game thread."));
+		}
+#else
+		UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning called in non-editor context."));
+#endif
+	}
+
+	static void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const TSoftClassPtr<AActor>& InActor, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true)
+	{
 		FVector Origin = FVector::ZeroVector;
 		FVector Extents = FVector::ZeroVector;
-		InActor->GetActorBounds(true, Origin, Extents);
+		GetBoundingBoxBySpawning(InActor, Origin, Extents, bOnlyCollidingComponents, bIncludeFromChildActors);
 
 		InStaging.Bounds = FBoxCenterAndExtent(Origin, Extents).GetBox();
 	}
@@ -472,7 +510,7 @@ namespace PCGExAssetCollection
 	{
 		if (!InMesh)
 		{
-			InStaging.Bounds = FBox(ForceInitToZero);
+			InStaging.Bounds = FBox(ForceInit);
 			return;
 		}
 
@@ -506,17 +544,21 @@ public:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void EDITOR_RefreshDisplayNames();
 
+	/** Rebuild Staging data just for this collection. */
 	UFUNCTION(CallInEditor, Category = Tools, meta=(DisplayName="Rebuild Staging", ShortToolTip="Rebuild Staging data just for this collection.", DisplayOrder=0))
 	virtual void EDITOR_RebuildStagingData();
 
+	/** Rebuild Staging data for this collection and its sub-collections, recursively. */
 	UFUNCTION(CallInEditor, Category = Tools, meta=(DisplayName="Rebuild Staging (Recursive)", ShortToolTip="Rebuild Staging data for this collection and its sub-collections, recursively.", DisplayOrder=1))
 	virtual void EDITOR_RebuildStagingData_Recursive();
 
+	/** Rebuild Staging data for all collection within this project. */
 	UFUNCTION(CallInEditor, Category = Tools, meta=(DisplayName="Rebuild Staging (Project)", ShortToolTip="Rebuild Staging data for all collection within this project.", DisplayOrder=2))
 	virtual void EDITOR_RebuildStagingData_Project();
 
 #pragma region Tools
 
+	/** Sort collection by weights in ascending order. */
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Sort (Asc)", ShortToolTip="Sort collection by weights in ascending order.", DisplayOrder=10))
 	void EDITOR_SortByWeightAscending();
 
@@ -530,6 +572,7 @@ public:
 		Entries.Sort([](const T& A, const T& B) { return A.Weight < B.Weight; });
 	}
 
+	/** Sort collection by weights in descending order. */
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Sort (Desc)", ShortToolTip="Sort collection by weights in descending order.", DisplayOrder=11))
 	void EDITOR_SortByWeightDescending();
 
@@ -543,7 +586,8 @@ public:
 		Entries.Sort([](const T& A, const T& B) { return A.Weight > B.Weight; });
 	}
 
-	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Index to Weight (Asc)", ShortToolTip="Assign entry index to entry weight", DisplayOrder=20))
+	/**Sort collection by weights in descending order. */
+	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Index to Weight (Asc)", ShortToolTip="Sort collection by weights in descending order.", DisplayOrder=20))
 	void EDITOR_SetWeightIndex();
 
 	virtual void EDITOR_SetWeightIndexTyped()
@@ -556,6 +600,7 @@ public:
 		for (int i = 0; i < Entries.Num(); i++) { Entries[i].Weight = i + 1; }
 	}
 
+	/** Add 1 to all weights so it's easier to weight down some assets */
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Pad Weights", ShortToolTip="Add 1 to all weights so it's easier to weight down some assets", DisplayOrder=21))
 	void EDITOR_PadWeight();
 
@@ -569,6 +614,7 @@ public:
 		for (int i = 0; i < Entries.Num(); i++) { Entries[i].Weight += 1; }
 	}
 
+	/** Reset all weights to 100 */
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Weight = 100", ShortToolTip="Reset all weights to 100", DisplayOrder=21))
 	void EDITOR_WeightOne();
 
@@ -582,6 +628,7 @@ public:
 		for (int i = 0; i < Entries.Num(); i++) { Entries[i].Weight = 100; }
 	}
 
+	/** Assign random weights to items */
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Randomize Weights", ShortToolTip="Assign random weights to items", DisplayOrder=21))
 	void EDITOR_WeightRandom();
 
@@ -676,10 +723,10 @@ protected:
 		const int32 Index,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
 		const int32 Pick = LoadCache()->Main->GetPick(Index, EPCGExIndexPickMode::Ascending);
 		if (!InEntries.IsValidIndex(Pick)) { return false; }
 		OutEntry = &InEntries[Pick];
+		OutHost = this;
 		return true;
 	}
 
@@ -692,11 +739,17 @@ protected:
 		const EPCGExIndexPickMode PickMode,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
 		const int32 Pick = LoadCache()->Main->GetPick(Index, PickMode);
 		if (!InEntries.IsValidIndex(Pick)) { return false; }
-		if (const T& Entry = InEntries[Pick]; Entry.SubCollectionPtr) { Entry.SubCollectionPtr->GetEntryWeightedRandom(OutEntry, Seed, OutHost); }
-		else { OutEntry = &Entry; }
+		if (const T& Entry = InEntries[Pick]; Entry.bIsSubCollection && Entry.SubCollection)
+		{
+			return Entry.SubCollection->GetEntryWeightedRandom(OutEntry, Seed, OutHost);
+		}
+		else
+		{
+			OutEntry = &Entry;
+			OutHost = this;
+		}
 		return true;
 	}
 
@@ -707,10 +760,13 @@ protected:
 		const int32 Seed,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
 		const T& Entry = InEntries[LoadCache()->Main->GetPickRandom(Seed)];
-		if (Entry.SubCollectionPtr) { Entry.SubCollectionPtr->GetEntryRandom(OutEntry, Seed * 2, OutHost); }
-		else { OutEntry = &Entry; }
+		if (Entry.bIsSubCollection && Entry.SubCollection)
+		{
+			return Entry.SubCollection->GetEntryRandom(OutEntry, Seed * 2, OutHost);
+		}
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 
@@ -721,10 +777,13 @@ protected:
 		const int32 Seed,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
 		const T& Entry = InEntries[LoadCache()->Main->GetPickRandomWeighted(Seed)];
-		if (Entry.SubCollectionPtr) { Entry.SubCollectionPtr->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost); }
-		else { OutEntry = &Entry; }
+		if (Entry.bIsSubCollection && Entry.SubCollection)
+		{
+			return Entry.SubCollection->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost);
+		}
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 
@@ -741,16 +800,15 @@ protected:
 		TSet<FName>& OutTags,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
-
 		const int32 Pick = LoadCache()->Main->GetPick(Index, EPCGExIndexPickMode::Ascending);
 		if (!InEntries.IsValidIndex(Pick)) { return false; }
 		const T& Entry = InEntries[Pick];
 
-		if (Entry.SubCollectionPtr && (TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollectionPtr->CollectionTags); }
+		if (Entry.bIsSubCollection && Entry.SubCollection && (TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollection->CollectionTags); }
 		if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
 
-		OutEntry = &InEntries[Pick];
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 
@@ -765,22 +823,18 @@ protected:
 		TSet<FName>& OutTags,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
-
 		const int32 Pick = LoadCache()->Main->GetPick(Index, PickMode);
 		if (!InEntries.IsValidIndex(Pick)) { return false; }
 		const T& Entry = InEntries[Pick];
-		if (Entry.SubCollectionPtr)
+		if (Entry.bIsSubCollection && Entry.SubCollection)
 		{
 			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Hierarchy))) { OutTags.Append(Entry.Tags); }
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollectionPtr->CollectionTags); }
-			Entry.SubCollectionPtr->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost);
+			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollection->CollectionTags); }
+			return Entry.SubCollection->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost);
 		}
-		else
-		{
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
-			OutEntry = &Entry;
-		}
+		if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 
@@ -793,20 +847,16 @@ protected:
 		TSet<FName>& OutTags,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
-
 		const T& Entry = InEntries[LoadCache()->Main->GetPickRandom(Seed)];
-		if (Entry.SubCollectionPtr)
+		if (Entry.bIsSubCollection && Entry.SubCollection)
 		{
 			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Hierarchy))) { OutTags.Append(Entry.Tags); }
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollectionPtr->CollectionTags); }
-			Entry.SubCollectionPtr->GetEntryRandom(OutEntry, Seed * 2, OutHost);
+			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollection->CollectionTags); }
+			return Entry.SubCollection->GetEntryRandom(OutEntry, Seed * 2, OutHost);
 		}
-		else
-		{
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
-			OutEntry = &Entry;
-		}
+		if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 
@@ -819,20 +869,16 @@ protected:
 		TSet<FName>& OutTags,
 		const UPCGExAssetCollection*& OutHost)
 	{
-		OutHost = this;
-
 		const T& Entry = InEntries[LoadCache()->Main->GetPickRandomWeighted(Seed)];
-		if (Entry.SubCollectionPtr)
+		if (Entry.bIsSubCollection && Entry.SubCollection)
 		{
 			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Hierarchy))) { OutTags.Append(Entry.Tags); }
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollectionPtr->CollectionTags); }
-			Entry.SubCollectionPtr->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost);
+			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Collection))) { OutTags.Append(Entry.SubCollection->CollectionTags); }
+			return Entry.SubCollection->GetEntryWeightedRandom(OutEntry, Seed * 2, OutHost);
 		}
-		else
-		{
-			if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
-			OutEntry = &Entry;
-		}
+		if ((TagInheritance & static_cast<uint8>(EPCGExAssetTagInheritance::Asset))) { OutTags.Append(Entry.Tags); }
+		OutEntry = &Entry;
+		OutHost = this;
 		return true;
 	}
 

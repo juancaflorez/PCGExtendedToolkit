@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 using UnrealBuildTool;
@@ -29,7 +29,7 @@ public class PCGExtendedToolkit : ModuleRules
 				"Core",
 				"CoreUObject",
 				"Engine",
-				"PCG",
+				"PCG"
 			}
 		);
 
@@ -40,10 +40,15 @@ public class PCGExtendedToolkit : ModuleRules
 				"GeometryCore",
 				"GeometryFramework",
 				"GeometryScriptingCore",
+				"GeometryAlgorithms",
 				"RenderCore",
 				"RHI",
 				"PhysicsCore",
-				"NavigationSystem"
+				"NavigationSystem",
+				"Slate",
+				"SlateCore",
+				"GameplayTags",
+				"PropertyPath"
 			}
 		);
 
@@ -54,12 +59,14 @@ public class PCGExtendedToolkit : ModuleRules
 			}
 		);
 
-		if (Target.bBuildEditor)
-			// Editor only modules
+		if (Target.bBuildEditor == true)
+		{
 			PrivateDependencyModuleNames.AddRange(
 				new string[]
 				{
-				}
-			);
+					"UnrealEd",
+					"Settings"
+				});
+		}
 	}
 }

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,7 +12,7 @@
 
 namespace PCGExBevelPath
 {
-	const FName SourceBevelFilters = TEXT("BevelConditions");
+	const FName SourceBevelFilters = TEXT("Bevel Conditions");
 	const FName SourceCustomProfile = TEXT("Profile");
 }
 
@@ -84,13 +84,13 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NotOverridable))
 	EPCGExInputValueType WidthInput = EPCGExInputValueType::Constant;
 
+	/** Bevel width attribute.*/
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Width (Attr)", EditCondition="WidthInput != EPCGExInputValueType::Constant", EditConditionHides))
+	FPCGAttributePropertyInputSelector WidthAttribute;
+
 	/** Bevel width constant.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Width", EditCondition="WidthInput == EPCGExInputValueType::Constant", EditConditionHides))
 	double WidthConstant = 0.1;
-
-	/** Bevel width attribute.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Width", EditCondition="WidthInput == EPCGExInputValueType::Attribute", EditConditionHides))
-	FPCGAttributePropertyInputSelector WidthAttribute;
 
 	/** Bevel limit type */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
@@ -115,7 +115,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Subdivision", meta=(PCG_Overridable, EditCondition="!bKeepCornerPoint && bSubdivide && Type != EPCGExBevelProfileType::Custom && SubdivideMethod==EPCGExSubdivideMode::Count && SubdivisionAmountInput==EPCGExInputValueType::Constant", EditConditionHides, ClampMin=1))
 	int32 SubdivisionCount = 10;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Subdivision", meta=(PCG_Overridable, EditCondition="!bKeepCornerPoint && bSubdivide && Type != EPCGExBevelProfileType::Custom && SubdivisionAmountInput==EPCGExInputValueType::Attribute", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Subdivision", meta=(PCG_Overridable, DisplayName="Subdividion (Attr)", EditCondition="!bKeepCornerPoint && bSubdivide && Type != EPCGExBevelProfileType::Custom && SubdivisionAmountInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector SubdivisionAmount;
 
 	/**  */
@@ -216,8 +216,8 @@ namespace PCGExBevelPath
 		void Balance(const FProcessor* InProcessor);
 		void Compute(const FProcessor* InProcessor);
 
-		void SubdivideLine(const double Factor, const double bIsCount);
-		void SubdivideArc(const double Factor, const double bIsCount);
+		void SubdivideLine(const double Factor, bool bIsCount);
+		void SubdivideArc(const double Factor, bool bIsCount);
 		void SubdivideCustom(const FProcessor* InProcessor);
 	};
 
@@ -253,8 +253,8 @@ namespace PCGExBevelPath
 		FORCEINLINE double Len(const int32 Index) const { return Lengths[Index]; }
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount) override;
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount) override;
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		void WriteFlags(const int32 Index);
 		virtual void CompleteWork() override;
 		virtual void Write() override;

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExSplineAlphaFilter.h"
@@ -7,6 +7,11 @@
 
 #define LOCTEXT_NAMESPACE "PCGExSplineAlphaFilterDefinition"
 #define PCGEX_NAMESPACE PCGExSplineAlphaFilterDefinition
+
+bool UPCGExSplineAlphaFilterFactory::SupportsDirectEvaluation() const
+{
+	return Config.CompareAgainst == EPCGExInputValueType::Constant;
+}
 
 bool UPCGExSplineAlphaFilterFactory::Init(FPCGExContext* InContext)
 {
@@ -31,7 +36,7 @@ bool UPCGExSplineAlphaFilterFactory::Init(FPCGExContext* InContext)
 
 	if (Splines.IsEmpty())
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (either no input or empty dataset)"));
+		PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)"));
 		return false;
 	}
 
@@ -40,7 +45,7 @@ bool UPCGExSplineAlphaFilterFactory::Init(FPCGExContext* InContext)
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExSplineAlphaFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::TSplineAlphaFilter>(this);
+	return MakeShared<PCGExPointsFilter::FSplineAlphaFilter>(this);
 }
 
 void UPCGExSplineAlphaFilterFactory::BeginDestroy()
@@ -48,15 +53,19 @@ void UPCGExSplineAlphaFilterFactory::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-void UPCGExSplineAlphaFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
+bool UPCGExSplineAlphaFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
 {
-	Super::RegisterConsumableAttributes(InContext);
-	//TODO : Implement Consumable
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.OperandB, Consumable)
+
+	return true;
 }
 
 namespace PCGExPointsFilter
 {
-	bool TSplineAlphaFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+	bool FSplineAlphaFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 	{
 		if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -74,7 +83,64 @@ namespace PCGExPointsFilter
 		return true;
 	}
 
-	bool TSplineAlphaFilter::Test(const int32 PointIndex) const
+	bool FSplineAlphaFilter::Test(const FPCGPoint& Point) const
+	{
+		const FVector Pos = Point.Transform.GetLocation();
+		double Time = 0;
+
+		if (TypedFilterFactory->Config.TimeConsolidation == EPCGExSplineTimeConsolidation::Min) { Time = MAX_dbl; }
+
+		if (TypedFilterFactory->Config.Pick == EPCGExSplineFilterPick::Closest)
+		{
+			double ClosestDist = MAX_dbl;
+			for (int i = 0; i < Splines.Num(); i++)
+			{
+				const FPCGSplineStruct* Spline = Splines[i];
+
+				double LocalTime = Spline->FindInputKeyClosestToWorldLocation(Pos);
+				FTransform T = Spline->GetTransformAtSplineInputKey(static_cast<float>(LocalTime), ESplineCoordinateSpace::World, true);
+				LocalTime /= SegmentsNum[i];
+
+				const double D = FVector::DistSquared(T.GetLocation(), Pos);
+
+				if (D > ClosestDist) { continue; }
+
+				Time = LocalTime;
+			}
+		}
+		else
+		{
+			for (int i = 0; i < Splines.Num(); i++)
+			{
+				const FPCGSplineStruct* Spline = Splines[i];
+
+				double LocalTime = Spline->FindInputKeyClosestToWorldLocation(Pos);
+				LocalTime /= SegmentsNum[i];
+
+				switch (TypedFilterFactory->Config.TimeConsolidation)
+				{
+				case EPCGExSplineTimeConsolidation::Min:
+					Time = FMath::Min(LocalTime, Time);
+					break;
+				case EPCGExSplineTimeConsolidation::Max:
+					Time = FMath::Max(LocalTime, Time);
+					break;
+				case EPCGExSplineTimeConsolidation::Average:
+					Time += LocalTime;
+					break;
+				}
+			}
+
+			if (TypedFilterFactory->Config.TimeConsolidation == EPCGExSplineTimeConsolidation::Average)
+			{
+				Time /= SegmentsNum.Num();
+			}
+		}
+
+		return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, Time, TypedFilterFactory->Config.OperandBConstant, TypedFilterFactory->Config.Tolerance);
+	}
+
+	bool FSplineAlphaFilter::Test(const int32 PointIndex) const
 	{
 		const FVector Pos = PointDataFacade->Source->GetInPoint(PointIndex).Transform.GetLocation();
 		double Time = 0;

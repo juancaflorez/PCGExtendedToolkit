@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -30,7 +30,7 @@ class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleAttribute : public UPCGExNe
 public:
 	TSharedPtr<PCGExDataBlending::FMetadataBlender> Blender;
 
-	TSet<FName> SourceAttributes;
+	FPCGExAttributeSourceToTargetList SourceAttributes;
 	EPCGExDataBlendingType Blending = EPCGExDataBlendingType::Average;
 
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
@@ -42,13 +42,13 @@ public:
 		Blender->PrepareForBlending(TargetNode.PointIndex);
 	}
 
-	FORCEINLINE virtual void BlendNodePoint(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const override
+	FORCEINLINE virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const override
 	{
 		const int32 PrimaryIndex = TargetNode.PointIndex;
 		Blender->Blend(PrimaryIndex, Cluster->GetNode(Lk)->PointIndex, PrimaryIndex, Weight);
 	}
 
-	FORCEINLINE virtual void BlendNodeEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const override
+	FORCEINLINE virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const override
 	{
 		const int32 PrimaryIndex = TargetNode.PointIndex;
 		Blender->Blend(PrimaryIndex, Cluster->GetEdge(Lk)->PointIndex, PrimaryIndex, Weight);
@@ -78,17 +78,18 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeSamplerConfigBase
 	{
 	}
 
-	/** Attribute to sample */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
-	TSet<FName> SourceAttributes;
-
-	/** How to blend neighbors */
+	/** Unique blendmode applied to all specified attributes. For different blendmodes, create multiple sampler nodes. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExDataBlendingType Blending = EPCGExDataBlendingType::Average;
+	
+	/** Attribute to sample & optionally remap. Leave it to None to overwrite the source attribute.  */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ShowOnlyInnerProperties))
+	FPCGExAttributeSourceToTargetList SourceAttributes;
+
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryAttribute : public UPCGExNeighborSamplerFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryAttribute : public UPCGExNeighborSamplerFactoryData
 {
 	GENERATED_BODY()
 
@@ -96,23 +97,8 @@ public:
 	FPCGExAttributeSamplerConfigBase Config;
 	virtual UPCGExNeighborSampleOperation* CreateOperation(FPCGExContext* InContext) const override;
 
-	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InDataFacade, PCGExData::FFacadePreloader& FacadePreloader) const override
-	{
-		if (SamplingConfig.NeighborSource == EPCGExClusterComponentSource::Vtx)
-		{
-			TSharedPtr<PCGEx::FAttributesInfos> Infos = PCGEx::FAttributesInfos::Get(InDataFacade->GetIn()->Metadata);
-			for (FName AttrName : Config.SourceAttributes)
-			{
-				const PCGEx::FAttributeIdentity* Identity = Infos->Find(AttrName);
-				if (!Identity)
-				{
-					PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Missing attribute: \"{0}\"."), FText::FromName(AttrName)));
-					return;
-				}
-				FacadePreloader.Register(InContext, *Identity);
-			}
-		}
-	}
+	virtual bool RegisterConsumableAttributes(FPCGExContext* InContext) const override;
+	virtual void RegisterVtxBuffersDependencies(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InVtxDataFacade, PCGExData::FFacadePreloader& FacadePreloader) const override;
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|NeighborSample")
@@ -130,7 +116,7 @@ public:
 #endif
 	//~End UPCGSettings
 
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
 
 #if WITH_EDITOR
 	virtual FString GetDisplayName() const override;

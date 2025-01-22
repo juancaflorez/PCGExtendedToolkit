@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Edges/PCGExWriteVtxProperties.h"
@@ -12,7 +12,7 @@
 TArray<FPCGPinProperties> UPCGExWriteVtxPropertiesSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	PCGEX_PIN_PARAMS(PCGExVtxProperty::SourcePropertyLabel, "Extra attribute handlers.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExVtxProperty::SourcePropertyLabel, "Extra attribute handlers.", Normal, {})
 	return PinProperties;
 }
 
@@ -76,7 +76,7 @@ namespace PCGExWriteVtxProperties
 
 		if (!FClusterProcessor::Process(InAsyncManager)) { return false; }
 
-		for (const UPCGExVtxPropertyFactoryBase* Factory : Context->ExtraFactories)
+		for (const UPCGExVtxPropertyFactoryData* Factory : Context->ExtraFactories)
 		{
 			UPCGExVtxPropertyOperation* NewOperation = Factory->CreateOperation(Context);
 
@@ -89,7 +89,7 @@ namespace PCGExWriteVtxProperties
 		return true;
 	}
 
-	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope)
 	{
 		if (VtxEdgeCountWriter) { VtxEdgeCountWriter->GetMutable(Node.PointIndex) = Node.Num(); }
 
@@ -106,8 +106,8 @@ namespace PCGExWriteVtxProperties
 
 	//////// BATCH
 
-	FBatch::FBatch(FPCGExContext* InContext, const TSharedRef<PCGExData::FPointIO>& InVtx, TArrayView<TSharedRef<PCGExData::FPointIO>> InEdges):
-		TBatch(InContext, InVtx, InEdges)
+	FBatch::FBatch(FPCGExContext* InContext, const TSharedRef<PCGExData::FPointIO>& InVtx, TArrayView<TSharedRef<PCGExData::FPointIO>> InEdges)
+		: TBatch(InContext, InVtx, InEdges)
 	{
 	}
 

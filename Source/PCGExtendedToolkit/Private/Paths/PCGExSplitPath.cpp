@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExSplitPath.h"
@@ -95,18 +95,19 @@ namespace PCGExSplitPath
 		const int32 ChunkSize = GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize();
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, TaskGroup)
-		TaskGroup->OnSubLoopStartCallback =
-			[&](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-			{
-				PointDataFacade->Fetch(StartIndex, Count);
-				FilterScope(StartIndex, Count);
-			};
+
+#define PCGEX_SPLIT_ACTION(_NAME)\
+		TaskGroup->OnSubLoopStartCallback = [PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope){\
+					PCGEX_ASYNC_THIS \
+					This->PointDataFacade->Fetch(Scope);\
+					This->FilterScope(Scope);\
+					for (int i = Scope.Start; i < Scope.End; i++) { This->_NAME(i); } };
 
 		if (Settings->SplitAction == EPCGExPathSplitAction::Partition ||
 			Settings->SplitAction == EPCGExPathSplitAction::Switch)
 		{
-			PointDataFacade->Fetch(0, 1);
-			FilterScope(0, 1);
+			PointDataFacade->Fetch(PCGExMT::FScope(0, 1));
+			FilterScope(PCGExMT::FScope(0, 1));
 
 			switch (Settings->InitialBehavior)
 			{
@@ -129,29 +130,31 @@ namespace PCGExSplitPath
 		switch (Settings->SplitAction)
 		{
 		case EPCGExPathSplitAction::Split:
-			TaskGroup->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx) { DoActionSplit(Index); };
+			PCGEX_SPLIT_ACTION(DoActionSplit)
 			break;
 		case EPCGExPathSplitAction::Remove:
-			TaskGroup->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx) { DoActionRemove(Index); };
+			PCGEX_SPLIT_ACTION(DoActionRemove)
 			break;
 		case EPCGExPathSplitAction::Disconnect:
-			TaskGroup->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx) { DoActionDisconnect(Index); };
+			PCGEX_SPLIT_ACTION(DoActionDisconnect)
 			break;
 		case EPCGExPathSplitAction::Partition:
-			TaskGroup->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx) { DoActionPartition(Index); };
+			PCGEX_SPLIT_ACTION(DoActionPartition)
 			break;
 		case EPCGExPathSplitAction::Switch:
-			TaskGroup->OnIterationCallback = [&](const int32 Index, const int32 Count, const int32 LoopIdx) { DoActionSwitch(Index); };
+			PCGEX_SPLIT_ACTION(DoActionSwitch)
 			break;
 		default: ;
 		}
 
-		TaskGroup->StartIterations(NumPoints, ChunkSize, true);
+#undef PCGEX_SPLIT_ACTION
+
+		TaskGroup->StartSubLoops(NumPoints, ChunkSize, true);
 
 		return true;
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		const FPath& PathInfos = Paths[Iteration];
 
@@ -166,7 +169,8 @@ namespace PCGExSplitPath
 		if (NumPathPoints == 1 && Settings->bOmitSinglePointOutputs) { return; }
 
 		const TSharedPtr<PCGExData::FPointIO> PathIO = NewPointIO(PointDataFacade->Source);
-		PathIO->InitializeOutput(PCGExData::EIOInit::New);
+		PCGEX_INIT_IO_VOID(PathIO, PCGExData::EIOInit::New)
+
 		PathsIOs[Iteration] = PathIO;
 
 		const TArray<FPCGPoint>& OriginalPoints = PointDataFacade->GetIn()->GetPoints();
@@ -208,9 +212,9 @@ namespace PCGExSplitPath
 			if (!PathIO) { continue; }
 			if (bAddOpenTag) { Context->UpdateTags.Update(PathIO); }
 
-			if ((OddEven & 1) == 0) { if (Settings->bTagIfEvenSplit) { PathIO->Tags->Add(Settings->IsEvenTag); } }
-			else if (Settings->bTagIfOddSplit) { PathIO->Tags->Add(Settings->IsOddTag); }
-			Context->MainPaths->AddUnsafe(PathIO);
+			if ((OddEven & 1) == 0) { if (Settings->bTagIfEvenSplit) { PathIO->Tags->AddRaw(Settings->IsEvenTag); } }
+			else if (Settings->bTagIfOddSplit) { PathIO->Tags->AddRaw(Settings->IsOddTag); }
+			Context->MainPaths->Add_Unsafe(PathIO);
 			OddEven++;
 		}
 

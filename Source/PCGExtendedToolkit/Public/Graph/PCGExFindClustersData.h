@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -64,7 +64,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindClustersDataContext final : FPCGExPo
 {
 	friend class FPCGExFindClustersDataElement;
 
-	FString SearchKey = TEXT("");
+	PCGExTags::IDType SearchKey;
 	TSharedPtr<PCGExData::FPointIO> SearchKeyIO;
 	TSharedPtr<PCGExData::FPointIOCollection> MainEdges;
 };

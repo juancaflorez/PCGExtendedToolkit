@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 using UnrealBuildTool;
@@ -27,8 +27,11 @@ public class PCGExtendedToolkitEditor : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"Slate",
-				"SlateCore"
+				"SlateCore",
+				"PCG",
+				"PCGExtendedToolkit",
 			}
 		);
+		
 	}
 }

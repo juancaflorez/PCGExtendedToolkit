@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -20,7 +20,9 @@ UPCGExHeuristicOperation* UPCGExHeuristicsFactorySteepness::CreateOperation(FPCG
 	return NewOperation;
 }
 
-UPCGExParamFactoryBase* UPCGExHeuristicsSteepnessProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+PCGEX_HEURISTIC_FACTORY_BOILERPLATE_IMPL(Steepness, {})
+
+UPCGExFactoryData* UPCGExHeuristicsSteepnessProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
 	UPCGExHeuristicsFactorySteepness* NewFactory = InContext->ManagedObjects->New<UPCGExHeuristicsFactorySteepness>();
 	PCGEX_FORWARD_HEURISTIC_FACTORY

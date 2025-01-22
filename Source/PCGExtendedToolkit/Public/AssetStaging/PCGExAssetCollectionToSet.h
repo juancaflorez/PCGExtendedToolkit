@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -29,10 +29,17 @@ class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAssetCollectionToSetSettings : public UPC
 
 	friend class FPCGExAssetCollectionToSetElement;
 
+	//~Begin UObject interface
+#if WITH_EDITOR
+
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+	//~End UObject interface
+
 public:
-	bool bCacheResult = false;
 	//~Begin UPCGSettings
 #if WITH_EDITOR
+	PCGEX_DUMMY_SETTINGS_MEMBERS
 	PCGEX_NODE_INFOS(AssetCollectionToSet, "Asset Collection to Set", "Converts an asset collection to an attribute set.");
 	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Param; }
 #endif
@@ -64,9 +71,15 @@ protected:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteAssetPath = true;
 
+	UPROPERTY()
+	bool bWriteAssetClass = true;
+
 	/** Name of the attribute on the AttributeSet that contains the asset path to be staged */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName="Asset Path", EditCondition="bWriteAssetPath"))
 	FName AssetPathAttributeName = FName("AssetPath");
+
+	UPROPERTY()
+	FName AssetClassAttributeName = NAME_None;
 
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -122,7 +135,7 @@ class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionToSetElement final : publi
 public:
 	virtual FPCGContext* Initialize(const FPCGDataCollection& InputData, TWeakObjectPtr<UPCGComponent> SourceComponent, const UPCGNode* Node) override;
 	virtual bool IsCacheable(const UPCGSettings* InSettings) const override { return false; }
-	virtual bool CanExecuteOnlyOnMainThread(FPCGContext* Context) const override { return true; }
+	PCGEX_CAN_ONLY_EXECUTE_ON_MAIN_THREAD(true)
 
 	//virtual void DisabledPassThroughData(FPCGContext* Context) const override;
 

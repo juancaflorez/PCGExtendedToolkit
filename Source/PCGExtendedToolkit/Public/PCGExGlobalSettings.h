@@ -1,22 +1,23 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
-
 
 #pragma once
 
 #include "CoreMinimal.h"
+
 #include "PCGExGlobalSettings.generated.h"
+
+class UPCGPin;
 
 UENUM()
 enum class EPCGExAsyncPriority : uint8
 {
-	Blocking = 0 UMETA(DisplayName = "Blocking", ToolTip="Position component."),
-	Highest  = 1 UMETA(DisplayName = "Highest", ToolTip="Position component."),
-	High     = 2 UMETA(DisplayName = "High", ToolTip="Position component."),
-	Normal   = 3 UMETA(DisplayName = "Normal", ToolTip="Position component."),
-	Low      = 4 UMETA(DisplayName = "Low", ToolTip="Position component."),
-	Lowest   = 5 UMETA(DisplayName = "Lowest", ToolTip="Position component."),
-	Default  = 6 UMETA(DisplayName = "Default", ToolTip="Position component."),
+	Default          = 0 UMETA(DisplayName = "Default", ToolTip="..."),
+	Normal           = 1 UMETA(DisplayName = "Normal", ToolTip="..."),
+	High             = 2 UMETA(DisplayName = "High", ToolTip="..."),
+	BackgroundHigh   = 3 UMETA(DisplayName = "BackgroundHigh", ToolTip="..."),
+	BackgroundNormal = 4 UMETA(DisplayName = "BackgroundNormal", ToolTip="..."),
+	BackgroundLow    = 5 UMETA(DisplayName = "BackgroundLow", ToolTip="..."),
 };
 
 UENUM()
@@ -28,7 +29,7 @@ enum class EPCGExDataBlendingTypeDefault : uint8
 	Weight           = 2 UMETA(DisplayName = "Weight", ToolTip="Weights based on distance to blend targets. If the results are unexpected, try 'Lerp' instead"),
 	Min              = 3 UMETA(DisplayName = "Min", ToolTip="Component-wise MIN operation"),
 	Max              = 4 UMETA(DisplayName = "Max", ToolTip="Component-wise MAX operation"),
-	Copy             = 5 UMETA(DisplayName = "Copy", ToolTip = "Copy incoming data"),
+	Copy             = 5 UMETA(DisplayName = "Copy (Target)", ToolTip = "Copy target data (second value)"),
 	Sum              = 6 UMETA(DisplayName = "Sum", ToolTip = "Sum"),
 	WeightedSum      = 7 UMETA(DisplayName = "Weighted Sum", ToolTip = "Sum of all the data, weighted"),
 	Lerp             = 8 UMETA(DisplayName = "Lerp", ToolTip="Uses weight as lerp. If the results are unexpected, try 'Weight' instead."),
@@ -38,8 +39,28 @@ enum class EPCGExDataBlendingTypeDefault : uint8
 	AbsoluteMin      = 12 UMETA(DisplayName = "Unsigned Min", ToolTip="Component-wise MIN on unsigned value, but keeps the sign on written data."),
 	AbsoluteMax      = 13 UMETA(DisplayName = "Unsigned Max", ToolTip="Component-wise MAX on unsigned value, but keeps the sign on written data."),
 	WeightedSubtract = 14 UMETA(DisplayName = "Weighted Subtract", ToolTip="Substraction of all the data, weighted"),
-	CopyOther        = 15 UMETA(DisplayName = "Copy (Other)", ToolTip="Same as copy, but copy the other value"),
+	CopyOther        = 15 UMETA(DisplayName = "Copy (Source)", ToolTip="Copy source data (first value)"),
+	Hash             = 16 UMETA(DisplayName = "Hash", ToolTip="Combine the values into a hash"),
+	UnsignedHash     = 17 UMETA(DisplayName = "Hash (Unsigned)", ToolTip="Combine the values into a hash but sort the values first to create an order-independent hash."),
 };
+
+namespace PCGEx
+{
+	struct FPinInfos
+	{
+		FName Icon = NAME_None;
+		FText Tooltip = FText();
+
+		FPinInfos() = default;
+
+		FPinInfos(const FName InIcon, const FString& InTooltip)
+			: Icon(InIcon), Tooltip(FText::FromString(InTooltip))
+		{
+		}
+
+		~FPinInfos() = default;
+	};
+}
 
 UCLASS(DefaultConfig, config = Editor, defaultconfig)
 class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExGlobalSettings : public UObject
@@ -47,12 +68,23 @@ class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExGlobalSettings : public UObject
 	GENERATED_BODY()
 
 public:
+	/** Value applied by default to node caching when `Default` is selected -- note that some nodes may stop working as expected when working with cached data.*/
+	UPROPERTY(EditAnywhere, config, Category = "Performance|Defaults")
+	bool bDefaultCacheNodeOutput = false;
+
+	/** Value applied by default to node caching when `Default` is selected*/
+	UPROPERTY(EditAnywhere, config, Category = "Performance|Defaults")
+	bool bDefaultScopedAttributeGet = true;
+
 	UPROPERTY(EditAnywhere, config, Category = "Performance|Cluster", meta=(ClampMin=1))
 	int32 SmallClusterSize = 256;
 
 	UPROPERTY(EditAnywhere, config, Category = "Performance|Cluster", meta=(ClampMin=1))
-	int32 ClusterDefaultBatchChunkSize = 512;
+	int32 ClusterDefaultBatchChunkSize = 256;
 	int32 GetClusterBatchChunkSize(const int32 In = -1) const { return In <= -1 ? ClusterDefaultBatchChunkSize : In; }
+
+	UPROPERTY(EditAnywhere, config, Category = "Performance|Cluster")
+	bool bDefaultScopedIndexLookupBuild = false;
 
 	/** Allow caching of clusters */
 	UPROPERTY(EditAnywhere, config, Category = "Performance|Cluster")
@@ -67,17 +99,17 @@ public:
 	bool IsSmallPointSize(const int32 InNum) const { return InNum <= SmallPointsSize; }
 
 	UPROPERTY(EditAnywhere, config, Category = "Performance|Points", meta=(ClampMin=1))
-	int32 PointsDefaultBatchChunkSize = 512;
+	int32 PointsDefaultBatchChunkSize = 256;
 	int32 GetPointsBatchChunkSize(const int32 In = -1) const { return In <= -1 ? PointsDefaultBatchChunkSize : In; }
 
 	UPROPERTY(EditAnywhere, config, Category = "Performance|Async")
-	EPCGExAsyncPriority DefaultWorkPriority = EPCGExAsyncPriority::Normal;
-	EPCGExAsyncPriority GetDefaultWorkPriority() const { return DefaultWorkPriority == EPCGExAsyncPriority::Default ? EPCGExAsyncPriority::Normal : DefaultWorkPriority; }
+	EPCGExAsyncPriority DefaultWorkPriority = EPCGExAsyncPriority::BackgroundNormal;
+	EPCGExAsyncPriority GetDefaultWorkPriority() const { return DefaultWorkPriority == EPCGExAsyncPriority::Default ? EPCGExAsyncPriority::BackgroundNormal : DefaultWorkPriority; }
 
 	/** Disable collision on new entries */
 	UPROPERTY(EditAnywhere, config, Category = "Collections")
 	bool bDisableCollisionByDefault = true;
-	
+
 	UPROPERTY(EditAnywhere, config, Category = "Blending|Attribute Types Defaults|Simple Types", meta=(DisplayName="Boolean"))
 	EPCGExDataBlendingTypeDefault DefaultBooleanBlendMode = EPCGExDataBlendingTypeDefault::Default;
 
@@ -123,6 +155,9 @@ public:
 	UPROPERTY(EditAnywhere, config, Category = "Blending|Attribute Types Defaults|Soft Paths Types", meta=(DisplayName="SoftClassPath"))
 	EPCGExDataBlendingTypeDefault DefaultSoftClassPathBlendMode = EPCGExDataBlendingTypeDefault::Copy;
 
+
+	UPROPERTY(EditAnywhere, config, Category = "Node Colors")
+	FLinearColor NodeColorConstant = FLinearColor(0.2, 0.2, 0.2, 1.0);
 
 	UPROPERTY(EditAnywhere, config, Category = "Node Colors")
 	FLinearColor NodeColorDebug = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
@@ -202,4 +237,22 @@ public:
 
 	UPROPERTY(EditAnywhere, config, Category = "Node Colors")
 	FLinearColor NodeColorShapeBuilder = FLinearColor(1.000000, 0.000000, 0.185865, 1.000000);
+
+	UPROPERTY(EditAnywhere, config, Category = "Node Colors")
+	FLinearColor NodeColorTex = FLinearColor(1.000000, 0.200000, 0.185865, 1.000000);
+
+	UPROPERTY(EditAnywhere, config, Category = "Node Colors")
+	FLinearColor NodeColorTensor = FLinearColor(0.350314, 1.000000, 0.470501, 1.000000);
+
+	bool GetPinExtraIcon(const UPCGPin* InPin, FName& OutExtraIcon, FText& OutTooltip, bool bIsOutPin = false) const;
+
+protected:
+	static TArray<PCGEx::FPinInfos> InPinInfos;
+	static TArray<PCGEx::FPinInfos> OutPinInfos;
+	static TMap<FName, int32> InPinInfosMap;
+	static TMap<FName, int32> OutPinInfosMap;
+
+	static bool bGeneratedPinMap;
+
+	void GeneratePinInfos();
 };

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -6,6 +6,8 @@
 #include "CoreMinimal.h"
 
 #include "PCGExPointsProcessor.h"
+
+
 #include "PCGExDiscardByOverlap.generated.h"
 
 UENUM()
@@ -184,20 +186,21 @@ protected:
 
 namespace PCGExDiscardByOverlap
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FPruneTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FPruneTask final : public PCGExMT::FTask
 	{
 	public:
-		explicit FPruneTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO)
-			: FPCGExTask(InPointIO)
+		PCGEX_ASYNC_TASK_NAME(FPruneTask)
+
+		explicit FPruneTask()
+			: FTask()
 
 		{
 		}
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
 		{
 			FPCGExDiscardByOverlapContext* Context = AsyncManager->GetContext<FPCGExDiscardByOverlapContext>();
 			Context->Prune();
-			return false;
 		}
 	};
 
@@ -337,7 +340,7 @@ namespace PCGExDiscardByOverlap
 		}
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount) override;
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 

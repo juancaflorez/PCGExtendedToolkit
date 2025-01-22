@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,6 +12,11 @@
 #include "Data/Blending/PCGExDataBlending.h"
 
 #include "PCGExFuseClusters.generated.h"
+
+namespace PCGExFuseClusters
+{
+	class FProcessor;
+}
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
 class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFuseClustersSettings : public UPCGExEdgesProcessorSettings
@@ -97,6 +102,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseClustersContext final : FPCGExEdgesP
 {
 	friend class UPCGExFuseClustersSettings;
 	friend class FPCGExFuseClustersElement;
+	friend class PCGExFuseClusters::FProcessor;
 
 	TArray<TSharedRef<PCGExData::FFacade>> VtxFacades;
 	TSharedPtr<PCGExGraph::FUnionGraph> UnionGraph;
@@ -143,21 +149,8 @@ namespace PCGExFuseClusters
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		FORCEINLINE virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 Count) override
-		{
-			ProcessSingleEdge(Iteration, IndexedEdges[Iteration], LoopIdx, Count);
-		}
-
-		FORCEINLINE virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count) override
-		{
-			TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExFusePointsElement::ProcessSingleEdge);
-
-			UnionGraph->InsertEdge(
-				*(InPoints->GetData() + Edge.Start), VtxIOIndex, Edge.Start,
-				*(InPoints->GetData() + Edge.End), VtxIOIndex, Edge.End,
-				EdgesIOIndex, Edge.PointIndex);
-		}
-
-		virtual void CompleteWork() override;
+		void InsertEdges(const PCGExMT::FScope& Scope, bool bUnsafe);
+		void OnInsertionComplete();
 	};
+
 }

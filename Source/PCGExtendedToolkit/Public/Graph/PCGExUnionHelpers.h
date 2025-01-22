@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -17,6 +17,8 @@ namespace PCGExGraph
 {
 	class /*PCGEXTENDEDTOOLKIT_API*/ FUnionProcessor : public TSharedFromThis<FUnionProcessor>
 	{
+		bool bCompilingFinalGraph = false;
+
 	public:
 		FPCGExPointsProcessorContext* Context = nullptr;
 

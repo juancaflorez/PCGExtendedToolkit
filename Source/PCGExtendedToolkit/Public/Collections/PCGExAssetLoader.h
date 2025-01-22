@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -10,13 +10,15 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExAttributeHelpers.h"
 #include "Data/PCGExPointIO.h"
+
+
 #include "Engine/AssetManager.h"
 
 namespace PCGEx
 {
-	PCGEX_ASYNC_STATE(InternalState_DiscoveringAssets)
-	PCGEX_ASYNC_STATE(InternalState_LoadingAssets)
-	PCGEX_ASYNC_STATE(InternalState_AssetsLoaded)
+	PCGEX_CTX_STATE(InternalState_DiscoveringAssets)
+	PCGEX_CTX_STATE(InternalState_LoadingAssets)
+	PCGEX_CTX_STATE(InternalState_AssetsLoaded)
 
 	template <typename T>
 	class TDiscoverAssetsTask;
@@ -37,7 +39,7 @@ namespace PCGEx
 		mutable FRWLock RegistrationLock;
 
 		TArray<FName> AttributeNames;
-		AsyncState ExitState = State_WaitingOnAsyncWork;
+		ContextState ExitState = State_WaitingOnAsyncWork;
 
 		TSet<FSoftObjectPath> UniquePaths;
 		TSharedPtr<FStreamableHandle> LoadHandle;
@@ -65,7 +67,7 @@ namespace PCGEx
 
 		FORCEINLINE TObjectPtr<T>* GetAsset(const FSoftObjectPath& Path) { return AssetsMap.Find(Path); }
 
-		bool Start(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const AsyncState InExitState)
+		bool Start(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const ContextState InExitState)
 		{
 			ExitState = InExitState;
 			Context->SetAsyncState(InternalState_DiscoveringAssets);
@@ -78,9 +80,9 @@ namespace PCGEx
 				for (const FName& AssetAttributeName : AttributeNames)
 				{
 #if PCGEX_ENGINE_VERSION <= 503
-					TSharedPtr<TAttributeBroadcaster<FString>> Broadcaster = MakeShared<TAttributeBroadcaster<FString>>();
+					PCGEX_MAKE_SHARED(Broadcaster, TAttributeBroadcaster<FString>)
 #else
-					TSharedPtr<TAttributeBroadcaster<FSoftObjectPath>> Broadcaster = MakeShared<TAttributeBroadcaster<FSoftObjectPath>>();
+					PCGEX_MAKE_SHARED(Broadcaster, TAttributeBroadcaster<FSoftObjectPath>)
 #endif
 
 					if (!Broadcaster->Prepare(AssetAttributeName, PointIORef))
@@ -90,7 +92,8 @@ namespace PCGEx
 					}
 
 					bAnyDiscovery = true;
-					AsyncManager->Start<TDiscoverAssetsTask<T>>(-1, PointIO, SharedThis(this), Broadcaster);
+
+					PCGEX_LAUNCH(TDiscoverAssetsTask<T>, SharedThis(this), Broadcaster)
 				}
 			}
 
@@ -188,13 +191,14 @@ namespace PCGEx
 
 #if PCGEX_ENGINE_VERSION <= 503
 	template <typename T>
-	class /*PCGEXTENDEDTOOLKIT_API*/ TDiscoverAssetsTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ TDiscoverAssetsTask final : public PCGExMT::FTask
 	{
 	public:
-		TDiscoverAssetsTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-		                    const TSharedPtr<TAssetLoader<T>>& InLoader,
+		PCGEX_ASYNC_TASK_NAME(TDiscoverAssetsTask)
+		
+		TDiscoverAssetsTask(const TSharedPtr<TAssetLoader<T>>& InLoader,
 		                    const TSharedPtr<TAttributeBroadcaster<FString>>& InBroadcaster) :
-			FPCGExTask(InPointIO),
+			FTask(),
 			Loader(InLoader),
 			Broadcaster(InBroadcaster)
 		{
@@ -203,7 +207,7 @@ namespace PCGEx
 		TSharedPtr<TAssetLoader<T>> Loader;
 		TSharedPtr<TAttributeBroadcaster<FString>> Broadcaster;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
 		{
 			Broadcaster->Grab(false);
 
@@ -216,18 +220,18 @@ namespace PCGEx
 			}
 
 			Loader->AddUniquePaths(UniquePaths);
-			return true;
 		}
 	};
 #else
 	template <typename T>
-	class /*PCGEXTENDEDTOOLKIT_API*/ TDiscoverAssetsTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ TDiscoverAssetsTask final : public PCGExMT::FTask
 	{
 	public:
-		TDiscoverAssetsTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-		                    const TSharedPtr<TAssetLoader<T>>& InLoader,
+		PCGEX_ASYNC_TASK_NAME(TDiscoverAssetsTask)
+
+		TDiscoverAssetsTask(const TSharedPtr<TAssetLoader<T>>& InLoader,
 		                    const TSharedPtr<TAttributeBroadcaster<FSoftObjectPath>>& InBroadcaster) :
-			FPCGExTask(InPointIO),
+			FTask(),
 			Loader(InLoader),
 			Broadcaster(InBroadcaster)
 		{
@@ -236,7 +240,7 @@ namespace PCGEx
 		TSharedPtr<TAssetLoader<T>> Loader;
 		TSharedPtr<TAttributeBroadcaster<FSoftObjectPath>> Broadcaster;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
 		{
 			Broadcaster->Grab(false);
 
@@ -248,7 +252,6 @@ namespace PCGEx
 			}
 
 			Loader->AddUniquePaths(UniquePaths);
-			return true;
 		}
 	};
 #endif

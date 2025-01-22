@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -12,6 +12,11 @@
 #include "Graph/PCGExGraph.h"
 #include "Graph/PCGExIntersections.h"
 #include "PCGExPathToClusters.generated.h"
+
+namespace PCGExPathToClusters
+{
+	class FFusingProcessor;
+}
 
 /**
  * 
@@ -99,6 +104,7 @@ public:
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathToClustersContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathToClustersElement;
+	friend class PCGExPathToClusters::FFusingProcessor;
 
 	TArray<TSharedRef<PCGExData::FFacade>> PathsFacades;
 
@@ -170,7 +176,8 @@ namespace PCGExPathToClusters
 		virtual ~FFusingProcessor() override;
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount) override;
+		void InsertEdges(const PCGExMT::FScope& Scope, bool bUnsafe);
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 	};
 
 #pragma endregion

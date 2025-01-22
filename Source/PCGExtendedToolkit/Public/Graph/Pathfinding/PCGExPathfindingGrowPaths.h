@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -300,15 +300,18 @@ namespace PCGExGrowPaths
 		void Grow();
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FGrowTask final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FGrowTask final : public PCGExMT::FTask
 	{
 	public:
-		FGrowTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO, const TSharedPtr<FProcessor>& InProcessor) :
-			FPCGExTask(InPointIO), Processor(InProcessor)
+		PCGEX_ASYNC_TASK_NAME(FGrowTask)
+
+		FGrowTask(const TSharedPtr<FProcessor>& InProcessor) :
+			FTask(),
+			Processor(InProcessor)
 		{
 		}
 
 		TSharedPtr<FProcessor> Processor;
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 }

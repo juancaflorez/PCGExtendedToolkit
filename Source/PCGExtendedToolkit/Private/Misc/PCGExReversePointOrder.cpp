@@ -1,7 +1,9 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/PCGExReversePointOrder.h"
+
+#include "Curve/CurveUtil.h"
 
 
 #define LOCTEXT_NAMESPACE "PCGExReversePointOrderElement"
@@ -12,9 +14,9 @@ PCGExData::EIOInit UPCGExReversePointOrderSettings::GetMainOutputInitMode() cons
 TArray<FPCGPinProperties> UPCGExReversePointOrderSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	if (bReverseUsingSortingRules)
+	if (Method == EPCGExPointReverseMethod::SortingRules)
 	{
-		PCGEX_PIN_PARAMS(PCGExSorting::SourceSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {})
+		PCGEX_PIN_FACTORIES(PCGExSorting::SourceSortingRules, "Plug sorting rules here. Order is defined by each rule' priority value, in ascending order.", Required, {})
 	}
 	return PinProperties;
 }
@@ -47,7 +49,7 @@ bool FPCGExReversePointOrderElement::ExecuteInternal(FPCGContext* InContext) con
 			[&](const TSharedPtr<PCGExData::FPointIO>& Entry) { return true; },
 			[&](const TSharedPtr<PCGExPointsMT::TBatch<PCGExReversePointOrder::FProcessor>>& NewBatch)
 			{
-				NewBatch->bPrefetchData = Settings->bReverseUsingSortingRules || !Settings->SwapAttributesValues.IsEmpty();
+				NewBatch->bPrefetchData = Settings->Method != EPCGExPointReverseMethod::None || !Settings->SwapAttributesValues.IsEmpty();
 			}))
 		{
 			return Context->CancelExecution(TEXT("Could not find any points to process."));
@@ -85,17 +87,26 @@ namespace PCGExReversePointOrder
 			FacadePreloader.Register(Context, *SecondIdentity);
 		}
 
-		if (Settings->bReverseUsingSortingRules)
+		if (Settings->Method == EPCGExPointReverseMethod::SortingRules)
 		{
 			Sorter = MakeShared<PCGExSorting::PointSorter<false, true>>(Context, PointDataFacade, PCGExSorting::GetSortingRules(Context, PCGExSorting::SourceSortingRules));
 			Sorter->SortDirection = Settings->SortDirection;
 			Sorter->RegisterBuffersDependencies(FacadePreloader);
+		}
+		else if (Settings->Method == EPCGExPointReverseMethod::Winding && Settings->ProjectionDetails.bLocalProjectionNormal)
+		{
+			FacadePreloader.Register<FVector>(Context, Settings->ProjectionDetails.LocalNormal);
 		}
 	}
 
 	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExWriteIndex::Process);
+
+		ON_SCOPE_EXIT
+		{
+			if (!bReversed) { PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward); }
+		};
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
@@ -105,19 +116,29 @@ namespace PCGExReversePointOrder
 			{
 				PCGE_LOG_C(Warning, GraphAndLog, Context, FTEXT("Some sorting rules could not be processed."));
 				bReversed = false;
-				PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward);
 				return false;
 			}
 
 			if (!Sorter->Sort(0, PointDataFacade->GetNum() - 1))
 			{
 				bReversed = false;
-				PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Forward);
 				return true;
 			}
 		}
 
-		PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Duplicate);
+		if (Settings->Method == EPCGExPointReverseMethod::Winding)
+		{
+			FPCGExGeo2DProjectionDetails Proj = FPCGExGeo2DProjectionDetails(Settings->ProjectionDetails);
+			if (!Proj.Init(Context, PointDataFacade)) { return false; }
+
+			TArray<FVector2D> ProjectedPoints;
+			Proj.ProjectFlat(PointDataFacade, ProjectedPoints);
+
+			bReversed = !PCGExGeo::IsWinded(Settings->Winding, UE::Geometry::CurveUtil::SignedArea2<double, FVector2D>(ProjectedPoints) < 0);
+			if (!bReversed) { return true; }
+		}
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		TArray<FPCGPoint>& MutablePoints = PointDataFacade->GetOut()->GetMutablePoints();
 		Algo::Reverse(MutablePoints);
@@ -125,20 +146,27 @@ namespace PCGExReversePointOrder
 		if (SwapPairs.IsEmpty()) { return true; } // Swap pairs are built during data prefetch
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FetchWritersTask)
-		FetchWritersTask->OnCompleteCallback = [&]() { StartParallelLoopForPoints(); };
+
+		FetchWritersTask->OnCompleteCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE]()
+			{
+				PCGEX_ASYNC_THIS
+				This->StartParallelLoopForPoints();
+			};
+
 		FetchWritersTask->OnSubLoopStartCallback =
-			[&](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
 				TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExAttributeRemap::FetchWriters);
+				PCGEX_ASYNC_THIS
+				FPCGExSwapAttributePairDetails& WorkingPair = This->SwapPairs[Scope.Start];
 
-				FPCGExSwapAttributePairDetails& WorkingPair = SwapPairs[StartIndex];
-
-				PCGMetadataAttribute::CallbackWithRightType(
-					static_cast<uint16>(WorkingPair.FirstIdentity->UnderlyingType), [&](auto DummyValue) -> void
+				PCGEx::ExecuteWithRightType(
+					WorkingPair.FirstIdentity->UnderlyingType, [&](auto DummyValue)
 					{
 						using RawT = decltype(DummyValue);
-						WorkingPair.FirstWriter = PointDataFacade->GetWritable<RawT>(WorkingPair.FirstAttributeName, PCGExData::EBufferInit::Inherit);
-						WorkingPair.SecondWriter = PointDataFacade->GetWritable<RawT>(WorkingPair.SecondAttributeName, PCGExData::EBufferInit::Inherit);
+						WorkingPair.FirstWriter = This->PointDataFacade->GetWritable<RawT>(WorkingPair.FirstAttributeName, PCGExData::EBufferInit::Inherit);
+						WorkingPair.SecondWriter = This->PointDataFacade->GetWritable<RawT>(WorkingPair.SecondAttributeName, PCGExData::EBufferInit::Inherit);
 					});
 			};
 
@@ -147,13 +175,13 @@ namespace PCGExReversePointOrder
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		FPointsProcessor::PrepareSingleLoopScopeForPoints(StartIndex, Count);
+		FPointsProcessor::PrepareSingleLoopScopeForPoints(Scope);
 		for (const FPCGExSwapAttributePairDetails& WorkingPair : SwapPairs)
 		{
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(WorkingPair.FirstIdentity->UnderlyingType), [&](auto DummyValue) -> void
+			PCGEx::ExecuteWithRightType(
+				WorkingPair.FirstIdentity->UnderlyingType, [&](auto DummyValue)
 				{
 					using RawT = decltype(DummyValue);
 					TSharedPtr<PCGExData::TBuffer<RawT>> FirstWriter = StaticCastSharedPtr<PCGExData::TBuffer<RawT>>(WorkingPair.FirstWriter);
@@ -161,22 +189,20 @@ namespace PCGExReversePointOrder
 
 					if (WorkingPair.bMultiplyByMinusOne)
 					{
-						for (int i = 0; i < Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
-							const int32 Index = StartIndex + i;
-							const RawT FirstValue = FirstWriter->Read(Index);
-							FirstWriter->GetMutable(Index) = PCGExMath::DblMult(SecondWriter->GetConst(Index), -1);
-							SecondWriter->GetMutable(Index) = PCGExMath::DblMult(FirstValue, -1);
+							const RawT FirstValue = FirstWriter->Read(i);
+							FirstWriter->GetMutable(i) = PCGExMath::DblMult(SecondWriter->GetConst(i), -1);
+							SecondWriter->GetMutable(i) = PCGExMath::DblMult(FirstValue, -1);
 						}
 					}
 					else
 					{
-						for (int i = 0; i < Count; i++)
+						for (int i = Scope.Start; i < Scope.End; i++)
 						{
-							const int32 Index = StartIndex + i;
-							const RawT FirstValue = FirstWriter->Read(Index);
-							FirstWriter->GetMutable(Index) = SecondWriter->GetConst(Index);
-							SecondWriter->GetMutable(Index) = FirstValue;
+							const RawT FirstValue = FirstWriter->Read(i);
+							FirstWriter->GetMutable(i) = SecondWriter->GetConst(i);
+							SecondWriter->GetMutable(i) = FirstValue;
 						}
 					}
 				});
@@ -188,11 +214,11 @@ namespace PCGExReversePointOrder
 		if (bReversed)
 		{
 			if (!SwapPairs.IsEmpty()) { PointDataFacade->Write(AsyncManager); }
-			if (Settings->bTagIfReversed) { PointDataFacade->Source->Tags->Add(Settings->IsReversedTag); }
+			if (Settings->bTagIfReversed) { PointDataFacade->Source->Tags->AddRaw(Settings->IsReversedTag); }
 		}
 		else
 		{
-			if (Settings->bTagIfNotReversed) { PointDataFacade->Source->Tags->Add(Settings->IsNotReversedTag); }
+			if (Settings->bTagIfNotReversed) { PointDataFacade->Source->Tags->AddRaw(Settings->IsNotReversedTag); }
 		}
 	}
 }

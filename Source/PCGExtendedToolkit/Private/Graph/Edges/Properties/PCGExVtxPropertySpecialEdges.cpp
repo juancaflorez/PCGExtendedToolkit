@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Edges/Properties/PCGExVtxPropertySpecialEdges.h"
@@ -40,7 +40,7 @@ bool UPCGExVtxPropertySpecialEdges::PrepareForCluster(const FPCGContext* InConte
 
 void UPCGExVtxPropertySpecialEdges::ProcessNode(PCGExCluster::FNode& Node, const TArray<PCGExCluster::FAdjacencyData>& Adjacency)
 {
-	double LLongest = MIN_dbl;
+	double LLongest = 0;
 	int32 ILongest = -1;
 
 	double LShortest = MAX_dbl;
@@ -95,7 +95,7 @@ UPCGExVtxPropertyOperation* UPCGExVtxPropertySpecialEdgesFactory::CreateOperatio
 	return NewOperation;
 }
 
-UPCGExParamFactoryBase* UPCGExVtxPropertySpecialEdgesSettings::CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const
+UPCGExFactoryData* UPCGExVtxPropertySpecialEdgesSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
 	UPCGExVtxPropertySpecialEdgesFactory* NewFactory = InContext->ManagedObjects->New<UPCGExVtxPropertySpecialEdgesFactory>();
 	NewFactory->Config = Config;

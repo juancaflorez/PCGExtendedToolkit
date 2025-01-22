@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -307,7 +307,7 @@ namespace PCGExAttributeStats
 				return;
 			}
 
-			const FString Identifier = FString::Printf(TEXT("PCGEx/Identifier::%u"), InDataFacade->Source->GetIn()->GetUniqueID());
+			const FString Identifier = FString::Printf(TEXT("PCGEx/Identifier:%u"), InDataFacade->Source->GetIn()->GetUniqueID());
 			PCGEX_OUTPUT_STAT(Identifier, FString, Identifier)
 
 			if constexpr (!PCGEx::IsValidForTMap<T>::value)
@@ -322,7 +322,7 @@ namespace PCGExAttributeStats
 				{
 					UniqueValuesParamData = Context->ManagedObjects->New<UPCGParamData>();
 					Context->StageOutput(OutputAttributeUniqueValues, UniqueValuesParamData, {Identifier, Identity.Name.ToString()}, false, false);
-					InDataFacade->Source->Tags->Add(Identifier);
+					InDataFacade->Source->Tags->AddRaw(Identifier);
 				}
 
 				const int32 NumPoints = InDataFacade->GetNum();

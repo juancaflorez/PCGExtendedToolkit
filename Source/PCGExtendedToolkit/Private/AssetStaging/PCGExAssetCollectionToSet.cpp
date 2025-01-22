@@ -1,15 +1,26 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "AssetStaging/PCGExAssetCollectionToSet.h"
 
 #include "PCGGraph.h"
 #include "PCGPin.h"
+#include "Collections/PCGExActorCollection.h"
 
 #define LOCTEXT_NAMESPACE "PCGExGraphSettings"
 #define PCGEX_NAMESPACE AssetCollectionToSet
 
 #pragma region UPCGSettings interface
+
+#if WITH_EDITOR
+void UPCGExAssetCollectionToSetSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	bWriteAssetClass = bWriteAssetPath;
+	AssetClassAttributeName = AssetPathAttributeName;
+}
+#endif
+
 
 TArray<FPCGPinProperties> UPCGExAssetCollectionToSetSettings::InputPinProperties() const
 {
@@ -31,6 +42,7 @@ FPCGElementPtr UPCGExAssetCollectionToSetSettings::CreateElement() const { retur
 #if PCGEX_ENGINE_VERSION > 503
 #define PCGEX_FOREACH_COL_FIELD(MACRO)\
 MACRO(AssetPath, FSoftObjectPath, FSoftObjectPath(), E->Staging.Path)\
+MACRO(AssetClass, FSoftClassPath, FSoftClassPath(), E->Staging.Path.ToString())\
 MACRO(Weight, int32, 0, E->Weight)\
 MACRO(Category, FName, NAME_None, E->Category)\
 MACRO(Extents, FVector, FVector::OneVector, E->Staging.Bounds.GetExtent())\
@@ -40,6 +52,7 @@ MACRO(NestingDepth, int32, -1, -1)
 #else
 #define PCGEX_FOREACH_COL_FIELD(MACRO)\
 MACRO(AssetPath, FString, TEXT(""), E->Staging.Path.ToString())\
+MACRO(AssetClass, FString, TEXT(""), E->Staging.Path.ToString())\
 MACRO(Weight, int32, 0, E->Weight)\
 MACRO(Category, FName, NAME_None, E->Category)\
 MACRO(Extents, FVector, FVector::OneVector, E->Staging.Bounds.GetExtent())\
@@ -76,22 +89,28 @@ bool FPCGExAssetCollectionToSetElement::ExecuteInternal(FPCGContext* Context) co
 		return true;
 	};
 
-	if (!Settings->AssetCollection) { return OutputToPin(); }
+	UPCGExAssetCollection* MainCollection = PCGExHelpers::LoadBlocking_AnyThread(Settings->AssetCollection);
 
-#define PCGEX_DECLARE_ATT(_NAME, _TYPE, _DEFAULT, _VALUE) \
-	const bool bOutput##_NAME = Settings->bWrite##_NAME; \
-	FPCGMetadataAttribute<_TYPE>* _NAME##Attribute = nullptr; \
-	if(bOutput##_NAME){PCGEX_VALIDATE_NAME(Settings->_NAME##AttributeName) _NAME##Attribute = OutputSet->Metadata->FindOrCreateAttribute<_TYPE>(Settings->_NAME##AttributeName, _DEFAULT, false, true);}
-	PCGEX_FOREACH_COL_FIELD(PCGEX_DECLARE_ATT);
-#undef PCGEX_DECLARE_ATT
-
-	UPCGExAssetCollection* MainCollection = Settings->AssetCollection.LoadSynchronous();
 
 	if (!MainCollection)
 	{
 		PCGE_LOG(Error, GraphAndLog, FTEXT("Asset collection failed to load."));
 		return OutputToPin();
 	}
+
+#define PCGEX_DECLARE_ATT(_NAME, _TYPE, _DEFAULT, _VALUE) bool bOutput##_NAME = Settings->bWrite##_NAME;
+	PCGEX_FOREACH_COL_FIELD(PCGEX_DECLARE_ATT);
+#undef PCGEX_DECLARE_ATT
+
+	// Output actor as FSoftClassPath
+	if (Cast<UPCGExActorCollection>(MainCollection)) { bOutputAssetPath = false; }
+	else { bOutputAssetClass = false; }
+
+#define PCGEX_DECLARE_ATT(_NAME, _TYPE, _DEFAULT, _VALUE) \
+	FPCGMetadataAttribute<_TYPE>* _NAME##Attribute = nullptr; \
+	if(bOutput##_NAME){PCGEX_VALIDATE_NAME(Settings->_NAME##AttributeName) _NAME##Attribute = OutputSet->Metadata->FindOrCreateAttribute<_TYPE>(Settings->_NAME##AttributeName, _DEFAULT, false, true);}
+	PCGEX_FOREACH_COL_FIELD(PCGEX_DECLARE_ATT);
+#undef PCGEX_DECLARE_ATT
 
 	const PCGExAssetCollection::FCache* MainCache = MainCollection->LoadCache();
 	TArray<const FPCGExAssetCollectionEntry*> Entries;
@@ -164,7 +183,7 @@ void FPCGExAssetCollectionToSetElement::ProcessEntry(
 	{
 		if (SubHandling == EPCGExSubCollectionToSet::Ignore) { return; }
 
-		UPCGExAssetCollection* SubCollection = InEntry->Staging.LoadSynchronous<UPCGExAssetCollection>();
+		UPCGExAssetCollection* SubCollection = InEntry->Staging.LoadSync<UPCGExAssetCollection>();
 		const PCGExAssetCollection::FCache* SubCache = SubCollection ? SubCollection->LoadCache() : nullptr;
 
 		if (!SubCache)
@@ -179,7 +198,7 @@ void FPCGExAssetCollectionToSetElement::ProcessEntry(
 
 		const FPCGExAssetCollectionEntry* NestedEntry = nullptr;
 		const UPCGExAssetCollection* EntryHost = nullptr;
-		
+
 		switch (SubHandling)
 		{
 		default: ;

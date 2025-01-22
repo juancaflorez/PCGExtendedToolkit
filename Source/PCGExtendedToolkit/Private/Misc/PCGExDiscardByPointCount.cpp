@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/PCGExDiscardByPointCount.h"
@@ -25,6 +25,7 @@ bool FPCGExDiscardByPointCountElement::Boot(FPCGExContext* InContext) const
 	PCGEX_SETTINGS(PointsProcessor)
 
 	Context->MainPoints = MakeShared<PCGExData::FPointIOCollection>(Context);
+
 	Context->MainPoints->OutputPin = Settings->GetMainOutputPin();
 
 	TArray<FPCGTaggedData> Sources = Context->InputData.GetInputsByPin(Settings->GetMainInputPin());

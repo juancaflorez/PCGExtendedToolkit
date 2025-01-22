@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Collections/PCGExAssetCollection.h"
@@ -12,9 +12,7 @@ namespace PCGExAssetCollection
 	void FCategory::RegisterEntry(const int32 Index, const FPCGExAssetCollectionEntry* InEntry)
 	{
 		Entries.Add(InEntry);
-
 		Indices.Add(Index);
-
 		Weights.Add(InEntry->Weight);
 	}
 
@@ -41,8 +39,8 @@ bool FPCGExAssetCollectionEntry::Validate(const UPCGExAssetCollection* ParentCol
 {
 	if (bIsSubCollection)
 	{
-		if (!BaseSubCollectionPtr) { return false; }
-		BaseSubCollectionPtr->LoadCache();
+		if (!InternalSubCollection) { return false; }
+		InternalSubCollection->LoadCache();
 	}
 	return true;
 }
@@ -50,11 +48,30 @@ bool FPCGExAssetCollectionEntry::Validate(const UPCGExAssetCollection* ParentCol
 void FPCGExAssetCollectionEntry::UpdateStaging(const UPCGExAssetCollection* OwningCollection, const int32 InInternalIndex, const bool bRecursive)
 {
 	Staging.InternalIndex = InInternalIndex;
-	if (bIsSubCollection) { Staging.Bounds = FBox(ForceInitToZero); }
+
+	if (bIsSubCollection)
+	{
+		Staging.Bounds = FBox(ForceInit);
+		if (InternalSubCollection)
+		{
+			Staging.Path = FSoftObjectPath(InternalSubCollection.GetPathName());
+			if (bRecursive) { InternalSubCollection->RebuildStagingData(true); }
+		}
+		else
+		{
+			Staging.Path = FSoftObjectPath{};
+		}
+	}
 }
 
-void FPCGExAssetCollectionEntry::OnSubCollectionLoaded()
+void FPCGExAssetCollectionEntry::SetAssetPath(const FSoftObjectPath& InPath)
 {
+	Staging.Path = InPath;
+}
+
+void FPCGExAssetCollectionEntry::GetAssetPaths(TSet<FSoftObjectPath>& OutPaths) const
+{
+	OutPaths.Add(Staging.Path);
 }
 
 namespace PCGExAssetCollection
@@ -67,7 +84,7 @@ namespace PCGExAssetCollection
 		// Register to sub categories
 		if (const TSharedPtr<FCategory>* CategoryPtr = Categories.Find(InEntry->Category); !CategoryPtr)
 		{
-			const TSharedPtr<FCategory> Category = MakeShared<FCategory>(InEntry->Category);
+			PCGEX_MAKE_SHARED(Category, FCategory, InEntry->Category)
 			Categories.Add(InEntry->Category, Category);
 			Category->RegisterEntry(Index, InEntry);
 		}

@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -32,7 +32,7 @@ struct FPCGExPointsProcessorContext;
 class FPCGExPointsProcessorElement;
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPointsProcessorSettings : public UPCGSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExPointsProcessorSettings : public UPCGSettings
 {
 	GENERATED_BODY()
 
@@ -43,6 +43,7 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual bool GetPinExtraIcon(const UPCGPin* InPin, FName& OutExtraIcon, FText& OutTooltip) const override;
 #endif
 
 protected:
@@ -58,6 +59,7 @@ public:
 	virtual FName GetMainInputPin() const { return PCGEx::SourcePointsLabel; }
 	virtual FName GetMainOutputPin() const { return PCGEx::OutputPointsLabel; }
 	virtual bool GetMainAcceptMultipleData() const { return true; }
+	virtual bool GetIsMainTransactional() const { return false; }
 	virtual PCGExData::EIOInit GetMainOutputInitMode() const;
 
 	virtual FName GetPointFilterPin() const { return NAME_None; }
@@ -68,20 +70,16 @@ public:
 	bool SupportsPointFilters() const { return !GetPointFilterPin().IsNone(); }
 
 	/** Forces execution on main thread. Work is still chunked. Turning this off ensure linear order of operations, and, in most case, determinism.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, DisplayName="Do Async Processing (Debug)", AdvancedDisplay))
 	bool bDoAsyncProcessing = true;
 
 	/** Async work priority for this node.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay, EditCondition="bDoAsyncProcessing"))
 	EPCGExAsyncPriority WorkPriority = EPCGExAsyncPriority::Default;
 
-	/** Chunk size for parallel processing. <1 switches to preferred node value.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay, EditCondition="bDoAsyncProcessing", ClampMin=-1, ClampMax=8196))
-	int32 ChunkSize = -1;
-
-	/** Cache the results of this node. Can yield unexpected result in certain cases.*/
+	/** Cache the results of this node. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
-	bool bCacheResult = false;
+	EPCGExOptionState CacheData = EPCGExOptionState::Default;
 
 	/** Flatten the output of this node.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
@@ -89,18 +87,33 @@ public:
 
 	/** Whether scoped attribute read is enabled or not. Disabling this on small dataset may greatly improve performance. It's enabled by default for legacy reasons. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
-	bool bScopedAttributeGet = true;
+	EPCGExOptionState ScopedAttributeGet = EPCGExOptionState::Default;
 
 	/** If the node registers consumable attributes, these will be deleted from the output data. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Performance|Cleanup", meta=(PCG_NotOverridable, AdvancedDisplay))
-	bool bDeleteConsumableAttributes = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Cleanup", meta=(PCG_NotOverridable))
+	bool bCleanupConsumableAttributes = false;
+
+	/** If the node registers consumable attributes, this a list of comma separated names that won't be deleted if they were registered. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Cleanup", meta=(PCG_Overridable, DisplayName="Protected Attributes", EditCondition="bCleanupConsumableAttributes"))
+	FString CommaSeparatedProtectedAttributesName;
+
+	/** Hardcoded set for ease of use. Not mutually exclusive with the overridable string, just easier to edit. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Cleanup", meta=(PCG_NotOverridable, DisplayName="Protected Attributes", EditCondition="bCleanupConsumableAttributes"))
+	TArray<FName> ProtectedAttributes;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors", meta=(PCG_NotOverridable, AdvancedDisplay))
+	bool bQuietMissingInputError = false;
+
+	//~End UPCGExPointsProcessorSettings
 
 protected:
-	virtual int32 GetPreferredChunkSize() const { return PCGExMT::GAsyncLoop_M; }
-	//~End UPCGExPointsProcessorSettings
+	virtual bool IsCacheable() const { return false; }
+	virtual bool ShouldCache() const;
+	virtual bool WantsScopedAttributeGet() const;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsProcessorContext : FPCGExContext
+struct PCGEXTENDEDTOOLKIT_API FPCGExPointsProcessorContext : FPCGExContext
 {
 	friend class FPCGExPointsProcessorElement;
 
@@ -115,29 +128,27 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsProcessorContext : FPCGExContext
 
 	TSharedPtr<PCGExMT::FTaskManager> GetAsyncManager();
 
-	int32 ChunkSize = 0;
-
 	template <typename T>
 	T* RegisterOperation(UPCGExOperation* BaseOperation, FName OverridePinLabel = NAME_None)
 	{
 		BaseOperation->BindContext(this); // Temp so Copy doesn't crash
 
 		T* RetValue = BaseOperation->CopyOperation<T>();
-		OwnedProcessorOperations.Add(RetValue);
+		InternalOperations.Add(RetValue);
 		RetValue->FindSettingsOverrides(this, OverridePinLabel);
 		return RetValue;
 	}
 
 #pragma region Filtering
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> FilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> FilterFactories;
 
 #pragma endregion
 
 #pragma region Batching
 
 	bool bBatchProcessingEnabled = false;
-	bool ProcessPointsBatch(const PCGEx::AsyncState NextStateId, const bool bIsNextStateAsync = false);
+	bool ProcessPointsBatch(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync = false);
 
 	TSharedPtr<PCGExPointsMT::FPointsProcessorBatchBase> MainBatch;
 	TMap<PCGExData::FPointIO*, TSharedRef<PCGExPointsMT::FPointsProcessor>> SubProcessorMap;
@@ -166,8 +177,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsProcessorContext : FPCGExContext
 		if (BatchAblePoints.IsEmpty()) { return bBatchProcessingEnabled; }
 		bBatchProcessingEnabled = true;
 
-		TSharedPtr<T> TypedBatch = MakeShared<T>(this, BatchAblePoints);
-
+		PCGEX_MAKE_SHARED(TypedBatch, T, this, BatchAblePoints)
 		MainBatch = TypedBatch;
 		MainBatch->SubProcessorMap = &SubProcessorMap;
 
@@ -211,6 +221,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsProcessorContext : FPCGExContext
 #pragma endregion
 
 	virtual bool ShouldWaitForAsync() override;
+	virtual bool CancelExecution(const FString& InReason) override;
 
 protected:
 	TSharedPtr<PCGExMT::FTaskManager> AsyncManager;
@@ -218,7 +229,7 @@ protected:
 	int32 CurrentPointIOIndex = -1;
 
 	TArray<UPCGExOperation*> ProcessorOperations;
-	TSet<UPCGExOperation*> OwnedProcessorOperations;
+	TSet<UPCGExOperation*> InternalOperations;
 
 	virtual void ResumeExecution() override;
 
@@ -226,7 +237,7 @@ public:
 	virtual bool IsAsyncWorkComplete();
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsProcessorElement : public IPCGElement
+class PCGEXTENDEDTOOLKIT_API FPCGExPointsProcessorElement : public IPCGElement
 {
 public:
 	virtual bool PrepareDataInternal(FPCGContext* Context) const override;
@@ -244,4 +255,8 @@ protected:
 	virtual bool Boot(FPCGExContext* InContext) const;
 	virtual void PostLoadAssetsDependencies(FPCGExContext* InContext) const;
 	virtual bool PostBoot(FPCGExContext* InContext) const;
+#if PCGEX_ENGINE_VERSION > 503
+	virtual void AbortInternal(FPCGContext* Context) const override;
+#endif
+	PCGEX_CAN_ONLY_EXECUTE_ON_MAIN_THREAD(true) // TODO : Proper refactor to support native multithreading
 };

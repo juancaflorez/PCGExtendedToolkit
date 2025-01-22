@@ -1,10 +1,9 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Data/PCGExData.h"
 #include "Collections/PCGExAssetCollection.h"
 
 namespace PCGExStaging
@@ -35,6 +34,8 @@ namespace PCGExStaging
 
 		uint64 GetPickIdx(const UPCGExAssetCollection* InCollection, const int32 InIndex)
 		{
+			// TODO : Pack index pick + material pick here
+
 			{
 				FReadScopeLock ReadScopeLock(AssetCollectionsLock);
 				if (const uint32* ColIdxPtr = CollectionMap.Find(InCollection)) { return PCGEx::H64(*ColIdxPtr, InIndex); }
@@ -80,6 +81,8 @@ namespace PCGExStaging
 		TMap<uint32, C*> CollectionMap;
 
 	public:
+		TMap<int64, TSharedPtr<TArray<int32>>> HashedPartitions;
+
 		TPickUnpacker()
 		{
 		}
@@ -128,9 +131,9 @@ namespace PCGExStaging
 				int32 Idx = CollectionIdx->GetValueFromItemKey(i);
 
 #if PCGEX_ENGINE_VERSION > 503
-				C* Collection = TSoftObjectPtr<C>(CollectionPath->GetValueFromItemKey(i)).LoadSynchronous();
+				C* Collection = PCGExHelpers::LoadBlocking_AnyThread<C>(TSoftObjectPtr<C>(CollectionPath->GetValueFromItemKey(i)));
 #else
-				C* Collection = TSoftObjectPtr<C>(FSoftObjectPath(CollectionPath->GetValueFromItemKey(i))).LoadSynchronous();
+				C* Collection = PCGExHelpers::LoadBlocking_AnyThread<C>(nullptr, FSoftObjectPath(CollectionPath->GetValueFromItemKey(i)));
 #endif
 
 				if (!Collection)
@@ -153,10 +156,10 @@ namespace PCGExStaging
 			return true;
 		}
 
-		void UnpackPin(FPCGContext* InContext, FName InPinLabel)
+		void UnpackPin(FPCGContext* InContext, const FName InPinLabel)
 		{
-			TArray<FPCGTaggedData> Params = InContext->InputData.GetParamsByPin(InPinLabel);
-			for (FPCGTaggedData& InTaggedData : Params)
+			for (TArray<FPCGTaggedData> Params = InContext->InputData.GetParamsByPin(InPinLabel);
+			     const FPCGTaggedData& InTaggedData : Params)
 			{
 				const UPCGParamData* ParamData = Cast<UPCGParamData>(InTaggedData.Data);
 
@@ -182,8 +185,46 @@ namespace PCGExStaging
 			C** Collection = CollectionMap.Find(CollectionIdx);
 			if (!Collection || !(*Collection)->IsValidIndex(EntryIndex)) { return false; }
 
-			(*Collection)->GetEntryAt(OutEntry, EntryIndex, EntryHost);
-			return true;
+			return (*Collection)->GetEntryAt(OutEntry, EntryIndex, EntryHost);
+		}
+
+		bool BuildPartitions(const UPCGPointData* InPointData)
+		{
+			const FPCGMetadataAttribute<int64>* HashAttribute = InPointData->Metadata->GetConstTypedAttribute<int64>(Tag_EntryIdx);
+
+			if (!HashAttribute) { return false; }
+
+			const TArray<FPCGPoint>& InPoints = InPointData->GetPoints();
+			const TSharedPtr<FPCGAttributeAccessorKeysPoints> InKeys = MakeShared<FPCGAttributeAccessorKeysPoints>(InPoints);
+			const TUniquePtr<FPCGAttributeAccessor<int64>> InAccessor = MakeUnique<FPCGAttributeAccessor<int64>>(HashAttribute, InPointData->Metadata);
+
+			const int32 NumPoints = InPoints.Num();
+
+			TArray<int64> Hashes;
+			Hashes.SetNumUninitialized(NumPoints);
+
+			if (const TArrayView<int64> InRange = MakeArrayView(Hashes.GetData(), NumPoints);
+				!InAccessor->GetRange(InRange, 0, *InKeys)) { return false; }
+
+			// Build partitions
+			for (int i = 0; i < NumPoints; i++)
+			{
+				uint64 EntryHash = Hashes[i];
+				TSharedPtr<TArray<int32>>* Indices = HashedPartitions.Find(EntryHash);
+
+				if (!Indices)
+				{
+					PCGEX_MAKE_SHARED(NewIndices, TArray<int32>)
+					NewIndices->Add(i);
+					HashedPartitions.Add(EntryHash, NewIndices);
+				}
+				else
+				{
+					(*Indices)->Add(i);
+				}
+			}
+
+			return !HashedPartitions.IsEmpty();
 		}
 	};
 }

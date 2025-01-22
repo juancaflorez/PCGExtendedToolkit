@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -10,7 +10,7 @@
 
 #include "PCGExPathProcessor.generated.h"
 
-class UPCGExFilterFactoryBase;
+class UPCGExFilterFactoryData;
 
 class UPCGExNodeStateFactory;
 

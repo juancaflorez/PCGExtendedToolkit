@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Topology/PCGExToggleTopology.h"
@@ -15,25 +15,14 @@
 TArray<FPCGPinProperties> UPCGExToggleTopologySettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties;
-
-	FPCGPinProperties& PinPropertySource = PinProperties.Emplace_GetRef(PCGEx::SourcePointsLabel, EPCGDataType::Any, true, true);
-
-#if WITH_EDITOR
-	PinPropertySource.Tooltip = FTEXT("In.");
-#endif
-
+	PCGEX_PIN_ANY(PCGEx::SourcePointsLabel, "In. Not used for anything except ordering operations.", Required, {})
 	return PinProperties;
 }
 
 TArray<FPCGPinProperties> UPCGExToggleTopologySettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties;
-	FPCGPinProperties& PinPointsOutput = PinProperties.Emplace_GetRef(PCGEx::OutputPointsLabel, EPCGDataType::Any);
-
-#if WITH_EDITOR
-	PinPointsOutput.Tooltip = FTEXT("Out.");
-#endif
-
+	PCGEX_PIN_ANY(PCGEx::SourcePointsLabel, "Out. Forwards In.", Required, {})
 	return PinProperties;
 }
 
@@ -64,12 +53,23 @@ bool FPCGExToggleTopologyElement::ExecuteInternal(FPCGContext* InContext) const
 		TArray<UPCGExDynamicMeshComponent*> Components;
 		TargetActor->GetComponents<UPCGExDynamicMeshComponent>(Components);
 
+		TSet<TSoftObjectPtr<AActor>> OutActorsToDelete;
+
 		for (UPCGExDynamicMeshComponent* Component : Components)
 		{
 			if (!Component) { continue; }
-			if (Settings->bFilterByTag && !Component->ComponentHasTag(Settings->FilterByTag)) { continue; }
-			if (Settings->bToggle) { if (!Component->IsRegistered()) { Component->RegisterComponent(); } }
-			else { if (Component->IsRegistered()) { Component->UnregisterComponent(); } }
+
+			if (Settings->bFilterByTag && !Component->ComponentHasTag(Settings->CommaSeparatedTagFilters)) { continue; }
+
+			if (Settings->Action == EPCGExToggleTopologyAction::Remove)
+			{
+				if (Component->GetManagedComponent()) { Component->GetManagedComponent()->Release(true, OutActorsToDelete); }
+			}
+			else
+			{
+				if (Settings->bToggle) { if (!Component->IsRegistered()) { Component->RegisterComponent(); } }
+				else { if (Component->IsRegistered()) { Component->UnregisterComponent(); } }
+			}
 		}
 	}
 	else

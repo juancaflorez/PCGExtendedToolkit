@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/Filters/PCGExBitmaskFilter.h"
@@ -9,17 +9,20 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExBitmaskFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::TBitmaskFilter>(this);
+	return MakeShared<PCGExPointsFilter::FBitmaskFilter>(this);
 }
 
-void UPCGExBitmaskFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
+bool UPCGExBitmaskFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
 {
-	Super::RegisterConsumableAttributes(InContext);
+	if (!Super::RegisterConsumableAttributes(InContext)) { return false; }
+
 	InContext->AddConsumableAttributeName(Config.FlagsAttribute);
 	InContext->AddConsumableAttributeName(Config.BitmaskAttribute);
+
+	return true;
 }
 
-bool PCGExPointsFilter::TBitmaskFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointsFilter::FBitmaskFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 

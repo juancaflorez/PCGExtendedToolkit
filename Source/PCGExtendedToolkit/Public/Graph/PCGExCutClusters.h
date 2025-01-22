@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -107,8 +107,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCutEdgesContext final : FPCGExEdgesProce
 	FPCGExPathClosedLoopDetails ClosedLoop;
 	FPCGExPathEdgeIntersectionDetails IntersectionDetails;
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> EdgeFilterFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> NodeFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> EdgeFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> NodeFilterFactories;
 
 	TArray<TSharedRef<PCGExData::FFacade>> PathFacades;
 	TArray<TSharedRef<PCGExPaths::FPath>> Paths;
@@ -153,14 +153,14 @@ namespace PCGExCutEdges
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
 
-		virtual void PrepareSingleLoopScopeForEdges(const uint32 StartIndex, const int32 Count) override;
-		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count) override;
-		virtual void PrepareSingleLoopScopeForNodes(const uint32 StartIndex, const int32 Count) override;
-		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count) override;
+		virtual void PrepareSingleLoopScopeForEdges(const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope) override;
+		virtual void PrepareSingleLoopScopeForNodes(const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope) override;
 		virtual void OnEdgesProcessingComplete() override;
 		virtual void OnNodesProcessingComplete() override;
 		void TryConsolidate();
-		virtual void ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};
 

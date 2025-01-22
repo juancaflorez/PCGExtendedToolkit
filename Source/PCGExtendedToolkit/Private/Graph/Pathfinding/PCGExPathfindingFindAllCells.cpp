@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfindingFindAllCells.h"
@@ -34,6 +34,9 @@ bool FPCGExFindAllCellsElement::Boot(FPCGExContext* InContext) const
 	if (!FPCGExEdgesProcessorElement::Boot(InContext)) { return false; }
 
 	PCGEX_CONTEXT_AND_SETTINGS(FindAllCells)
+
+	PCGEX_FWD(Artifacts)
+	if (!Context->Artifacts.Init(Context)) { return false; }
 
 	if (TSharedPtr<PCGExData::FFacade> HoleDataFacade = PCGExData::TryGetSingleFacade(Context, PCGExTopology::SourceHolesLabel, false))
 	{
@@ -134,7 +137,7 @@ namespace PCGExFindAllCells
 		return true;
 	}
 
-	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
 	{
 		//Check endpoints
 		FindCell(*Cluster->GetEdgeStart(Edge), Edge);
@@ -157,7 +160,7 @@ namespace PCGExFindAllCells
 		FPlatformAtomics::InterlockedAdd(&NumAttempts, 1);
 		const TSharedPtr<PCGExTopology::FCell> Cell = MakeShared<PCGExTopology::FCell>(CellsConstraints.ToSharedRef());
 
-		const PCGExTopology::ECellResult Result = Cell->BuildFromCluster(Node.Index, Edge.Index, Cluster.ToSharedRef(), *ProjectedPositions);
+		const PCGExTopology::ECellResult Result = Cell->BuildFromCluster(PCGExGraph::FLink(Node.Index, Edge.Index), Cluster.ToSharedRef(), *ProjectedPositions);
 		if (Result != PCGExTopology::ECellResult::Success) { return false; }
 
 		ProcessCell(Cell);
@@ -165,15 +168,18 @@ namespace PCGExFindAllCells
 		return true;
 	}
 
-	void FProcessor::ProcessCell(const TSharedPtr<PCGExTopology::FCell>& InCell) const
+	void FProcessor::ProcessCell(const TSharedPtr<PCGExTopology::FCell>& InCell)
 	{
-		TSharedRef<PCGExData::FPointIO> PathIO = Context->Paths->Emplace_GetRef<UPCGPointData>(VtxDataFacade->Source, PCGExData::EIOInit::New).ToSharedRef();
-		PathIO->IOIndex = Cluster->GetEdge(InCell->SeedEdge)->IOIndex; // Enforce seed order for collection output-ish
+		const TSharedPtr<PCGExData::FPointIO> PathIO = Context->Paths->Emplace_GetRef<UPCGPointData>(VtxDataFacade->Source, PCGExData::EIOInit::New);
+		if (!PathIO) { return; }
 
-		PCGExGraph::CleanupClusterTags(PathIO, true);
+		PathIO->Tags->Reset();                                          // Tag forwarding handled by artifacts
+		PathIO->IOIndex = Cluster->GetEdge(InCell->Seed.Edge)->IOIndex; // Enforce seed order for collection output-ish
+
+		PCGExGraph::CleanupClusterTags(PathIO);
 		PCGExGraph::CleanupVtxData(PathIO);
 
-		TSharedPtr<PCGExData::FFacade> PathDataFacade = MakeShared<PCGExData::FFacade>(PathIO);
+		PCGEX_MAKE_SHARED(PathDataFacade, PCGExData::FFacade, PathIO.ToSharedRef())
 
 		TArray<FPCGPoint> MutablePoints;
 		MutablePoints.Reserve(InCell->Nodes.Num());
@@ -184,10 +190,8 @@ namespace PCGExFindAllCells
 
 		PathIO->GetOut()->SetPoints(MutablePoints);
 
-		if (Settings->bTagIfClosedLoop) { PathIO->Tags->Add(Settings->IsClosedLoopTag); }
-
-		if (InCell->bIsConvex) { if (Settings->bTagConvex) { PathIO->Tags->Add(Settings->ConvexTag); } }
-		else { if (Settings->bTagConcave) { PathIO->Tags->Add(Settings->ConcaveTag); } }
+		Context->Artifacts.Process(Cluster, PathDataFacade, InCell);
+		PathDataFacade->Write(AsyncManager);
 
 		/*
 		Context->SeedAttributesToPathTags.Tag(SeedIndex, PathIO);
@@ -213,13 +217,15 @@ namespace PCGExFindAllCells
 			Context->UdpatedSeedPoints[SeedIndex] = SeedPoint;
 		}
 		*/
+
+		FPlatformAtomics::InterlockedIncrement(&OutputPathsNum);
 	}
 
 	void FProcessor::EnsureRoamingClosedLoopProcessing()
 	{
 		if (NumAttempts == 0 && LastBinary != -1)
 		{
-			TSharedPtr<PCGExTopology::FCell> Cell = MakeShared<PCGExTopology::FCell>(CellsConstraints.ToSharedRef());
+			PCGEX_MAKE_SHARED(Cell, PCGExTopology::FCell, CellsConstraints.ToSharedRef())
 			PCGExGraph::FEdge& Edge = *Cluster->GetEdge(Cluster->GetNode(LastBinary)->Links[0].Edge);
 			FindCell(*Cluster->GetEdgeStart(Edge), Edge, false);
 		}
@@ -234,7 +240,7 @@ namespace PCGExFindAllCells
 	void FProcessor::CompleteWork()
 	{
 		if (!CellsConstraints->WrapperCell) { return; }
-		if (Context->Paths->IsEmpty() && Settings->Constraints.bKeepWrapperIfSolePath) { ProcessCell(CellsConstraints->WrapperCell); }
+		if (OutputPathsNum == 0 && Settings->Constraints.bKeepWrapperIfSolePath) { ProcessCell(CellsConstraints->WrapperCell); }
 	}
 
 	void FProcessor::Cleanup()
@@ -256,24 +262,18 @@ namespace PCGExFindAllCells
 		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, ProjectionTaskGroup)
 
 		ProjectionTaskGroup->OnCompleteCallback =
-			[WeakThis = TWeakPtr<FBatch>(SharedThis(this))]()
+			[PCGEX_ASYNC_THIS_CAPTURE]()
 			{
-				if (TSharedPtr<FBatch> This = WeakThis.Pin()) { This->OnProjectionComplete(); }
+				PCGEX_ASYNC_THIS
+				This->OnProjectionComplete();
 			};
 
 		ProjectionTaskGroup->OnSubLoopStartCallback =
-			[WeakThis = TWeakPtr<FBatch>(SharedThis(this))]
-			(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+			[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 			{
-				TSharedPtr<FBatch> This = WeakThis.Pin();
-				if (!This) { return; }
-
-				const int32 MaxIndex = StartIndex + Count;
-
-				for (int i = StartIndex; i < MaxIndex; i++)
-				{
-					This->ProjectedPositions[i] = This->ProjectionDetails.ProjectFlat(This->VtxDataFacade->Source->GetInPoint(i).Transform.GetLocation(), i);
-				}
+				PCGEX_ASYNC_THIS
+				TArray<FVector>& PP = *This->ProjectedPositions;
+				This->ProjectionDetails.ProjectFlat(This->VtxDataFacade, PP, Scope);
 			};
 
 		ProjectionTaskGroup->StartSubLoops(VtxDataFacade->GetNum(), GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());
@@ -281,7 +281,7 @@ namespace PCGExFindAllCells
 
 	bool FBatch::PrepareSingle(const TSharedPtr<FProcessor>& ClusterProcessor)
 	{
-		ClusterProcessor->ProjectedPositions = &ProjectedPositions;
+		ClusterProcessor->ProjectedPositions = ProjectedPositions;
 		TBatch<FProcessor>::PrepareSingle(ClusterProcessor);
 		return true;
 	}

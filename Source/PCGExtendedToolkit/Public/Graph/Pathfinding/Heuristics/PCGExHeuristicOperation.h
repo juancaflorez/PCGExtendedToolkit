@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -29,8 +29,7 @@ public:
 	EPCGExClusterComponentSource LocalWeightMultiplierSource = EPCGExClusterComponentSource::Vtx;
 	FPCGAttributePropertyInputSelector WeightMultiplierAttribute;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UCurveFloat> ScoreCurveObj;
+	const FRichCurve* ScoreCurve = nullptr;
 
 	bool bHasCustomLocalWeightMultiplier = false;
 
@@ -82,6 +81,6 @@ protected:
 
 	FORCEINLINE virtual double GetScoreInternal(const double InTime) const
 	{
-		return FMath::Max(0, ScoreCurveObj->GetFloatValue(bInvert ? 1 - InTime : InTime)) * ReferenceWeight;
+		return FMath::Max(0, ScoreCurve->Eval(bInvert ? 1 - InTime : InTime)) * ReferenceWeight;
 	}
 };

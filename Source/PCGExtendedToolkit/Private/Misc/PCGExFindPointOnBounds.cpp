@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Misc/PCGExFindPointOnBounds.h"
@@ -105,11 +105,20 @@ namespace PCGExFindPointOnBounds
 		return true;
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
-		if (const double Dist = FVector::Dist(Point.Transform.GetLocation(), SearchPosition); Dist < BestDistance)
+		const double Dist = FVector::Dist(Point.Transform.GetLocation(), SearchPosition);
+		
 		{
 			FWriteScopeLock WriteLock(BestIndexLock);
+			if (Dist > BestDistance) { return; }
+		}
+
+		{
+			FWriteScopeLock WriteLock(BestIndexLock);
+			
+			if (Dist > BestDistance) { return; }
+			
 			BestPosition = Point.Transform.GetLocation();
 			BestIndex = Index;
 			BestDistance = Dist;
@@ -129,7 +138,7 @@ namespace PCGExFindPointOnBounds
 		}
 		else
 		{
-			PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::New);
+			PCGEX_INIT_IO_VOID(PointDataFacade->Source, PCGExData::EIOInit::New)
 			PointDataFacade->Source->GetOut()->GetMutablePoints().SetNum(1);
 
 			FPCGPoint& OutPoint = (PointDataFacade->Source->GetOut()->GetMutablePoints()[0] = PointDataFacade->Source->GetInPoint(BestIndex));

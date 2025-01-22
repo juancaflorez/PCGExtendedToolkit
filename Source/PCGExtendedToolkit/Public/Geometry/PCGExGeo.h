@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -7,6 +7,7 @@
 #include "PCGEx.h"
 #include "PCGExMT.h"
 #include "PCGExFitting.h"
+#include "Curve/CurveUtil.h"
 #include "Data/PCGExData.h"
 
 
@@ -124,12 +125,23 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExGeo2DProjectionDetails
 		return FTransform(FQuat::FindBetweenNormals(Quat.GetUpVector(), FVector::UpVector) * Quat, Position);
 	}
 
-	void ProjectFlat(const TSharedPtr<PCGExData::FFacade>& InFacade, TArray<FVector2D>& OutPositions) const
+	template <typename T>
+	void ProjectFlat(const TSharedPtr<PCGExData::FFacade>& InFacade, TArray<T>& OutPositions) const
 	{
-		const int32 NumVectors = InFacade->GetNum();
-		const TArray<FPCGPoint>& InPoints = InFacade->GetIn()->GetPoints();
+		const TArray<FPCGPoint>& InPoints = InFacade->Source->GetInOut()->GetPoints();
+		const int32 NumVectors = InPoints.Num();
 		PCGEx::InitArray(OutPositions, NumVectors);
-		for (int i = 0; i < NumVectors; i++) { OutPositions[i] = FVector2D(ProjectFlat(InPoints[i].Transform.GetLocation(), i)); }
+		for (int i = 0; i < NumVectors; i++) { OutPositions[i] = T(ProjectFlat(InPoints[i].Transform.GetLocation(), i)); }
+	}
+
+	template <typename T>
+	void ProjectFlat(const TSharedPtr<PCGExData::FFacade>& InFacade, TArray<T>& OutPositions, const PCGExMT::FScope& Scope) const
+	{
+		const TArray<FPCGPoint>& InPoints = InFacade->Source->GetInOut()->GetPoints();
+		const int32 NumVectors = InPoints.Num();
+		if (OutPositions.Num() < NumVectors) { PCGEx::InitArray(OutPositions, NumVectors); }
+
+		for (int i = Scope.Start; i < Scope.End; i++) { OutPositions[i] = T(ProjectFlat(InPoints[i].Transform.GetLocation(), i)); }
 	}
 
 	void Project(const TArray<FVector>& InPositions, TArray<FVector>& OutPositions) const
@@ -244,7 +256,48 @@ enum class EPCGExCellCenter : uint8
 
 namespace PCGExGeo
 {
-	PCGEX_ASYNC_STATE(State_ExtractingMesh)
+	PCGEX_CTX_STATE(State_ExtractingMesh)
+
+	FORCEINLINE static bool IsWinded(const EPCGExWinding Winding, const bool bIsInputClockwise)
+	{
+		if (Winding == EPCGExWinding::Clockwise) { return bIsInputClockwise; }
+		return !bIsInputClockwise;
+	}
+
+	FORCEINLINE static bool IsWinded(const EPCGExWindingMutation Winding, const bool bIsInputClockwise)
+	{
+		if (Winding == EPCGExWindingMutation::Clockwise) { return bIsInputClockwise; }
+		return !bIsInputClockwise;
+	}
+
+	struct /*PCGEXTENDEDTOOLKIT_API*/ FPolygonInfos
+	{
+		double Area = 0;
+		bool bIsClockwise = false;
+		double Perimeter = 0;
+		double Compactness = 0;
+
+		explicit FPolygonInfos(const TArray<FVector2D>& InPolygon)
+		{
+			Area = UE::Geometry::CurveUtil::SignedArea2<double, FVector2D>(InPolygon);
+			Perimeter = UE::Geometry::CurveUtil::ArcLength<double, FVector2D>(InPolygon, true);
+
+			if (Area < 0)
+			{
+				bIsClockwise = true;
+				Area = FMath::Abs(Area);
+			}
+			else
+			{
+				bIsClockwise = false;
+			}
+
+			if (Perimeter == 0.0f) { Compactness = 0; }
+			else { Compactness = (4.0f * PI * Area) / (Perimeter * Perimeter); }
+		}
+
+		FORCEINLINE bool IsWinded(const EPCGExWinding Winding) const { return PCGExGeo::IsWinded(Winding, bIsClockwise); }
+	};
 
 	template <typename T>
 	FORCEINLINE double Det(const T& A, const T& B) { return A.X * B.Y - A.Y * B.X; }
@@ -383,7 +436,7 @@ namespace PCGExGeo
 
 	FORCEINLINE static void GetLongestEdge(const TArrayView<FVector>& Positions, const int32 (&Vtx)[3], uint64& Edge)
 	{
-		double Dist = MIN_dbl;
+		double Dist = 0;
 		for (int i = 0; i < 3; i++)
 		{
 			for (int j = i + 1; j < 3; j++)
@@ -400,7 +453,7 @@ namespace PCGExGeo
 
 	FORCEINLINE static void GetLongestEdge(const TArrayView<FVector>& Positions, const int32 (&Vtx)[4], uint64& Edge)
 	{
-		double Dist = MIN_dbl;
+		double Dist = 0;
 		for (int i = 0; i < 4; i++)
 		{
 			for (int j = i + 1; j < 4; j++)
@@ -479,10 +532,10 @@ namespace PCGExGeo
 			Alpha = DistToStart / (DistToStart + DistToEnd);
 		}
 
-		FVector Direction;
-		FVector Anchor;
-		FVector TowardStart;
-		FVector TowardEnd;
+		FVector Direction = FVector::ZeroVector;
+		FVector Anchor = FVector::ZeroVector;
+		FVector TowardStart = FVector::ZeroVector;
+		FVector TowardEnd = FVector::ZeroVector;
 		double Alpha = 0;
 
 		FVector GetAnchorNormal(const FVector& Location) const { return (Anchor - Location).GetSafeNormal(); }
@@ -610,38 +663,34 @@ namespace PCGExGeo
 
 namespace PCGExGeoTasks
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FTransformPointIO final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FTransformPointIO final : public PCGExMT::FPCGExIndexedTask
 	{
 	public:
-		FTransformPointIO(
-			const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-			const TSharedPtr<PCGExData::FPointIO>& InToBeTransformedIO,
-			FPCGExTransformDetails* InTransformDetails) :
-			FPCGExTask(InPointIO),
+		FTransformPointIO(const int32 InTaskIndex,
+		                  const TSharedPtr<PCGExData::FPointIO>& InPointIO,
+		                  const TSharedPtr<PCGExData::FPointIO>& InToBeTransformedIO,
+		                  FPCGExTransformDetails* InTransformDetails) :
+			FPCGExIndexedTask(InTaskIndex),
+			PointIO(InPointIO),
 			ToBeTransformedIO(InToBeTransformedIO),
 			TransformDetails(InTransformDetails)
 		{
 		}
 
+		TSharedPtr<PCGExData::FPointIO> PointIO;
 		TSharedPtr<PCGExData::FPointIO> ToBeTransformedIO;
 		FPCGExTransformDetails* TransformDetails = nullptr;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
 		{
 			TArray<FPCGPoint>& MutableTargets = ToBeTransformedIO->GetMutablePoints();
 
 			FTransform TargetTransform = FTransform::Identity;
-			if (TransformDetails->bSupportFitting)
-			{
-				FBox PointBounds = FBox(ForceInit);
-				for (const FPCGPoint& Pt : MutableTargets) { PointBounds += PCGExMath::GetLocalBounds<EPCGExPointBoundsSource::Bounds>(Pt).TransformBy(Pt.Transform); }
-				PointBounds = PointBounds.ExpandBy(1); // Avoid NaN
-				TransformDetails->ComputeTransform(TaskIndex, TargetTransform, PointBounds);
-			}
-			else
-			{
-				TargetTransform = PointIO->GetInPoint(TaskIndex).Transform;
-			}
+
+			FBox PointBounds = FBox(ForceInit);
+			for (const FPCGPoint& Pt : MutableTargets) { PointBounds += PCGExMath::GetLocalBounds<EPCGExPointBoundsSource::Bounds>(Pt).TransformBy(Pt.Transform); }
+			PointBounds = PointBounds.ExpandBy(1); // Avoid NaN
+			TransformDetails->ComputeTransform(TaskIndex, TargetTransform, PointBounds);
 
 			if (TransformDetails->bInheritRotation && TransformDetails->bInheritScale)
 			{
@@ -675,8 +724,6 @@ namespace PCGExGeoTasks
 					}
 				}
 			}
-
-			return true;
 		}
 	};
 }

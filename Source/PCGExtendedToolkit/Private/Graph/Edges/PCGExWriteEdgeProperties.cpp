@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Edges/PCGExWriteEdgeProperties.h"
@@ -14,7 +14,7 @@ PCGExData::EIOInit UPCGExWriteEdgePropertiesSettings::GetEdgeOutputInitMode() co
 TArray<FPCGPinProperties> UPCGExWriteEdgePropertiesSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	if (bWriteHeuristics) { PCGEX_PIN_PARAMS(PCGExGraph::SourceHeuristicsLabel, "Heuristics that will be computed and written.", Required, {}) }
+	if (bWriteHeuristics) { PCGEX_PIN_FACTORIES(PCGExGraph::SourceHeuristicsLabel, "Heuristics that will be computed and written.", Required, {}) }
 	return PinProperties;
 }
 
@@ -124,13 +124,13 @@ namespace PCGExWriteEdgeProperties
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForEdges(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForEdges(const PCGExMT::FScope& Scope)
 	{
-		FClusterProcessor::PrepareSingleLoopScopeForEdges(StartIndex, Count);
-		EdgeDataFacade->Fetch(StartIndex, Count);
+		FClusterProcessor::PrepareSingleLoopScopeForEdges(Scope);
+		EdgeDataFacade->Fetch(Scope);
 	}
 
-	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
 	{
 		DirectionSettings.SortEndpoints(Cluster.Get(), Edge);
 
@@ -230,11 +230,11 @@ namespace PCGExWriteEdgeProperties
 
 
 			BlendWeightStart = EdgeLerp;
-			BlendWeightEnd = 1 - EdgeLerp;
+			BlendWeightEnd = EdgeLerpInv;
 
 			if (MetadataBlender) { MetadataBlend(); } // Blend first THEN apply bounds otherwise it gets overwritten
 
-			MutableTarget.Transform = FTransform(EdgeRot, FMath::Lerp(B, A, EdgeLerp), MutableTarget.Transform.GetScale3D());
+			MutableTarget.Transform = FTransform(EdgeRot, FMath::Lerp(B, A, EdgeLerpInv), MutableTarget.Transform.GetScale3D());
 
 			MutableTarget.BoundsMin = TargetBoundsMin;
 			MutableTarget.BoundsMax = TargetBoundsMax;

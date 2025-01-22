@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -13,9 +13,24 @@
 #include "PCGExDetails.h"
 #include "PCGExMT.h"
 #include "Data/PCGPointData.h"
+
 #include "Geometry/PCGExGeoPointBox.h"
 
 #include "PCGExData.generated.h"
+
+#pragma region DATA MACROS
+
+#ifndef PCGEX_DATA_MACROS
+#define PCGEX_DATA_MACROS
+
+#define PCGEX_INIT_IO_VOID(_IO, _INIT) if (!_IO->InitializeOutput(_INIT)) { return; }
+#define PCGEX_INIT_IO(_IO, _INIT) if (!_IO->InitializeOutput(_INIT)) { return false; }
+
+#define PCGEX_CLEAR_IO_VOID(_IO) if (!_IO->InitializeOutput(PCGExData::EIOInit::None)) { return; }
+#define PCGEX_CLEAR_IO(_IO) if (!_IO->InitializeOutput(PCGExData::EIOInit::None)) { return false; }
+
+#endif
+#pragma endregion
 
 USTRUCT(BlueprintType)
 struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeGatherDetails : public FPCGExNameFiltersDetails
@@ -45,7 +60,13 @@ namespace PCGExData
 		New,
 	};
 
-	PCGEX_ASYNC_STATE(State_MergingData);
+	enum class EBufferLevel : uint8
+	{
+		Local = 0, // Per point data
+		Global     // Per dataset data (Tags etc)
+	};
+
+	PCGEX_CTX_STATE(State_MergingData);
 
 #pragma region Pool & Buffers
 
@@ -72,8 +93,16 @@ namespace PCGExData
 		EPCGMetadataTypes Type = EPCGMetadataTypes::Unknown;
 		uint64 UID = 0;
 
+		bool bIsNewOutput = false;
+		std::atomic<bool> bIsEnabled{true}; // BUG : Need to have a better look at why we hang when this is false
+		FName TargetOutputName = NAME_None;
+
 	public:
 		FName FullName = NAME_None;
+
+		bool IsEnabled() const { return bIsEnabled.load(std::memory_order_acquire); }
+		void Disable() { bIsEnabled.store(false, std::memory_order_release); }
+		void Enable() { bIsEnabled.store(true, std::memory_order_release); }
 
 		const FPCGMetadataAttributeBase* InAttribute = nullptr;
 		FPCGMetadataAttributeBase* OutAttribute = nullptr;
@@ -107,31 +136,32 @@ namespace PCGExData
 			PCGEX_LOG_DTR(FBufferBase)
 		}
 
-		virtual void Write()
+		virtual void Write(const bool bEnsureValidKeys = true)
 		{
 		}
 
-		virtual void Fetch(const int32 StartIndex, const int32 Count)
+		virtual void Fetch(const PCGExMT::FScope& Scope)
 		{
 		}
 
 		virtual bool IsScoped() { return bScopedBuffer; }
-		virtual bool IsWritable() { return false; }
-		virtual bool IsReadable() { return false; }
+		virtual bool IsWritable() PCGEX_NOT_IMPLEMENTED_RET(FBuffer::IsWritable, false)
+		virtual bool IsReadable() PCGEX_NOT_IMPLEMENTED_RET(FBuffer::IsReadable, false)
+
+		virtual void SetTargetOutputName(const FName InName);
+		virtual PCGEx::FAttributeIdentity GetTargetOutputIdentity() PCGEX_NOT_IMPLEMENTED_RET(FBuffer::GetTargetOutputIdentity, PCGEx::FAttributeIdentity())
+		virtual bool OutputsToDifferentName() const;
 
 		FORCEINLINE bool GetAllowsInterpolation() const { return OutAttribute ? OutAttribute->AllowsInterpolation() : InAttribute ? InAttribute->AllowsInterpolation() : false; }
 	};
 
-	template <typename T>
+	template <typename T, EBufferLevel BufferLevel = EBufferLevel::Local>
 	class /*PCGEXTENDEDTOOLKIT_API*/ TBuffer final : public FBufferBase
 	{
 		friend class FFacade;
 
 	protected:
-		TUniquePtr<FPCGAttributeAccessor<T>> InAccessor;
 		const FPCGMetadataAttribute<T>* TypedInAttribute = nullptr;
-
-		TUniquePtr<FPCGAttributeAccessor<T>> OutAccessor;
 		FPCGMetadataAttribute<T>* TypedOutAttribute = nullptr;
 
 		TSharedPtr<TArray<T>> InValues;
@@ -172,6 +202,23 @@ namespace PCGExData
 		FORCEINLINE void Set(const int32 Index, const T& Value) { *(OutValues->GetData() + Index) = Value; }
 		FORCEINLINE void SetImmediate(const int32 Index, const T& Value) { TypedOutAttribute->SetValue(InPoints[Index], Value); }
 
+		virtual PCGEx::FAttributeIdentity GetTargetOutputIdentity() override
+		{
+			check(IsWritable() && OutAttribute)
+
+			if (OutputsToDifferentName()) { return PCGEx::FAttributeIdentity(TargetOutputName, PCGEx::GetMetadataType<T>(), OutAttribute->AllowsInterpolation()); }
+			else { return PCGEx::FAttributeIdentity(OutAttribute->Name, PCGEx::GetMetadataType<T>(), OutAttribute->AllowsInterpolation()); }
+		}
+
+		virtual bool OutputsToDifferentName() const override
+		{
+			// Don't consider None, @Source, @Last etc
+			FString StrName = TargetOutputName.ToString();
+			if (TargetOutputName.IsNone() || StrName.IsEmpty() || StrName.StartsWith(TEXT("@"))) { return false; }
+			if (TypedOutAttribute) { return TypedOutAttribute->Name != TargetOutputName; }
+			return false;
+		}
+
 	protected:
 		void PrepareReadInternal(const bool bScoped, const FPCGMetadataAttributeBase* Attribute)
 		{
@@ -179,6 +226,7 @@ namespace PCGExData
 
 			const TArray<FPCGPoint>& InPts = Source->GetIn()->GetPoints();
 			const int32 NumPoints = InPts.Num();
+
 			InPoints = MakeArrayView(InPts.GetData(), NumPoints);
 
 			InValues = MakeShared<TArray<T>>();
@@ -215,7 +263,7 @@ namespace PCGExData
 				if (bScopedBuffer && !bScoped)
 				{
 					// Un-scoping reader.
-					Fetch(0, InValues->Num());
+					Fetch(PCGExMT::FScope(0, InValues->Num()));
 					bReadComplete = true;
 					bScopedBuffer = false;
 				}
@@ -241,15 +289,14 @@ namespace PCGExData
 			}
 
 			UPCGMetadata* InMetadata = Source->GetIn()->Metadata;
-
 			check(InMetadata)
 
-			// 'template' spec required for clang on mac, not sure why.
+			// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 			// ReSharper disable once CppRedundantTemplateKeyword
 			TypedInAttribute = InMetadata->template GetConstTypedAttribute<T>(FullName);
 			if (!TypedInAttribute) { return false; }
 
-			InAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedInAttribute, InMetadata);
+			TUniquePtr<FPCGAttributeAccessor<T>> InAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedInAttribute, InMetadata);
 
 			if (!InAccessor.IsValid())
 			{
@@ -302,7 +349,6 @@ namespace PCGExData
 			if (!InternalBroadcaster->Prepare(InSelector, Source))
 			{
 				TypedInAttribute = nullptr;
-				InAccessor = nullptr;
 				return false;
 			}
 
@@ -322,11 +368,21 @@ namespace PCGExData
 		{
 			FWriteScopeLock WriteScopeLock(BufferLock);
 
-			if (OutValues) { return true; }
+			if (OutValues)
+			{
+				check(OutValues->Num() == Source->GetOut()->GetPoints().Num())
+				return true;
+			}
 
+			bIsNewOutput = !Source->GetOut()->Metadata->HasAttribute(FullName);
 			TypedOutAttribute = Source->FindOrCreateAttribute(FullName, DefaultValue, bAllowInterpolation);
 
-			OutAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedOutAttribute, Source->GetOut()->Metadata);
+			if (!TypedOutAttribute)
+			{
+				return false;
+			}
+
+			TUniquePtr<FPCGAttributeAccessor<T>> OutAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedOutAttribute, Source->GetOut()->Metadata);
 
 			if (!TypedOutAttribute || !OutAccessor.IsValid())
 			{
@@ -346,42 +402,7 @@ namespace PCGExData
 				OutAccessor->GetRange(OutRange, 0, *TempOutKeys.Get());
 			};
 
-			if (Init == EBufferInit::Inherit)
-			{
-				GrabExistingValues();
-				/*
-				if (!bHasIn && ExistingEntryCount != 0) { GrabExistingValues(); }
-				else if (bHasIn)
-				{
-					if (InValues && bReadComplete)
-					{
-						// Leverage prefetched data					
-						int32 NumToCopy = FMath::Min(InValues->Num(), OutValues->Num());
-						if constexpr (std::is_trivial_v<T>)
-						{
-							FMemory::Memcpy(OutValues->GetData(), InValues->GetData(), NumToCopy * sizeof(T));
-						}
-						else
-						{
-							for (int32 i = 0; i < NumToCopy; i++) { *(OutValues->GetData() + i) = *(InValues->GetData() + i); }
-						}
-					}
-					else
-					{
-						UPCGMetadata* InMetadata = Source->GetIn()->Metadata;
-
-						// 'template' spec required for clang on mac, not sure why.
-						// ReSharper disable once CppRedundantTemplateKeyword
-						if (const FPCGMetadataAttribute<T>* TempInAttribute = InMetadata->template GetConstTypedAttribute<T>(FullName))
-						{
-							TUniquePtr<FPCGAttributeAccessor<T>> TempInAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TempInAttribute, InMetadata);
-							TArrayView<T> OutRange = MakeArrayView(OutValues->GetData(), FMath::Min(Source->GetNum(), OutValues->Num()));
-							TempInAccessor->GetRange(OutRange, 0, *Source->GetInKeys());
-						}
-					}
-				}
-				*/
-			}
+			if (Init == EBufferInit::Inherit) { GrabExistingValues(); }
 			else if (!bHasIn && ExistingEntryCount != 0) { GrabExistingValues(); }
 
 			return true;
@@ -396,7 +417,7 @@ namespace PCGExData
 
 			if (Source->GetIn())
 			{
-				// 'template' spec required for clang on mac, not sure why.
+				// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 				// ReSharper disable once CppRedundantTemplateKeyword
 				if (const FPCGMetadataAttribute<T>* ExistingAttribute = Source->GetIn()->Metadata->template GetConstTypedAttribute<T>(FullName))
 				{
@@ -410,24 +431,66 @@ namespace PCGExData
 			return PrepareWrite(T{}, true, Init);
 		}
 
-		virtual void Write() override
+		virtual void Write(const bool bEnsureValidKeys = true) override
 		{
-			if (!IsWritable() || !OutAccessor || !OutValues || !TypedOutAttribute) { return; }
+			if (!IsWritable() || !OutValues || !IsEnabled()) { return; }
+
+			if (!Source->GetOut())
+			{
+				UE_LOG(LogTemp, Error, TEXT("Attempting to write data to an output that's not initialized!"));
+				return;
+			}
 
 			TRACE_CPUPROFILER_EVENT_SCOPE(TBuffer::Write);
 
-			TArrayView<const T> View = MakeArrayView(OutValues->GetData(), OutValues->Num());
-			OutAccessor->SetRange(View, 0, *Source->GetOutKeys(true).Get());
+			// If we reach that point, data has been cleaned up and we're expected to create a new attribute here.
+
+			if (OutputsToDifferentName())
+			{
+
+				// If we want to output to a different name, ensure the new attribute exists and hope we did proper validations beforehand
+				
+				// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
+				// ReSharper disable once CppRedundantTemplateKeyword
+				TypedOutAttribute = Source->GetOut()->Metadata->template FindOrCreateAttribute<T>(TargetOutputName, TypedOutAttribute->GetValueFromItemKey(PCGInvalidEntryKey), TypedOutAttribute->AllowsInterpolation());
+
+				TUniquePtr<FPCGAttributeAccessor<T>> OutAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedOutAttribute, Source->GetOut()->Metadata);
+				if (!OutAccessor.IsValid()) { return; }
+
+				// Assume that if we write data, it's not to delete it.
+				Source->GetContext()->AddProtectedAttributeName(TargetOutputName);
+
+				// Output value to fresh attribute	
+				TArrayView<const T> View = MakeArrayView(OutValues->GetData(), OutValues->Num());
+				OutAccessor->SetRange(View, 0, *Source->GetOutKeys(bEnsureValidKeys).Get());
+			}
+			else if (TypedOutAttribute)
+			{
+
+				// if we're not writing to a different name, then go through the usual flow
+				
+				TUniquePtr<FPCGAttributeAccessor<T>> OutAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedOutAttribute, Source->GetOut()->Metadata);
+				if (!OutAccessor.IsValid()) { return; }
+
+				// Assume that if we write data, it's not to delete it.
+				Source->GetContext()->AddProtectedAttributeName(TypedOutAttribute->Name);
+
+				// Output value			
+				TArrayView<const T> View = MakeArrayView(OutValues->GetData(), OutValues->Num());
+				OutAccessor->SetRange(View, 0, *Source->GetOutKeys(bEnsureValidKeys).Get());
+			}
 		}
 
-		virtual void Fetch(const int32 StartIndex, const int32 Count) override
+		virtual void Fetch(const PCGExMT::FScope& Scope) override
 		{
-			if (!IsScoped() || bReadComplete) { return; }
-			if (InternalBroadcaster) { InternalBroadcaster->Fetch(*InValues, StartIndex, Count); }
-			if (InAccessor.IsValid())
+			if (!IsScoped() || bReadComplete || !IsEnabled()) { return; }
+			if (InternalBroadcaster) { InternalBroadcaster->Fetch(*InValues, Scope); }
+
+			if (TUniquePtr<FPCGAttributeAccessor<T>> InAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedInAttribute, Source->GetIn()->Metadata);
+				InAccessor.IsValid())
 			{
-				TArrayView<T> ReadRange = MakeArrayView(InValues->GetData() + StartIndex, Count);
-				InAccessor->GetRange(ReadRange, StartIndex, *Source->GetInKeys());
+				TArrayView<T> ReadRange = MakeArrayView(InValues->GetData() + Scope.Start, Scope.Count);
+				InAccessor->GetRange(ReadRange, Scope.Start, *Source->GetInKeys());
 			}
 
 			//if (OutAccessor.IsValid())
@@ -447,7 +510,7 @@ namespace PCGExData
 
 	class /*PCGEXTENDEDTOOLKIT_API*/ FFacade : public TSharedFromThis<FFacade>
 	{
-		mutable FRWLock PoolLock;
+		mutable FRWLock BufferLock;
 		mutable FRWLock CloudLock;
 
 	public:
@@ -456,13 +519,18 @@ namespace PCGExData
 		TMap<uint64, TSharedPtr<FBufferBase>> BufferMap;
 		TSharedPtr<PCGExGeo::FPointBoxCloud> Cloud;
 
+		TMap<FName, FName> WritableRemap; // TODO : Manage remapping in the facade directly to remove the need for dummy attributes
+
 		bool bSupportsScopedGet = false;
 
 		FORCEINLINE int32 GetNum(const ESource InSource = ESource::In) const { return Source->GetNum(InSource); }
 		FORCEINLINE TArray<FPCGPoint>& GetMutablePoints() const { return Source->GetMutablePoints(); }
 
-		TSharedPtr<FBufferBase> FindBufferUnsafe(const uint64 UID);
+		TSharedPtr<FBufferBase> FindBuffer_Unsafe(const uint64 UID);
 		TSharedPtr<FBufferBase> FindBuffer(const uint64 UID);
+		TSharedPtr<FBufferBase> FindReadableAttributeBuffer(const FName InName);
+		TSharedPtr<FBufferBase> FindWritableAttributeBuffer(const FName InName);
+
 
 		explicit FFacade(const TSharedRef<FPointIO>& InSource):
 			Source(InSource)
@@ -480,9 +548,9 @@ namespace PCGExData
 		bool ShareSource(const FFacade* OtherManager) const { return this == OtherManager || OtherManager->Source == Source; }
 
 		template <typename T>
-		TSharedPtr<TBuffer<T>> FindBufferUnsafe(const FName FullName)
+		TSharedPtr<TBuffer<T>> FindBuffer_Unsafe(const FName FullName)
 		{
-			const TSharedPtr<FBufferBase>& Found = FindBufferUnsafe(BufferUID(FullName, PCGEx::GetMetadataType<T>()));
+			const TSharedPtr<FBufferBase>& Found = FindBuffer_Unsafe(BufferUID(FullName, PCGEx::GetMetadataType<T>()));
 			if (!Found) { return nullptr; }
 			return StaticCastSharedPtr<TBuffer<T>>(Found);
 		}
@@ -502,9 +570,9 @@ namespace PCGExData
 			if (NewBuffer) { return NewBuffer; }
 
 			{
-				FWriteScopeLock WriteScopeLock(PoolLock);
+				FWriteScopeLock WriteScopeLock(BufferLock);
 
-				NewBuffer = FindBufferUnsafe<T>(FullName);
+				NewBuffer = FindBuffer_Unsafe<T>(FullName);
 				if (NewBuffer) { return NewBuffer; }
 
 				NewBuffer = MakeShared<TBuffer<T>>(Source, FullName);
@@ -649,18 +717,18 @@ namespace PCGExData
 			const UPCGPointData* Data = Source->GetData(InSource);
 			if (!Data) { return nullptr; }
 
-			// 'template' spec required for clang on mac, not sure why.
+			// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 			// ReSharper disable once CppRedundantTemplateKeyword
 			return Data->Metadata->template GetConstTypedAttribute<T>(InName);
 		}
 
-		TSharedPtr<PCGExGeo::FPointBoxCloud> GetCloud(const EPCGExPointBoundsSource BoundsSource, const double Epsilon = DBL_EPSILON)
+		TSharedPtr<PCGExGeo::FPointBoxCloud> GetCloud(const EPCGExPointBoundsSource BoundsSource, const double Expansion = DBL_EPSILON)
 		{
 			FWriteScopeLock WriteScopeLock(CloudLock);
 
 			if (Cloud) { return Cloud; }
 
-			Cloud = MakeShared<PCGExGeo::FPointBoxCloud>(GetIn(), BoundsSource, Epsilon);
+			Cloud = MakeShared<PCGExGeo::FPointBoxCloud>(GetIn(), BoundsSource, Expansion);
 			return Cloud;
 		}
 
@@ -672,20 +740,34 @@ namespace PCGExData
 
 		void Flush()
 		{
+			FWriteScopeLock WriteScopeLock(BufferLock);
 			Buffers.Empty();
 			BufferMap.Empty();
 		}
 
-		void Write(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager);
-		void WriteBuffersAsCallbacks(const TSharedPtr<PCGExMT::FTaskGroup>& TaskGroup);
+		void Write(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const bool bEnsureValidKeys = true);
+		FPlatformTypes::int32 WriteBuffersAsCallbacks(const TSharedPtr<PCGExMT::FTaskGroup>& TaskGroup);
+		void WriteBuffers(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, PCGExMT::FCompletionCallback&& Callback);
 
-		void Fetch(const int32 StartIndex, const int32 Count) { for (const TSharedPtr<FBufferBase>& Buffer : Buffers) { Buffer->Fetch(StartIndex, Count); } }
-		void Fetch(const uint64 Scope) { Fetch(PCGEx::H64A(Scope), PCGEx::H64B(Scope)); }
+		void Fetch(const PCGExMT::FScope& Scope) { for (const TSharedPtr<FBufferBase>& Buffer : Buffers) { Buffer->Fetch(Scope); } }
 
 	protected:
+		template <typename Func>
+		void ForEachWritable(Func&& Callback)
+		{
+			for (int i = 0; i < Buffers.Num(); i++)
+			{
+				const TSharedPtr<FBufferBase> Buffer = Buffers[i];
+				if (!Buffer.IsValid() || !Buffer->IsWritable() || !Buffer->IsEnabled()) { continue; }
+				Callback(Buffer);
+			}
+		}
+
+		bool ValidateOutputsBeforeWriting() const;
+
 		void Flush(const TSharedPtr<FBufferBase>& Buffer)
 		{
-			FWriteScopeLock WriteScopeLock(PoolLock);
+			FWriteScopeLock WriteScopeLock(BufferLock);
 			Buffers.RemoveAt(Buffer->BufferIndex);
 			BufferMap.Remove(Buffer->GetUID());
 			for (int i = 0; i < Buffers.Num(); i++) { Buffers[i].Get()->BufferIndex = i; }
@@ -723,14 +805,13 @@ namespace PCGExData
 		}
 
 		bool Validate(FPCGExContext* InContext, const TSharedRef<FFacade>& InFacade) const;
-		void Fetch(const TSharedRef<FFacade>& InFacade, const int32 StartIndex, const int32 Count) const;
+		void Fetch(const TSharedRef<FFacade>& InFacade, const PCGExMT::FScope& Scope) const;
 		void Read(const TSharedRef<FFacade>& InFacade) const;
 	};
 
 	class /*PCGEXTENDEDTOOLKIT_API*/ FFacadePreloader : public TSharedFromThis<FFacadePreloader>
 	{
 	protected:
-		TWeakPtr<PCGExMT::FTaskGroup> TaskGroupPtr;
 		TWeakPtr<FFacade> InternalDataFacadePtr;
 
 	public:
@@ -787,7 +868,7 @@ namespace PCGExData
 			BufferConfigs.Emplace(InName, Type, InMode);
 		}
 
-		void Fetch(const TSharedRef<FFacade>& InFacade, const int32 StartIndex, const int32 Count) const;
+		void Fetch(const TSharedRef<FFacade>& InFacade, const PCGExMT::FScope& Scope) const;
 		void Read(const TSharedRef<FFacade>& InFacade, const int32 ConfigIndex) const;
 
 		///
@@ -795,10 +876,10 @@ namespace PCGExData
 		using CompletionCallback = std::function<void()>;
 		CompletionCallback OnCompleteCallback;
 
-		void StartLoading(TSharedPtr<PCGExMT::FTaskManager> AsyncManager, const TSharedRef<FFacade>& InDataFacade, TSharedPtr<PCGExMT::FTaskGroup> InTaskGroup = nullptr);
+		void StartLoading(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const TSharedRef<FFacade>& InDataFacade, const TSharedPtr<PCGExMT::FAsyncMultiHandle>& InParentHandle = nullptr);
 
 	protected:
-		void OnLoadingEnd();
+		void OnLoadingEnd() const;
 	};
 
 #pragma endregion
@@ -860,7 +941,7 @@ namespace PCGExData
 		uint64 Append(const int32 Index, const int32 IOIndex, const int32 ItemIndex);
 		bool IOIndexOverlap(const int32 InIdx, const TSet<int32>& InIndices);
 
-		FORCEINLINE TSharedPtr<FUnionData> Get(const int32 Index) const { return Entries[Index]; }
+		FORCEINLINE TSharedPtr<FUnionData> Get(const int32 Index) const { return Entries.IsValidIndex(Index) ? Entries[Index] : nullptr; }
 	};
 
 #pragma endregion
@@ -880,7 +961,7 @@ namespace PCGExData
 	template <typename T>
 	static bool TryReadMark(UPCGMetadata* Metadata, const FName MarkID, T& OutMark)
 	{
-		// 'template' spec required for clang on mac, not sure why.
+		// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 		// ReSharper disable once CppRedundantTemplateKeyword
 		const FPCGMetadataAttribute<T>* Mark = Metadata->template GetConstTypedAttribute<T>(MarkID);
 		if (!Mark) { return false; }
@@ -896,8 +977,7 @@ namespace PCGExData
 
 	static void WriteId(const TSharedRef<FPointIO>& PointIO, const FName IdName, const int64 Id)
 	{
-		FString OutId;
-		PointIO->Tags->Add(IdName.ToString(), Id, OutId);
+		PointIO->Tags->Set<int64>(IdName.ToString(), Id);
 		if (PointIO->GetOut()) { WriteMark(PointIO, IdName, Id); }
 	}
 
@@ -912,36 +992,6 @@ namespace PCGExData
 		return const_cast<UPCGPointData*>(PointData);
 	}
 
-	static void CopyValues(
-		const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager,
-		const PCGEx::FAttributeIdentity& Identity,
-		const TSharedPtr<FPointIO>& Source,
-		const TSharedPtr<FPointIO>& Target,
-		const TArrayView<const int32>& SourceIndices,
-		const int32 TargetIndex = 0)
-	{
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(Identity.UnderlyingType),
-			[&](auto DummyValue) -> void
-			{
-				using T = decltype(DummyValue);
-				TArray<T> RawValues;
-
-				// 'template' spec required for clang on mac, not sure why.
-				// ReSharper disable once CppRedundantTemplateKeyword
-				const FPCGMetadataAttribute<T>* SourceAttribute = Source->GetIn()->Metadata->template GetConstTypedAttribute<T>(Identity.Name);
-
-				const TSharedPtr<TBuffer<T>> TargetBuffer = MakeShared<TBuffer<T>>(Target.ToSharedRef(), Identity.Name);
-				TargetBuffer->PrepareWrite(SourceAttribute->GetValue(PCGDefaultValueKey), SourceAttribute->AllowsInterpolation(), EBufferInit::New);
-
-				TUniquePtr<FPCGAttributeAccessor<T>> InAccessor = MakeUnique<FPCGAttributeAccessor<T>>(SourceAttribute, Source->GetIn()->Metadata);
-				TArrayView<T> InRange = MakeArrayView(TargetBuffer->GetOutValues()->GetData() + TargetIndex, SourceIndices.Num());
-				InAccessor->GetRange(InRange, 0, *Source->GetInKeys());
-
-				PCGExMT::Write(AsyncManager, TargetBuffer);
-			});
-	}
-
 #pragma endregion
 
 	static TSharedPtr<FFacade> TryGetSingleFacade(FPCGExContext* InContext, const FName InputPinLabel, const bool bThrowError)
@@ -953,5 +1003,55 @@ namespace PCGExData
 		}
 
 		return SingleFacade;
+	}
+
+	static bool TryGetFacades(FPCGExContext* InContext, const FName InputPinLabel, TArray<TSharedPtr<FFacade>>& OutFacades, const bool bThrowError)
+	{
+		TSharedPtr<PCGExData::FPointIOCollection> TargetsCollection = MakeShared<PCGExData::FPointIOCollection>(InContext, PCGEx::SourceTargetsLabel, PCGExData::EIOInit::None);
+		if (TargetsCollection->IsEmpty())
+		{
+			if (bThrowError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FText::FromString(TEXT("Missing or zero-points '{0}' inputs")), FText::FromName(InputPinLabel))); }
+			return false;
+		}
+
+		OutFacades.Reserve(OutFacades.Num() + TargetsCollection->Num());
+		for (const TSharedPtr<FPointIO>& IO : TargetsCollection->Pairs) { OutFacades.Add(MakeShared<FFacade>(IO.ToSharedRef())); }
+
+		return true;
+	}
+
+	template <bool bReverse = false>
+	static void GetTransforms(const TArray<FPCGPoint>& InPoints, TArray<FTransform>& OutTransforms)
+	{
+		PCGEx::InitArray(OutTransforms, InPoints.Num());
+		const int32 MaxIndex = InPoints.Num() - 1;
+		if constexpr (bReverse) { for (int i = 0; i <= MaxIndex; i++) { OutTransforms[i] = InPoints[i].Transform; } }
+		else { for (int i = 0; i <= MaxIndex; i++) { OutTransforms[MaxIndex - i] = InPoints[i].Transform; } }
+	}
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteBufferTask final : public PCGExMT::FTask
+	{
+	public:
+		PCGEX_ASYNC_TASK_NAME(FWriteTask)
+
+		explicit FWriteBufferTask(const TSharedPtr<FBufferBase>& InBuffer, const bool InEnsureValidKeys = true)
+			: FTask(), bEnsureValidKeys(InEnsureValidKeys), Buffer(InBuffer)
+		{
+		}
+
+		bool bEnsureValidKeys = true;
+		TSharedPtr<FBufferBase> Buffer;
+
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override
+		{
+			if (!Buffer) { return; }
+			Buffer->Write(bEnsureValidKeys);
+		}
+	};
+
+	static void WriteBuffer(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const TSharedPtr<FBufferBase>& InBuffer, const bool InEnsureValidKeys = true)
+	{
+		if (!AsyncManager || !AsyncManager->IsAvailable()) { InBuffer->Write(InEnsureValidKeys); }
+		PCGEX_LAUNCH(FWriteBufferTask, InBuffer, InEnsureValidKeys)
 	}
 }

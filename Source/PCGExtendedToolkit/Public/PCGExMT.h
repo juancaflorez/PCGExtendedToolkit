@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -17,477 +17,577 @@
 #include "PCGExMacros.h"
 #include "PCGExGlobalSettings.h"
 #include "Data/PCGExPointIO.h"
+#include "Tasks/Task.h"
+
 
 #pragma region MT MACROS
 
+#ifndef PCGEX_MT_MACROS
+#define PCGEX_MT_MACROS
+
+#define PCGEX_ASYNC_TASK_NAME(_NAME) virtual FString HandleId() const override { return TEXT(""#_NAME); }
+
 #define PCGEX_ASYNC_GROUP_CHKD_VOID(_MANAGER, _NAME) \
-	TSharedPtr<PCGExMT::FTaskGroup> _NAME = _MANAGER ? _MANAGER->TryCreateGroup(FName(#_NAME)) : nullptr; \
+	TSharedPtr<PCGExMT::FTaskGroup> _NAME = _MANAGER ? _MANAGER->TryCreateTaskGroup(FName(#_NAME)) : nullptr; \
 	if(!_NAME){ return; }
+
 #define PCGEX_ASYNC_GROUP_CHKD(_MANAGER, _NAME) \
-	TSharedPtr<PCGExMT::FTaskGroup> _NAME= _MANAGER ? _MANAGER->TryCreateGroup(FName(#_NAME)) : nullptr; \
+	TSharedPtr<PCGExMT::FTaskGroup> _NAME= _MANAGER ? _MANAGER->TryCreateTaskGroup(FName(#_NAME)) : nullptr; \
 	if(!_NAME){ return false; }
 
+#define PCGEX_ASYNC_GROUP_CHKD_CUSTOM(_MANAGER, _NAME, _RET) \
+	TSharedPtr<PCGExMT::FTaskGroup> _NAME= _MANAGER ? _MANAGER->TryCreateTaskGroup(FName(#_NAME)) : nullptr; \
+	if(!_NAME){ return _RET; }
+
+#define PCGEX_ASYNC_RELEASE_TOKEN(_TOKEN) if(const TSharedPtr<PCGExMT::FAsyncToken> Token = _TOKEN.Pin()){ Token->Release(); _TOKEN.Reset(); }
+#define PCGEX_ASYNC_RELEASE_TOKEN_ELSE(_TOKEN) if(const TSharedPtr<PCGExMT::FAsyncToken> Token = _TOKEN.Pin()){ Token->Release(); _TOKEN.Reset(); }else
+
+#define PCGEX_SHARED_THIS_DECL TSharedPtr<std::remove_reference_t<decltype(*this)>> ThisPtr = SharedThis(this);
+#define PCGEX_ASYNC_THIS_DECL TWeakPtr<std::remove_reference_t<decltype(*this)>> AsyncThis = SharedThis(this);
+#define PCGEX_ASYNC_THIS_CAPTURE AsyncThis = TWeakPtr<std::remove_reference_t<decltype(*this)>>(SharedThis(this))
+#define PCGEX_ASYNC_THIS const TSharedPtr<std::remove_reference_t<decltype(*this)>> This = AsyncThis.Pin(); if (!This) { return; }
+#define PCGEX_ASYNC_NESTED_THIS const TSharedPtr<std::remove_reference_t<decltype(*this)>> NestedThis = AsyncThis.Pin(); if (!NestedThis) { return; }
+
+#define PCGEX_ASYNC_CHKD_VOID(_MANAGER) if (!_MANAGER->IsAvailable()) { return; }
+#define PCGEX_ASYNC_CHKD(_MANAGER) if (!_MANAGER->IsAvailable()) { return false; }
+
+#define PCGEX_LAUNCH(_CLASS, ...) PCGEX_MAKE_SHARED(Task, _CLASS, __VA_ARGS__); AsyncManager->Launch<_CLASS>(Task);
+#define PCGEX_LAUNCH_INTERNAL(_CLASS, ...) PCGEX_MAKE_SHARED(Task, _CLASS, __VA_ARGS__); Launch<_CLASS>(Task);
+
+#endif
 #pragma endregion
 
 namespace PCGExMT
 {
-	static void SetWorkPriority(const EPCGExAsyncPriority Selection, EQueuedWorkPriority& Priority)
+	using FCompletionCallback = std::function<void()>;
+	using FSimpleCallback = std::function<void()>;
+
+	static void SetWorkPriority(const EPCGExAsyncPriority Selection, UE::Tasks::ETaskPriority& Priority)
 	{
 		switch (Selection)
 		{
-		case EPCGExAsyncPriority::Blocking:
-			Priority = EQueuedWorkPriority::Blocking;
-			break;
-		case EPCGExAsyncPriority::Highest:
-			Priority = EQueuedWorkPriority::Highest;
-			break;
-		case EPCGExAsyncPriority::High:
-			Priority = EQueuedWorkPriority::High;
-			break;
 		default:
-		case EPCGExAsyncPriority::Normal:
-			Priority = EQueuedWorkPriority::Normal;
-			break;
-		case EPCGExAsyncPriority::Low:
-			Priority = EQueuedWorkPriority::Low;
-			break;
-		case EPCGExAsyncPriority::Lowest:
-			Priority = EQueuedWorkPriority::Lowest;
-			break;
 		case EPCGExAsyncPriority::Default:
 			SetWorkPriority(GetDefault<UPCGExGlobalSettings>()->GetDefaultWorkPriority(), Priority);
+			break;
+		case EPCGExAsyncPriority::Normal:
+			Priority = UE::Tasks::ETaskPriority::Normal;
+			break;
+		case EPCGExAsyncPriority::High:
+			Priority = UE::Tasks::ETaskPriority::High;
+			break;
+		case EPCGExAsyncPriority::BackgroundHigh:
+			Priority = UE::Tasks::ETaskPriority::BackgroundHigh;
+			break;
+		case EPCGExAsyncPriority::BackgroundNormal:
+			Priority = UE::Tasks::ETaskPriority::BackgroundNormal;
+			break;
+		case EPCGExAsyncPriority::BackgroundLow:
+			Priority = UE::Tasks::ETaskPriority::BackgroundLow;
 			break;
 		}
 	}
 
-	constexpr int32 GAsyncLoop_XS = 32;
-	constexpr int32 GAsyncLoop_S = 64;
-	constexpr int32 GAsyncLoop_M = 256;
-	constexpr int32 GAsyncLoop_L = 512;
-	constexpr int32 GAsyncLoop_XL = 1024;
+	struct FScope
+	{
+		int32 Start = -1;
+		int32 Count = -1;
+		int32 End = -1;
+		int32 LoopIndex = -1;
 
-	static int32 SubRanges(TArray<uint64>& OutSubRanges, const int32 MaxItems, const int32 RangeSize)
+		FScope() = default;
+
+		FScope(const int32 InStart, const int32 InCount, const int32 InLoopIndex = -1)
+			: Start(InStart), Count(InCount), End(InStart + InCount), LoopIndex(InLoopIndex)
+		{
+		}
+
+		~FScope() = default;
+		bool IsValid() const { return Start != -1 && Count > 0; }
+		int32 GetNextScopeIndex() const { return LoopIndex + 1; }
+	};
+
+	static int32 SubLoopScopes(TArray<FScope>& OutSubRanges, const int32 MaxItems, const int32 RangeSize)
 	{
 		OutSubRanges.Empty();
 		OutSubRanges.Reserve((MaxItems + RangeSize - 1) / RangeSize);
 
 		for (int32 CurrentCount = 0; CurrentCount < MaxItems; CurrentCount += RangeSize)
 		{
-			OutSubRanges.Add(PCGEx::H64(CurrentCount, FMath::Min(RangeSize, MaxItems - CurrentCount)));
+			OutSubRanges.Emplace(CurrentCount, FMath::Min(RangeSize, MaxItems - CurrentCount), OutSubRanges.Num());
 		}
 
 		return OutSubRanges.Num();
 	}
 
-	class FPCGExTask;
-	class FTaskGroup;
-	class FGroupRangeCallbackTask;
-
-	class /*PCGEXTENDEDTOOLKIT_API*/ FTaskManager : public TSharedFromThis<FTaskManager>
+	enum class EAsyncHandleState : uint8
 	{
-		friend class FPCGExTask;
-		friend class FPCGExDeferredUnpauseTask;
-		friend class FTaskGroup;
-
-	public:
-		FTaskManager(FPCGExContext* InContext)
-			: Context(InContext)
-		{
-			PCGEX_LOG_CTR(FTaskManager)
-		}
-
-		~FTaskManager();
-
-		EQueuedWorkPriority WorkPriority = EQueuedWorkPriority::Normal;
-
-		mutable FRWLock ManagerLock;
-		mutable FRWLock PauseLock;
-		mutable FRWLock GroupLock;
-
-		FPCGExContext* Context = nullptr;
-
-		int8 Stopped = 0;
-		int8 ForceSync = 0;
-
-		void GrowNumStarted();
-		void GrowNumCompleted();
-
-		TSharedPtr<FTaskGroup> TryCreateGroup(const FName& GroupName);
-
-		FORCEINLINE bool IsAvailable() const { return Stopped ? false : true; }
-
-		template <typename T, typename... Args>
-		void Start(const int32 TaskIndex, const TSharedPtr<PCGExData::FPointIO>& InPointsIO, Args&&... InArgs)
-		{
-			if (!IsAvailable()) { return; }
-
-			FAsyncTask<T>* UniqueTask = new FAsyncTask<T>(InPointsIO, std::forward<Args>(InArgs)...);
-			if (ForceSync) { StartSynchronousTask<T>(UniqueTask, TaskIndex); }
-			else { StartBackgroundTask<T>(UniqueTask, TaskIndex); }
-		}
-
-		template <typename T, typename... Args>
-		void StartSynchronous(int32 TaskIndex, const TSharedPtr<PCGExData::FPointIO>& InPointsIO, Args&&... InArgs)
-		{
-			if (!IsAvailable()) { return; }
-
-			FAsyncTask<T>* UniqueTask = new FAsyncTask<T>(InPointsIO, std::forward<Args>(InArgs)...);
-			StartSynchronousTask(UniqueTask, TaskIndex);
-		}
-
-		template <typename T>
-		void StartBackgroundTask(FAsyncTask<T>* AsyncTask, int32 TaskIndex = -1)
-		{
-			if (!IsAvailable())
-			{
-				delete AsyncTask;
-				return;
-			}
-
-			GrowNumStarted();
-
-			{
-				FWriteScopeLock WriteLock(ManagerLock);
-				QueuedTasks.Add(AsyncTask);
-			}
-
-			T& Task = AsyncTask->GetTask();
-			//Task.TaskPtr = AsyncTask;
-			Task.ManagerPtr = SharedThis(this);
-			Task.TaskIndex = TaskIndex;
-
-			AsyncTask->StartBackgroundTask(GThreadPool, WorkPriority);
-		}
-
-		template <typename T>
-		void StartSynchronousTask(FAsyncTask<T>* AsyncTask, int32 TaskIndex = -1)
-		{
-			if (!IsAvailable())
-			{
-				delete AsyncTask;
-				return;
-			}
-
-			GrowNumStarted();
-
-			T& Task = AsyncTask->GetTask();
-			//Task.TaskPtr = AsyncTask;
-			Task.ManagerPtr = SharedThis(this);
-			Task.TaskIndex = TaskIndex;
-			Task.bIsAsync = false;
-
-			Task.DoWork();
-			delete AsyncTask;
-		}
-
-		void Reserve(const int32 NumTasks)
-		{
-			FWriteScopeLock WriteLock(ManagerLock);
-			QueuedTasks.Reserve(QueuedTasks.Num() + NumTasks);
-		}
-
-		bool IsWorkComplete() const;
-
-		void Reset(const bool bHoldStop = false);
-
-		template <typename T>
-		T* GetContext() { return static_cast<T*>(Context); }
-
-	protected:
-		int32 NumStarted = 0;
-		int32 NumCompleted = 0;
-		TArray<FAsyncTaskBase*> QueuedTasks;
-		TArray<TSharedPtr<FTaskGroup>> Groups;
-
-		int8 CompletionScheduled = 0;
-		int8 WorkComplete = 1;
-		void ScheduleCompletion();
-		void TryComplete();
+		Idle    = 0,
+		Running = 1,
+		Ended   = 2,
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FTaskGroup : public TSharedFromThis<FTaskGroup>
+	class FAsyncMultiHandle;
+	class FAsyncToken;
+	class FTask;
+	class FTaskGroup;
+
+
+	template <typename T>
+	class /*PCGEXTENDEDTOOLKIT_API*/ TScopedArray final : public TSharedFromThis<TScopedArray<T>>
 	{
-		friend class FTaskManager;
+	public:
+		TArray<TSharedPtr<TArray<T>>> Values;
 
-		friend class FPCGExTask;
-		friend class FSimpleCallbackTask;
-		friend class FGroupRangeCallbackTask;
-		friend class FGroupPrepareRangeTask;
-		friend class FGroupRangeIterationTask;
-		friend class FGroupPrepareRangeInlineTask;
-		friend class FGroupRangeInlineIterationTask;
+		explicit TScopedArray(const TArray<FScope>& InScopes, const T InDefaultValue)
+		{
+			Values.Reserve(InScopes.Num());
+			for (const FScope& Scope : InScopes) { Values[Values.Add(MakeShared<TArray<T>>())]->Init(InDefaultValue, Scope.Count); }
+		};
 
+		explicit TScopedArray(const TArray<FScope>& InScopes)
+		{
+			Values.Reserve(InScopes.Num());
+			for (int i = 0; i < InScopes.Num(); i++) { Values.Add(MakeShared<TArray<T>>()); }
+		};
+
+		virtual ~TScopedArray() = default;
+
+		FORCEINLINE TSharedPtr<TArray<T>> Get(const FScope& InScope) { return Values[InScope.LoopIndex]; }
+		FORCEINLINE TArray<T>& Get_Ref(const FScope& InScope) { return *Values[InScope.LoopIndex].Get(); }
+
+		using FForEachFunc = std::function<void (TArray<T>&)>;
+		FORCEINLINE void ForEach(FForEachFunc&& Func) { for (int i = 0; i < Values.Num(); i++) { Func(*Values[i].Get()); } }
+	};
+
+	template <typename T>
+	class /*PCGEXTENDEDTOOLKIT_API*/ TScopedSet final : public TSharedFromThis<TScopedSet<T>>
+	{
+	public:
+		TArray<TSharedPtr<TSet<T>>> Sets;
+
+		explicit TScopedSet(const TArray<FScope>& InScopes, const T InReserve)
+		{
+			Sets.Reserve(InScopes.Num());
+			for (int i = 0; i < InScopes.Num(); i++) { Sets.Add_GetRef(MakeShared<TSet<T>>())->Reserve(InReserve); }
+		};
+
+		virtual ~TScopedSet() = default;
+
+		FORCEINLINE TSharedPtr<TSet<T>> Get(const FScope& InScope) { return Sets[InScope.LoopIndex]; }
+		FORCEINLINE TSet<T>& Get_Ref(const FScope& InScope) { return *Sets[InScope.LoopIndex].Get(); }
+
+		using FForEachFunc = std::function<void (TSet<T>&)>;
+		FORCEINLINE void ForEach(FForEachFunc&& Func) { for (int i = 0; i < Sets.Num(); i++) { Func(*Sets[i].Get()); } }
+	};
+
+	template <typename T>
+	class /*PCGEXTENDEDTOOLKIT_API*/ TScopedValue final : public TSharedFromThis<TScopedValue<T>>
+	{
+	public:
+		TArray<T> Values;
+
+		using FFlattenFunc = std::function<T(const T&, const T&)>;
+
+		explicit TScopedValue(const TArray<FScope>& InScopes, const T InDefaultValue)
+		{
+			Values.Init(InDefaultValue, InScopes.Num());
+		};
+
+		virtual ~TScopedValue() = default;
+
+		FORCEINLINE T Get(const FScope& InScope) { return Values[InScope.LoopIndex]; }
+		FORCEINLINE T& GetMutable(const FScope& InScope) { return Values[InScope.LoopIndex]; }
+		FORCEINLINE T Set(const FScope& InScope, const T& InValue) { return Values[InScope.LoopIndex] = InValue; }
+
+		FORCEINLINE T Flatten(FFlattenFunc&& Func)
+		{
+			T Result = Values[0];
+			if (Values.Num() > 1) { for (int i = 1; i < Values.Num(); i++) { Result = Func(Values[i], Result); } }
+			return Result;
+		}
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FAsyncHandle : public TSharedFromThis<FAsyncHandle>
+	{
+	protected:
+		TWeakPtr<FAsyncMultiHandle> Root;
+		TWeakPtr<FAsyncMultiHandle> ParentHandle;
+
+		std::atomic<bool> bIsCancelled{false};
+		std::atomic<EAsyncHandleState> State{EAsyncHandleState::Idle};
+
+	public:
+		int32 HandleIdx = -1;
+		virtual FString HandleId() const { return TEXT("NOT IMPLEMENTED"); }
+
+		FAsyncHandle() = default;
+		virtual ~FAsyncHandle();
+
+		bool IsCancelled() const { return bIsCancelled.load(std::memory_order_acquire); }
+
+		virtual void SetRoot(const TSharedPtr<FAsyncMultiHandle>& InRoot, int32 InHandleIdx = -1);
+		void SetParent(const TSharedPtr<FAsyncMultiHandle>& InParent);
+
+		virtual bool Start();    // Return whether the task is running or not
+		virtual bool Cancel();   // Return whether the task is ended or not
+		virtual bool Complete(); // Return whether the task is ended or not
+
+		void SetState(const EAsyncHandleState NewState) { State.store(NewState, std::memory_order_release); }
+		EAsyncHandleState GetState() const { return State.load(std::memory_order_acquire); }
+
+	protected:
+		bool CompareAndSetState(EAsyncHandleState& ExpectedState, EAsyncHandleState NewState);
+		virtual void End(bool bIsCancellation);
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FAsyncMultiHandle : public FAsyncHandle
+	{
+	protected:
+		bool bForceSync = false;
 		FName GroupName = NAME_None;
 
 	public:
-		int8 bAvailable = 1;
-		using SimpleCallback = std::function<void()>;
+		explicit FAsyncMultiHandle(const bool InForceSync, const FName InName);
+		virtual ~FAsyncMultiHandle() override;
 
-		using CompletionCallback = std::function<void()>;
-		CompletionCallback OnCompleteCallback;
+		FCompletionCallback OnCompleteCallback; // Only called with handle was not cancelled
 
-		using IterationCallback = std::function<void(const int32, const int32, const int32)>;
-		IterationCallback OnIterationCallback;
+		virtual void SetRoot(const TSharedPtr<FAsyncMultiHandle>& InRoot, int32 InHandleIdx) override;
 
-		using PrepareSubLoopsCallback = std::function<void(const TArray<uint64>&)>;
-		PrepareSubLoopsCallback OnPrepareSubLoopsCallback;
+		void IncrementPendingTasks();
+		void IncrementCompletedTasks();
 
-		using SubLoopStartCallback = std::function<void(const int32, const int32, const int32)>;
-		SubLoopStartCallback OnSubLoopStartCallback;
+		virtual bool IsAvailable() const;
 
-		explicit FTaskGroup(const TSharedPtr<FTaskManager>& InManager, const FName InGroupName):
-			GroupName(InGroupName), Manager(InManager)
+		template <typename T>
+		void Launch(const TSharedPtr<T>& InTask)
 		{
-			InManager->GrowNumStarted();
+			if (bForceSync) { StartSynchronousTask(InTask); }
+			else { StartBackgroundTask(InTask); }
 		}
 
-		~FTaskGroup()
-		{
-		}
+	protected:
+		std::atomic<int32> ExpectedTaskCount = {0};
+		std::atomic<int32> PendingTaskCount{0};
+		std::atomic<int32> CompletedTaskCount{0};
 
-		bool IsAvailable() const;
+		void SetExpectedTaskCount(const int32 InCount) { ExpectedTaskCount.store(InCount, std::memory_order_release); }
+
+		virtual void HandleTaskStart();
+
+		virtual void StartBackgroundTask(const TSharedPtr<FTask>& InTask);
+		virtual void StartSynchronousTask(const TSharedPtr<FTask>& InTask);
+
+		virtual void End(bool bIsCancellation) override;
+		virtual void Reset();
+	};
+
+	class FAsyncToken final : public TSharedFromThis<FAsyncToken>
+	{
+		std::atomic<bool> bIsReleased{false};
+		TWeakPtr<FAsyncMultiHandle> Handle;
+		FName Name = NAME_None;
+
+	public:
+		FAsyncToken(const TWeakPtr<FAsyncMultiHandle>& InHandle, const FName& InName);
+		~FAsyncToken();
+
+		void Release();
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FTaskManager : public FAsyncMultiHandle
+	{
+		friend class FTask;
+		friend class FTaskGroup;
+
+		mutable FRWLock TasksLock;
+		mutable FRWLock GroupsLock;
+		mutable FRWLock TokensLock;
+
+		TWeakPtr<PCGEx::FWorkPermit> WorkPermit;
+
+		FPCGExContext* Context = nullptr;
+
+	public:
+		UE::Tasks::ETaskPriority WorkPriority = UE::Tasks::ETaskPriority::Default;
+
+		explicit FTaskManager(FPCGExContext* InContext, bool InForceSync = false);
+		virtual ~FTaskManager() override;
+
+		virtual bool IsAvailable() const override;
+
+		bool IsWaitingForRunningTasks() const;
+
+		template <typename T>
+		T* GetContext() const { return static_cast<T*>(Context); }
+
+		FPCGExContext* GetContext() const { return Context; }
+
+		virtual bool Start() override;
+		virtual bool Cancel() override;
+
+		virtual void Reset() override;
+
+		void ReserveTasks(const int32 NumTasks);
+
+		TSharedPtr<FTaskGroup> TryCreateTaskGroup(const FName& InName);
+		TWeakPtr<FAsyncToken> TryCreateToken(const FName& TokenName);
+
+		void DeferredReset(FSimpleCallback&& Callback);
+		void DeferredResumeExecution(FSimpleCallback&& Callback) const;
+
+	protected:
+		std::atomic<bool> bIsCancelling{false};
+		bool IsCancelling() const { return bIsCancelling.load(std::memory_order_acquire); }
+
+		std::atomic<bool> bIsResetting{false};
+		bool IsResetting() const { return bIsResetting.load(std::memory_order_acquire); }
+
+		TArray<TWeakPtr<FTask>> Tasks;
+		TArray<TSharedPtr<FTaskGroup>> Groups;
+		TArray<TSharedPtr<FAsyncToken>> Tokens;
+
+		virtual void HandleTaskStart() override;
+		virtual void End(bool bIsCancellation) override;
+
+		virtual void StartBackgroundTask(const TSharedPtr<FTask>& InTask) override;
+		virtual void StartSynchronousTask(const TSharedPtr<FTask>& InTask) override;
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FTaskGroup final : public FAsyncMultiHandle
+	{
+		friend class FTaskManager;
+
+		friend class FTask;
+		friend class FSimpleCallbackTask;
+		friend class FScopeIterationTask;
+		friend class FDaisyChainScopeIterationTask;
+
+	public:
+		using FIterationCallback = std::function<void(const int32, const FScope&)>;
+		FIterationCallback OnIterationCallback;
+
+		using FPrepareSubLoopsCallback = std::function<void(const TArray<FScope>&)>;
+		FPrepareSubLoopsCallback OnPrepareSubLoopsCallback;
+
+		using FSubLoopStartCallback = std::function<void(const FScope&)>;
+		FSubLoopStartCallback OnSubLoopStartCallback;
+
+		explicit FTaskGroup(const bool InForceSync, const FName InName);
 
 		template <typename T, typename... Args>
-		void StartRanges(const int32 MaxItems, const int32 ChunkSize, const TSharedPtr<PCGExData::FPointIO>& InPointsIO, Args&&... InArgs)
+		void StartRanges(const int32 MaxItems, const int32 ChunkSize, const bool bPrepareOnly, Args&&... InArgs)
 		{
 			if (!IsAvailable()) { return; }
 
-			TArray<uint64> Loops;
-			GrowNumStarted(SubRanges(Loops, MaxItems, ChunkSize));
+			const TSharedPtr<FAsyncMultiHandle> PinnedRoot = Root.Pin();
+			if (!PinnedRoot) { return; }
+
+			if (MaxItems <= 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("StartRanges: MaxItems = %i"), MaxItems);
+				return;
+			}
+
+			check(MaxItems > 0);
+
+			// Compute sub scopes
+			SetExpectedTaskCount(SubLoopScopes(Loops, MaxItems, FMath::Max(1, ChunkSize)));
+			StaticCastSharedPtr<FTaskManager>(PinnedRoot)->ReserveTasks(Loops.Num());
 
 			if (OnPrepareSubLoopsCallback) { OnPrepareSubLoopsCallback(Loops); }
 
-			TSharedPtr<FTaskGroup> SharedPtr = SharedThis(this);
-			int32 LoopIdx = 0;
-			for (const uint64 H : Loops)
-			{
-				FAsyncTask<T>* ATask = new FAsyncTask<T>(InPointsIO, std::forward<Args>(InArgs)...);
-				ATask->GetTask().GroupPtr = SharedPtr;
-				ATask->GetTask().Scope = H;
+			const TSharedPtr<FTaskGroup> Self = SharedThis(this);
 
-				if (Manager->ForceSync) { Manager->StartSynchronousTask<T>(ATask, LoopIdx++); }
-				else { Manager->StartBackgroundTask<T>(ATask, LoopIdx++); }
+			for (const FScope& Scope : Loops)
+			{
+				PCGEX_MAKE_SHARED(Task, T, std::forward<Args>(InArgs)...)
+				Task->bPrepareOnly = bPrepareOnly;
+				Task->Scope = Scope;
+
+				Launch(Task);
 			}
+
+			Loops.Empty();
 		}
 
-		void StartIterations(const int32 MaxItems, const int32 ChunkSize, const bool bInlined = false, const bool bExecuteSmallSynchronously = true);
+		void StartIterations(const int32 MaxItems, const int32 ChunkSize, const bool bDaisyChain = false);
+		void StartSubLoops(const int32 MaxItems, const int32 ChunkSize, const bool bDaisyChain = false);
 
-		void StartSubLoops(const int32 MaxItems, const int32 ChunkSize, const bool bInline = false);
-
-		void AddSimpleCallback(SimpleCallback&& InCallback);
+		void AddSimpleCallback(FSimpleCallback&& InCallback);
 		void StartSimpleCallbacks();
+		void TriggerSimpleCallback(const int32 Index);
 
-		void GrowNumStarted(const int32 InNumStarted = 1);
-		void GrowNumCompleted();
+		const TArray<FScope>& GetLoopScopes() const { return Loops; }
+		const FScope& GetLoopScope(int32 Index) const { return Loops[Index]; }
 
 	protected:
-		TArray<SimpleCallback> SimpleCallbacks;
+		bool bDaisyChained = false;
+		TArray<FSimpleCallback> SimpleCallbacks;
+		TArray<FScope> Loops;
 
-		TSharedPtr<FTaskManager> Manager;
-
-		mutable FRWLock GroupLock;
-		mutable FRWLock TrackingLock;
-
-		int32 NumStarted = 0;
-		int32 NumCompleted = 0;
-
-		void PrepareRangeIteration(const int32 StartIndex, const int32 Count, const int32 LoopIdx) const;
-		void DoRangeIteration(const int32 StartIndex, const int32 Count, const int32 LoopIdx) const;
-
-		template <typename T, typename... Args>
-		void InternalStart(const bool bGrowNumStarted, const int32 TaskIndex, const TSharedPtr<PCGExData::FPointIO>& InPointsIO, Args&&... InArgs)
-		{
-			if (!Manager->IsAvailable()) { return; }
-
-			if (bGrowNumStarted) { GrowNumStarted(); }
-			FAsyncTask<T>* ATask = new FAsyncTask<T>(InPointsIO, std::forward<Args>(InArgs)...);
-			ATask->GetTask().GroupPtr = SharedThis(this);
-			if (Manager->ForceSync) { Manager->StartSynchronousTask<T>(ATask, TaskIndex); }
-			else { Manager->StartBackgroundTask<T>(ATask, TaskIndex); }
-		}
+		void ExecScopeIterations(const FScope& Scope, bool bPrepareOnly) const;
 
 		template <typename T>
-		void InternalStartInlineRange(const int32 Index, const TArray<uint64>& Loops)
+		void LaunchWithPreparation(TSharedPtr<T> InTask, const bool bPrepareOnly)
 		{
-			FAsyncTask<T>* NextRange = new FAsyncTask<T>(nullptr);
-			NextRange->GetTask().GroupPtr = SharedThis(this);
-			NextRange->GetTask().Loops = Loops;
-
-			if (Manager->ForceSync) { Manager->StartSynchronousTask<T>(NextRange, Index); }
-			else { Manager->StartBackgroundTask<T>(NextRange, Index); }
+			InTask->bPrepareOnly = bPrepareOnly;
+			Launch(InTask);
 		}
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTask : public FNonAbandonableTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FTask : public FAsyncHandle
 	{
 		friend class FTaskManager;
 		friend class FTaskGroup;
 
-	protected:
-		bool bIsAsync = true;
+		mutable FRWLock StateLock;
 
 	public:
-		virtual ~FPCGExTask() = default;
+		FTask() = default;
 
-		TWeakPtr<FTaskManager> ManagerPtr;
-		TWeakPtr<FTaskGroup> GroupPtr;
-		int32 TaskIndex = -1;
-		//FAsyncTaskBase* TaskPtr = nullptr;
-		TSharedPtr<PCGExData::FPointIO> PointIO;
-
-		FPCGExTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO)
-			: PointIO(InPointIO)
-		{
-		}
-
-		FORCEINLINE TStatId GetStatId() const
-		{
-			RETURN_QUICK_DECLARE_CYCLE_STAT(FPCGExAsyncTask, STATGROUP_ThreadPoolAsyncTasks);
-		}
-
-		void DoWork();
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) = 0;
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) = 0;
 
 	protected:
-		bool bWorkDone = false;
-
-		template <typename T, typename... Args>
-		void InternalStart(int32 InTaskIndex, const TSharedPtr<PCGExData::FPointIO>& InPointsIO, Args&&... InArgs)
+		template <typename T>
+		void Launch(const TSharedPtr<T>& InTask)
 		{
-			if (const TSharedPtr<FTaskGroup> Group = GroupPtr.Pin())
+			if (const TSharedPtr<FAsyncMultiHandle> PinnedParent = ParentHandle.Pin())
 			{
-				Group->InternalStart<T>(true, InTaskIndex, InPointsIO, std::forward<Args>(InArgs)...);
+				PinnedParent->Launch<T>(InTask);
 			}
-			else if (const TSharedPtr<FTaskManager> Manager = ManagerPtr.Pin())
+			else if (const TSharedPtr<FAsyncMultiHandle> PinnedRoot = Root.Pin())
 			{
-				Manager->Start<T>(InTaskIndex, InPointsIO, std::forward<Args>(InArgs)...);
+				PinnedRoot->Launch<T>(InTask);
 			}
 		}
 	};
 
-	class FSimpleCallbackTask final : public FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExIndexedTask : public FTask
 	{
+	protected:
+		int32 TaskIndex;
+
 	public:
-		explicit FSimpleCallbackTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
+		PCGEX_ASYNC_TASK_NAME(FPCGExIndexedTask)
+
+		explicit FPCGExIndexedTask(const int32 InTaskIndex)
+			: FTask(), TaskIndex(InTaskIndex)
 		{
-		}
-
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	class FGroupRangeCallbackTask final : public FPCGExTask
-	{
-	public:
-		explicit FGroupRangeCallbackTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
-		{
-		}
-
-		int32 NumIterations = 0;
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	class FGroupRangeIterationTask final : public FPCGExTask
-	{
-	public:
-		explicit FGroupRangeIterationTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
-		{
-		}
-
-		uint64 Scope = 0;
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	class FGroupPrepareRangeTask final : public FPCGExTask
-	{
-	public:
-		explicit FGroupPrepareRangeTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
-		{
-		}
-
-		uint64 Scope = 0;
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	class FGroupPrepareRangeInlineTask final : public FPCGExTask
-	{
-	public:
-		explicit FGroupPrepareRangeInlineTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
-		{
-		}
-
-		TArray<uint64> Loops;
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	class FGroupRangeInlineIterationTask final : public FPCGExTask
-	{
-	public:
-		explicit FGroupRangeInlineIterationTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO):
-			FPCGExTask(InPointIO)
-		{
-		}
-
-		TArray<uint64> Loops;
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
-	};
-
-	template <typename T>
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteTask final : public FPCGExTask
-	{
-	public:
-		FWriteTask(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-		           const TSharedPtr<T>& InOperation)
-			: FPCGExTask(InPointIO),
-			  Operation(InOperation)
-
-		{
-		}
-
-		TSharedPtr<T> Operation;
-
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override
-		{
-			if (!Operation) { return false; }
-			Operation->Write();
-			return true;
 		}
 	};
 
-	template <typename T>
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteTaskWithManager final : public FPCGExTask
+	class FSimpleCallbackTask final : public FPCGExIndexedTask
 	{
 	public:
-		FWriteTaskWithManager(const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-		                      const TSharedPtr<T>& InOperation)
-			: FPCGExTask(InPointIO),
-			  Operation(InOperation)
+		PCGEX_ASYNC_TASK_NAME(FSimpleCallbackTask)
 
+		explicit FSimpleCallbackTask(const int32 InTaskIndex):
+			FPCGExIndexedTask(InTaskIndex)
 		{
 		}
 
-		TSharedPtr<T> Operation;
-
-		virtual bool ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override
-		{
-			if (!Operation) { return false; }
-			Operation->Write(AsyncManager);
-			return true;
-		}
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
 	};
 
-	template <typename T, bool bWithManager = false>
-	static void Write(const TSharedPtr<FTaskManager>& AsyncManager, const TSharedPtr<T>& Operation)
+	class FScopeIterationTask : public FTask
 	{
-		if (!AsyncManager || !AsyncManager->IsAvailable()) { Operation->Write(); }
-		else
+	public:
+		PCGEX_ASYNC_TASK_NAME(FScopeIterationTask)
+
+		explicit FScopeIterationTask() : FTask()
 		{
-			if constexpr (bWithManager) { AsyncManager->Start<FWriteTaskWithManager<T>>(-1, nullptr, Operation); }
-			else { AsyncManager->Start<FWriteTask<T>>(-1, nullptr, Operation); }
+		}
+
+		bool bPrepareOnly = false;
+		FScope Scope = FScope{};
+
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
+	};
+
+	class FDaisyChainScopeIterationTask final : public FPCGExIndexedTask
+	{
+	public:
+		explicit FDaisyChainScopeIterationTask(const int32 InTaskIndex):
+			FPCGExIndexedTask(InTaskIndex)
+		{
+		}
+
+		bool bPrepareOnly = false;
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FDeferredCallbackTask final : public FTask
+	{
+	public:
+		PCGEX_ASYNC_TASK_NAME(FDeferredCallbackTask)
+
+		FDeferredCallbackTask(FSimpleCallback&& InCallback)
+			: FTask(), Callback(InCallback)
+		{
+		}
+
+		FSimpleCallback Callback;
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
+	};
+
+	class /*PCGEXTENDEDTOOLKIT_API*/ FDeferredCallbackWithManagerTask final : public FTask
+	{
+	public:
+		PCGEX_ASYNC_TASK_NAME(FDeferredCallbackWithManagerTask)
+
+		using FSimpleCallbackWithManager = std::function<void(const TSharedPtr<FTaskManager>&)>;
+
+		FDeferredCallbackWithManagerTask(FSimpleCallbackWithManager&& InCallback)
+			: FTask(), Callback(InCallback)
+		{
+		}
+
+		FSimpleCallbackWithManager Callback;
+		virtual void ExecuteTask(const TSharedPtr<FTaskManager>& AsyncManager) override;
+	};
+
+	//
+
+	class FDeferredCallbackHandle : public FAsyncHandle
+	{
+	public:
+		FSimpleCallback Callback;
+
+		explicit FDeferredCallbackHandle() : FAsyncHandle()
+		{
+		}
+
+		virtual bool Start() override;
+	};
+
+	static TSharedPtr<FDeferredCallbackHandle> DeferredCallback(FPCGExContext* InContext, FSimpleCallback&& InCallback)
+	{
+		TSharedPtr<FDeferredCallbackHandle> DeferredCallback = MakeShared<FDeferredCallbackHandle>();
+		DeferredCallback->Callback = InCallback;
+
+		TWeakPtr<FDeferredCallbackHandle> WeakTask = DeferredCallback;
+		UE::Tasks::Launch(
+				TEXT("DeferredCallback"),
+				[WeakTask]()
+				{
+					const TSharedPtr<FDeferredCallbackHandle> Task = WeakTask.Pin();
+					if (!Task.IsValid()) { return; }
+					if (Task->Start()) { Task->Complete(); }
+				},
+				UE::Tasks::ETaskPriority::Default
+			);
+
+		return DeferredCallback;
+	}
+
+	static void CancelDeferredCallback(const TSharedPtr<FDeferredCallbackHandle>& InCallback)
+	{
+		InCallback->Cancel();
+		while (InCallback->GetState() != EAsyncHandleState::Ended)
+		{
+			// Hold off until ended
 		}
 	}
 }

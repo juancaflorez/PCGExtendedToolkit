@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 
@@ -45,7 +45,7 @@ bool UPCGExSearchAStar::ResolveQuery(
 	double CurrentFScore;
 	while (ScoredQueue->Dequeue(CurrentNodeIndex, CurrentFScore))
 	{
-		if (CurrentNodeIndex == GoalNode.Index) { break; } // Exit early
+		if (bEarlyExit && CurrentNodeIndex == GoalNode.Index) { break; } // Exit early
 
 		const double CurrentGScore = GScore[CurrentNodeIndex];
 		const PCGExCluster::FNode& Current = NodesRef[CurrentNodeIndex];

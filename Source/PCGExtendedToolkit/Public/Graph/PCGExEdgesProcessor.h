@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -13,7 +13,7 @@
 #define PCGEX_CLUSTER_BATCH_PROCESSING(_STATE) if (!Context->ProcessClusters(_STATE)) { return false; }
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExEdgesProcessorSettings : public UPCGExPointsProcessorSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExEdgesProcessorSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -44,15 +44,23 @@ public:
 
 	/** Whether scoped attribute read is enabled or not. Disabling this on small dataset may greatly improve performance. It's enabled by default for legacy reasons. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
-	bool bScopedIndexLookupBuild = false;
+	EPCGExOptionState ScopedIndexLookupBuild = EPCGExOptionState::Default;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors", meta=(PCG_NotOverridable, AdvancedDisplay))
+	bool bQuietMissingClusterPairElement = false;
+
+	bool WantsScopedIndexLookupBuild() const;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgesProcessorContext : FPCGExPointsProcessorContext
+struct PCGEXTENDEDTOOLKIT_API FPCGExEdgesProcessorContext : FPCGExPointsProcessorContext
 {
 	friend class UPCGExEdgesProcessorSettings;
 	friend class FPCGExEdgesProcessorElement;
 
 	virtual ~FPCGExEdgesProcessorContext() override;
+
+	bool bQuietMissingClusterPairElement = false;
 
 	bool bBuildEndpointsLookup = true;
 
@@ -90,10 +98,14 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgesProcessorContext : FPCGExPointsProc
 	void OutputBatches() const;
 
 protected:
-	TArray<TObjectPtr<const UPCGExHeuristicsFactoryBase>> HeuristicsFactories;
+	mutable FRWLock ClusterProcessingLock;
+	TArray<TObjectPtr<const UPCGExHeuristicsFactoryData>> HeuristicsFactories;
 
-	virtual bool ProcessClusters(const PCGEx::AsyncState NextStateId, const bool bIsNextStateAsync = false);
-	virtual bool CompileGraphBuilders(const bool bOutputToContext, const PCGEx::AsyncState NextStateId);
+public:
+	virtual bool ProcessClusters(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync = false);
+
+protected:
+	virtual bool CompileGraphBuilders(const bool bOutputToContext, const PCGEx::ContextState NextStateId);
 
 	TArray<FPCGExSortRuleConfig> EdgeSortingRules;
 
@@ -103,6 +115,7 @@ protected:
 	bool bScopedIndexLookupBuild = false;
 	bool bHasValidHeuristics = false;
 
+	bool bSkipClusterBatchCompletionStep = false;
 	bool bDoClusterBatchWritingStep = false;
 
 	bool bClusterRequiresHeuristics = false;
@@ -122,6 +135,7 @@ protected:
 
 		bBatchProcessingEnabled = false;
 		bClusterRequiresHeuristics = true;
+		bSkipClusterBatchCompletionStep = false;
 		bDoClusterBatchWritingStep = false;
 		bBuildEndpointsLookup = false;
 
@@ -144,12 +158,17 @@ protected:
 
 			if (!ValidateEntries(TaggedEdges)) { continue; }
 
-			TSharedPtr<T> NewBatch = MakeShared<T>(this, CurrentIO.ToSharedRef(), TaggedEdges->Entries);
+			PCGEX_MAKE_SHARED(NewBatch, T, this, CurrentIO.ToSharedRef(), TaggedEdges->Entries);
 			InitBatch(NewBatch);
 
 			if (NewBatch->bRequiresWriteStep)
 			{
 				bDoClusterBatchWritingStep = true;
+			}
+
+			if (NewBatch->bSkipCompletion)
+			{
+				bSkipClusterBatchCompletionStep = true;
 			}
 
 			if (NewBatch->RequiresHeuristics())
@@ -197,12 +216,12 @@ protected:
 	{
 	}
 
-	void AdvanceBatch(const PCGEx::AsyncState NextStateId, const bool bIsNextStateAsync);
+	void AdvanceBatch(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync);
 
 	int32 CurrentEdgesIndex = -1;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgesProcessorElement : public FPCGExPointsProcessorElement
+class PCGEXTENDEDTOOLKIT_API FPCGExEdgesProcessorElement : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

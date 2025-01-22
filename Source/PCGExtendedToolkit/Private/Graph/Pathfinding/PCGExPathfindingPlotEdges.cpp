@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Graph/Pathfinding/PCGExPathfindingPlotEdges.h"
@@ -26,7 +26,7 @@ TArray<FPCGPinProperties> UPCGExPathfindingPlotEdgesSettings::InputPinProperties
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
 	PCGEX_PIN_POINTS(PCGExGraph::SourcePlotsLabel, "Plot points for pathfinding.", Required, {})
-	PCGEX_PIN_PARAMS(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
+	PCGEX_PIN_FACTORIES(PCGExGraph::SourceHeuristicsLabel, "Heuristics.", Normal, {})
 	PCGEX_PIN_OPERATION_OVERRIDES(PCGExPathfinding::SourceOverridesSearch)
 	return PinProperties;
 }
@@ -119,16 +119,20 @@ void FPCGExPathfindingPlotEdgesContext::BuildPath(const TSharedPtr<PCGExPathfind
 	}
 
 	const TSharedPtr<PCGExData::FPointIO> PathIO = OutputPaths->Emplace_GetRef<UPCGPointData>(ReferenceIO->GetIn(), PCGExData::EIOInit::New);
-	const TSharedPtr<PCGExData::FFacade> PathDataFacade = MakeShared<PCGExData::FFacade>(PathIO.ToSharedRef());
+	if (!PathIO) { return; }
+
+	PathIO->IOIndex = Query->QueryIndex;
+
+	PCGEX_MAKE_SHARED(PathDataFacade, PCGExData::FFacade, PathIO.ToSharedRef())
 	PathDataFacade->GetMutablePoints() = MutablePoints;
 
-	PCGExGraph::CleanupClusterTags(PathIO, true);
+	PCGExGraph::CleanupClusterTags(PathIO);
 	PCGExGraph::CleanupVtxData(PathIO);
 
 	PathIO->Tags->Append(Query->PlotFacade->Source->Tags.ToSharedRef());
 
-	if (!Settings->bClosedLoop) { if (Settings->bTagIfOpenPath) { PathIO->Tags->Add(Settings->IsOpenPathTag); } }
-	else { if (Settings->bTagIfClosedLoop) { PathIO->Tags->Add(Settings->IsClosedLoopTag); } }
+	if (!Settings->bClosedLoop) { if (Settings->bTagIfOpenPath) { PathIO->Tags->AddRaw(Settings->IsOpenPathTag); } }
+	else { if (Settings->bTagIfClosedLoop) { PathIO->Tags->AddRaw(Settings->IsClosedLoopTag); } }
 }
 
 PCGEX_INITIALIZE_ELEMENT(PathfindingPlotEdges)
@@ -142,7 +146,7 @@ bool FPCGExPathfindingPlotEdgesElement::Boot(FPCGExContext* InContext) const
 	PCGEX_OPERATION_BIND(SearchAlgorithm, UPCGExSearchOperation, PCGExPathfinding::SourceOverridesSearch)
 
 	Context->OutputPaths = MakeShared<PCGExData::FPointIOCollection>(Context);
-	TSharedPtr<PCGExData::FPointIOCollection> Plots = MakeShared<PCGExData::FPointIOCollection>(Context);
+	PCGEX_MAKE_SHARED(Plots, PCGExData::FPointIOCollection, Context)
 
 	TArray<FPCGTaggedData> Sources = Context->InputData.GetInputsByPin(PCGExGraph::SourcePlotsLabel);
 	Plots->Initialize(Sources, PCGExData::EIOInit::None);
@@ -223,30 +227,27 @@ namespace PCGExPathfindingPlotEdge
 		PCGEx::InitArray(Queries, Context->Plots.Num());
 		for (int i = 0; i < Queries.Num(); i++)
 		{
-			const TSharedPtr<PCGExPathfinding::FPlotQuery> Query = MakeShared<PCGExPathfinding::FPlotQuery>(Cluster.ToSharedRef(), Settings->bClosedLoop);
+			PCGEX_MAKE_SHARED(Query, PCGExPathfinding::FPlotQuery, Cluster.ToSharedRef(), Settings->bClosedLoop, i)
 			Queries[i] = Query;
 		}
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, ResolveQueriesTask)
-		TWeakPtr<FProcessor> WeakPtr = SharedThis(this);
-		ResolveQueriesTask->OnIterationCallback = [WeakPtr](const int32 Index, const int32 Count, const int32 LoopIdx)
-		{
-			TSharedPtr<FProcessor> This = WeakPtr.Pin();
-			if (!This) { return; }
-
-			TSharedPtr<PCGExPathfinding::FPlotQuery> Query = This->Queries[Index];
-			Query->BuildPlotQuery(This->Context->Plots[Index], This->Settings->SeedPicking, This->Settings->GoalPicking);
-			Query->FindPaths(This->AsyncManager, This->SearchOperation, This->HeuristicsHandler);
-			Query->OnCompleteCallback = [WeakPtr](const TSharedPtr<PCGExPathfinding::FPlotQuery>& Plot)
+		ResolveQueriesTask->OnIterationCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE](const int32 Index, const PCGExMT::FScope& Scope)
 			{
-				TSharedPtr<FProcessor> NestedThis = WeakPtr.Pin();
-				if (!NestedThis) { return; }
-				NestedThis->Context->BuildPath(Plot);
-				Plot->Cleanup();
+				PCGEX_ASYNC_THIS
+				TSharedPtr<PCGExPathfinding::FPlotQuery> Query = This->Queries[Index];
+				Query->BuildPlotQuery(This->Context->Plots[Index], This->Settings->SeedPicking, This->Settings->GoalPicking);
+				Query->FindPaths(This->AsyncManager, This->SearchOperation, This->HeuristicsHandler);
+				Query->OnCompleteCallback = [AsyncThis](const TSharedPtr<PCGExPathfinding::FPlotQuery>& Plot)
+				{
+					PCGEX_ASYNC_NESTED_THIS
+					NestedThis->Context->BuildPath(Plot);
+					Plot->Cleanup();
+				};
 			};
-		};
 
-		ResolveQueriesTask->StartIterations(Queries.Num(), 1, HeuristicsHandler->HasGlobalFeedback(), false);
+		ResolveQueriesTask->StartIterations(Queries.Num(), 1, HeuristicsHandler->HasGlobalFeedback());
 		return true;
 	}
 }

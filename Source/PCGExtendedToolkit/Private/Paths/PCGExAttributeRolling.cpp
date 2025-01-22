@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExAttributeRolling.h"
@@ -52,7 +52,7 @@ bool FPCGExAttributeRollingElement::ExecuteInternal(FPCGContext* InContext) cons
 					bHasInvalidInputs = true;
 					return false;
 				}
-				
+
 				Entry->InitializeOutput(PCGExData::EIOInit::Duplicate);
 				return true;
 			},
@@ -102,7 +102,7 @@ namespace PCGExAttributeRolling
 		OutMetadata = PointDataFacade->GetOut()->Metadata;
 		OutPoints = &PointDataFacade->GetOut()->GetMutablePoints();
 
-		bInlineProcessRange = true;
+		bDaisyChainProcessRange = true;
 
 		if (Settings->TriggerAction == EPCGExRollingTriggerMode::None)
 		{
@@ -116,22 +116,21 @@ namespace PCGExAttributeRolling
 			}
 			else
 			{
-				TWeakPtr<FProcessor> WeakPtr = SharedThis(this);
 				PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FilterTask)
 
-				FilterTask->OnCompleteCallback = [WeakPtr]()
-				{
-					const TSharedPtr<FProcessor> This = WeakPtr.Pin();
-					if (!This) { return; }
-					This->StartParallelLoopForRange(This->PointDataFacade->GetNum());
-				};
+				FilterTask->OnCompleteCallback =
+					[PCGEX_ASYNC_THIS_CAPTURE]()
+					{
+						PCGEX_ASYNC_THIS
+						This->StartParallelLoopForRange(This->PointDataFacade->GetNum());
+					};
 
-				FilterTask->OnSubLoopStartCallback = [WeakPtr](const int32 StartIndex, const int32 Count, const int32 LoopIdx)
-				{
-					const TSharedPtr<FProcessor> This = WeakPtr.Pin();
-					if (!This) { return; }
-					This->PrepareSingleLoopScopeForPoints(StartIndex, Count);
-				};
+				FilterTask->OnSubLoopStartCallback =
+					[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
+					{
+						PCGEX_ASYNC_THIS
+						This->PrepareSingleLoopScopeForPoints(Scope);
+					};
 
 				FilterTask->StartSubLoops(PointDataFacade->GetNum(), GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());
 			}
@@ -141,13 +140,13 @@ namespace PCGExAttributeRolling
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const int32 LoopIdx, const int32 LoopCount)
+	void FProcessor::ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope)
 	{
 		int32 TargetIndex = -1;
 		int32 PrevIndex = -1;

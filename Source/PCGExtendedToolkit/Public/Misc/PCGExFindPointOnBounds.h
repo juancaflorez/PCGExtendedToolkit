@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -109,8 +109,8 @@ namespace PCGExFindPointOnBounds
 			UPCGMetadata* InMetadata = IO->GetIn()->Metadata;
 			for (const PCGEx::FAttributeIdentity& Identity : InAttributesInfos.Identities)
 			{
-				PCGMetadataAttribute::CallbackWithRightType(
-					static_cast<uint16>(Identity.GetTypeId()), [&](auto DummyValue)
+				PCGEx::ExecuteWithRightType(
+					Identity.GetTypeId(), [&](auto DummyValue)
 					{
 						using T = decltype(DummyValue);
 						const FPCGMetadataAttribute<T>* InAttribute = InMetadata->GetConstTypedAttribute<T>(Identity.Name);
@@ -141,10 +141,10 @@ namespace PCGExFindPointOnBounds
 	{
 		mutable FRWLock BestIndexLock;
 
+		double BestDistance = MAX_dbl;
 		FVector SearchPosition = FVector::ZeroVector;
 		FVector BestPosition = FVector::ZeroVector;
 		int32 BestIndex = -1;
-		double BestDistance = MAX_dbl;
 
 	public:
 		explicit FProcessor(const TSharedRef<PCGExData::FFacade>& InPointDataFacade):
@@ -155,7 +155,7 @@ namespace PCGExFindPointOnBounds
 		virtual ~FProcessor() override;
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount) override;
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};
 }

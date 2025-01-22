@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -15,7 +15,7 @@ MACRO(VtxNormal, FVector, FVector::OneVector) \
 MACRO(VtxEdgeCount, int32, 0)
 
 class UPCGExVtxPropertyOperation;
-class UPCGExVtxPropertyFactoryBase;
+class UPCGExVtxPropertyFactoryData;
 
 namespace PCGExWriteVtxProperties
 {
@@ -67,7 +67,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWriteVtxPropertiesContext final : FPCGEx
 {
 	friend class FPCGExWriteVtxPropertiesElement;
 
-	TArray<TObjectPtr<const UPCGExVtxPropertyFactoryBase>> ExtraFactories;
+	TArray<TObjectPtr<const UPCGExVtxPropertyFactoryData>> ExtraFactories;
 
 	PCGEX_FOREACH_FIELD_VTXEXTRAS(PCGEX_OUTPUT_DECL_TOGGLE)
 };
@@ -102,7 +102,7 @@ namespace PCGExWriteVtxProperties
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 
 		PCGEX_FOREACH_FIELD_VTXEXTRAS(PCGEX_OUTPUT_DECL)

@@ -1,9 +1,9 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExSplineToPath.h"
 
-#include "VectorTypes.h"
+
 #include "Sampling/PCGExSampleNearestSpline.h"
 
 #define LOCTEXT_NAMESPACE "PCGExSplineToPathElement"
@@ -76,7 +76,7 @@ bool FPCGExSplineToPathElement::Boot(FPCGExContext* InContext) const
 
 	if (Context->NumTargets <= 0)
 	{
-		PCGE_LOG(Error, GraphAndLog, FTEXT("No targets (either no input or empty dataset)"));
+		PCGE_LOG(Error, GraphAndLog, FTEXT("No targets (no input matches criteria or empty dataset)"));
 		return false;
 	}
 
@@ -97,11 +97,12 @@ bool FPCGExSplineToPathElement::ExecuteInternal(FPCGContext* InContext) const
 	PCGEX_EXECUTION_CHECK
 	PCGEX_ON_INITIAL_EXECUTION
 	{
+		const TSharedPtr<PCGExMT::FTaskManager> AsyncManager = Context->GetAsyncManager();
 		for (int i = 0; i < Context->NumTargets; i++)
 		{
 			TSharedPtr<PCGExData::FPointIO> NewOutput = Context->MainPoints->Emplace_GetRef(PCGExData::EIOInit::New);
-			TSharedPtr<PCGExData::FFacade> PointDataFacade = MakeShared<PCGExData::FFacade>(NewOutput.ToSharedRef());
-			Context->GetAsyncManager()->Start<PCGExSplineToPath::FWriteTask>(i, NewOutput, PointDataFacade);
+			PCGEX_MAKE_SHARED(PointDataFacade, PCGExData::FFacade, NewOutput.ToSharedRef())
+			PCGEX_LAUNCH(PCGExSplineToPath::FWriteTask, i, PointDataFacade)
 
 			NewOutput->Tags->Append(Context->Tags[i]);
 		}
@@ -120,7 +121,7 @@ bool FPCGExSplineToPathElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExSplineToPath
 {
-	bool FWriteTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
+	void FWriteTask::ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
 	{
 		FPCGExSplineToPathContext* Context = AsyncManager->GetContext<FPCGExSplineToPathContext>();
 		PCGEX_SETTINGS(SplineToPath)
@@ -167,27 +168,46 @@ namespace PCGExSplineToPath
 			Point.Seed = PCGExRandom::ComputeSeed(Point);
 		};
 
+		auto GetPointType = [](EInterpCurveMode Mode)-> int32
+		{
+			switch (Mode)
+			{
+			case CIM_Linear: return 0;
+			case CIM_CurveAuto: return 1;
+			case CIM_Constant: return 2;
+			case CIM_CurveUser: return 4;
+			case CIM_CurveAutoClamped: return 3;
+			default:
+			case CIM_Unknown:
+			case CIM_CurveBreak:
+				return -1;
+			}
+		};
+
 		for (int i = 0; i < NumSegments; i++)
 		{
 			const double LengthAtPoint = Spline.GetDistanceAlongSplineAtSplinePoint(i);
 			const FTransform SplineTransform = Spline.GetTransform();
-			const FVector Scale = SplineTransform.GetScale3D();
 
 			ApplyTransform(MutablePoints[i], Spline.GetTransformAtDistanceAlongSpline(LengthAtPoint, ESplineCoordinateSpace::Type::World, true));
+
+			int32 PtType = -1;
+
 
 			PCGEX_OUTPUT_VALUE(LengthAtPoint, i, LengthAtPoint);
 			PCGEX_OUTPUT_VALUE(Alpha, i, LengthAtPoint / TotalLength);
 			PCGEX_OUTPUT_VALUE(ArriveTangent, i, SplineTransform.TransformVector(Spline.SplineCurves.Position.Points[i].ArriveTangent));
 			PCGEX_OUTPUT_VALUE(LeaveTangent, i, SplineTransform.TransformVector(Spline.SplineCurves.Position.Points[i].LeaveTangent));
+			PCGEX_OUTPUT_VALUE(PointType, i, GetPointType(Spline.SplineCurves.Position.Points[i].InterpMode));
 		}
 
 		if (Spline.bClosedLoop)
 		{
-			if (Settings->bTagIfClosedLoop) { PointDataFacade->Source->Tags->Add(Settings->IsClosedLoopTag); }
+			if (Settings->bTagIfClosedLoop) { PointDataFacade->Source->Tags->AddRaw(Settings->IsClosedLoopTag); }
 		}
 		else
 		{
-			if (Settings->bTagIfOpenSpline) { PointDataFacade->Source->Tags->Add(Settings->IsOpenSplineTag); }
+			if (Settings->bTagIfOpenSpline) { PointDataFacade->Source->Tags->AddRaw(Settings->IsOpenSplineTag); }
 
 			ApplyTransform(MutablePoints.Last(), Spline.GetTransformAtDistanceAlongSpline(TotalLength, ESplineCoordinateSpace::Type::World, true));
 
@@ -195,11 +215,10 @@ namespace PCGExSplineToPath
 			PCGEX_OUTPUT_VALUE(Alpha, LastIndex, 1);
 			PCGEX_OUTPUT_VALUE(ArriveTangent, LastIndex, Spline.SplineCurves.Position.Points[NumSegments].ArriveTangent);
 			PCGEX_OUTPUT_VALUE(LeaveTangent, LastIndex, Spline.SplineCurves.Position.Points[NumSegments].LeaveTangent);
+			PCGEX_OUTPUT_VALUE(PointType, LastIndex, GetPointType(Spline.SplineCurves.Position.Points[NumSegments].InterpMode));
 		}
 
 		PointDataFacade->Write(AsyncManager);
-
-		return true;
 	}
 }
 

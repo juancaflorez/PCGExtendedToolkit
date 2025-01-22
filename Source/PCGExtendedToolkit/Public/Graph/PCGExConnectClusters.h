@@ -1,10 +1,12 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Data/PCGExPointIOMerger.h"
+
+
 #include "Graph/PCGExEdgesProcessor.h"
 
 #include "PCGExConnectClusters.generated.h"
@@ -61,8 +63,8 @@ public:
 	FPCGExGraphBuilderDetails GraphBuilderDetails;
 
 	/** If enabled, won't throw a warning if no bridge could be created. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
-	bool bMuteNoBridgeWarning = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors")
+	bool bQuietNoBridgeWarning = false;
 
 private:
 	friend class FPCGExConnectClustersElement;
@@ -76,8 +78,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectClustersContext final : FPCGExEdg
 	FPCGExGeo2DProjectionDetails ProjectionDetails;
 	FPCGExCarryOverDetails CarryOverDetails;
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> GeneratorsFiltersFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> ConnectablesFiltersFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> GeneratorsFiltersFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> ConnectablesFiltersFactories;
 };
 
 class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectClustersElement final : public FPCGExEdgesProcessorElement
@@ -104,7 +106,7 @@ namespace PCGExBridgeClusters
 		}
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};
 
@@ -114,6 +116,8 @@ namespace PCGExBridgeClusters
 		TSharedPtr<PCGExData::FFacade> CompoundedEdgesDataFacade;
 		TSharedPtr<FPCGExPointIOMerger> Merger;
 		TSet<uint64> Bridges;
+		TArray<uint64> BridgesList;
+		TArray<int32> NewEdges;
 
 		FBatch(FPCGExContext* InContext, const TSharedRef<PCGExData::FPointIO>& InVtx, TArrayView<TSharedRef<PCGExData::FPointIO>> InEdges);
 
@@ -121,28 +125,6 @@ namespace PCGExBridgeClusters
 		virtual bool PrepareSingle(const TSharedPtr<FProcessor>& ClusterProcessor) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
-	};
-
-	class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCreateBridgeTask final : public PCGExMT::FPCGExTask
-	{
-	public:
-		FPCGExCreateBridgeTask(
-			const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-			const TSharedPtr<FBatch>& InBatch,
-			const TSharedPtr<PCGExCluster::FCluster>& A,
-			const TSharedPtr<PCGExCluster::FCluster>& B) :
-			FPCGExTask(InPointIO),
-			Batch(InBatch),
-			ClusterA(A),
-			ClusterB(B)
-		{
-		}
-
-		TSharedPtr<FBatch> Batch;
-
-		TSharedPtr<PCGExCluster::FCluster> ClusterA;
-		TSharedPtr<PCGExCluster::FCluster> ClusterB;
-
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+		void CreateBridge(int32 EdgeIndex, int32 FromClusterIndex, int32 ToClusterIndex);
 	};
 }

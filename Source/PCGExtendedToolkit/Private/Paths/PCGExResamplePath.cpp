@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExResamplePath.h"
@@ -83,22 +83,23 @@ namespace PCGExResamplePath
 				NumSamples = PCGEx::TruncateDbl(PathLength->TotalLength / Settings->Resolution, Settings->Truncate);
 			}
 
+			if (Path->IsClosedLoop()) { NumSamples++; }
+
 			if (NumSamples < 2) { return false; }
 
-			PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::New);
+			PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::New)
+
 			TArray<FPCGPoint>& OutPoints = PointDataFacade->GetMutablePoints();
 			OutPoints.SetNum(NumSamples);
 			OutPoints[0] = PointDataFacade->Source->GetIn()->GetPoints()[0]; // Copy first point
 		}
 		else
 		{
-			PointDataFacade->Source->InitializeOutput(PCGExData::EIOInit::Duplicate);
+			PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 			NumSamples = PointDataFacade->GetNum();
 		}
 
-		if (Path->IsClosedLoop()) { SampleLength = PathLength->TotalLength / static_cast<double>(NumSamples); }
-		else { SampleLength = PathLength->TotalLength / static_cast<double>(NumSamples - 1); }
-
+		SampleLength = PathLength->TotalLength / static_cast<double>(NumSamples - 1);
 
 		Samples.SetNumUninitialized(NumSamples);
 		bInlineProcessPoints = true;
@@ -137,7 +138,16 @@ namespace PCGExResamplePath
 				{
 					StartIndex = EndIndex++;
 
-					if (EndIndex >= InPoints.Num()) { break; }
+					if (EndIndex >= InPoints.Num())
+					{
+						if (!Path->IsClosedLoop())
+						{
+							EndIndex = InPoints.Num() - 1;
+							break;
+						}
+
+						EndIndex = 0;
+					}
 
 					NextPosition = InPoints[EndIndex].Transform.GetLocation();
 					DistToNext = FVector::Dist(PrevPosition, NextPosition);
@@ -153,7 +163,7 @@ namespace PCGExResamplePath
 			Sample.Distance = TraversedDistance;
 		}
 
-		if (Settings->bPreserveLastPoint)
+		if (Settings->bPreserveLastPoint && !Path->IsClosedLoop())
 		{
 			FPointSample& LastSample = Samples.Last();
 			LastSample.Start = InPoints.Num() - 2;
@@ -170,16 +180,15 @@ namespace PCGExResamplePath
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const FPointSample& Sample = Samples[Index];
 		Point.Transform.SetLocation(Sample.Location);
-		const int32 SourcesRange = Sample.End - Sample.Start;
 
 		//if (SourcesRange == 1)
 		//{

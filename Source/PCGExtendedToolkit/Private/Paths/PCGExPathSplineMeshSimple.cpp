@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExPathSplineMeshSimple.h"
@@ -21,11 +21,11 @@ bool FPCGExPathSplineMeshSimpleElement::Boot(FPCGExContext* InContext) const
 
 	if (Settings->bApplyCustomTangents)
 	{
-		PCGEX_VALIDATE_NAME(Settings->ArriveTangentAttribute)
-		PCGEX_VALIDATE_NAME(Settings->LeaveTangentAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->ArriveTangentAttribute)
+		PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->LeaveTangentAttribute)
 	}
 
-	PCGEX_VALIDATE_NAME(Settings->AssetPathAttributeName)
+	PCGEX_VALIDATE_NAME_CONSUMABLE(Settings->AssetPathAttributeName)
 
 	TArray<FName> Names = {Settings->AssetPathAttributeName};
 	Context->StaticMeshLoader = MakeShared<PCGEx::TAssetLoader<UStaticMesh>>(Context, Context->MainPoints.ToSharedRef(), Names);
@@ -105,6 +105,28 @@ namespace PCGExPathSplineMeshSimple
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
+		if (Settings->StartOffsetInput == EPCGExInputValueType::Attribute)
+		{
+			StartOffsetGetter = PointDataFacade->GetScopedBroadcaster<FVector2D>(Settings->StartOffsetAttribute);
+
+			if (!StartOffsetGetter)
+			{
+				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("StartOffset attribute is missing on some inputs.."));
+				return false;
+			}
+		}
+
+		if (Settings->EndOffsetInput == EPCGExInputValueType::Attribute)
+		{
+			EndOffsetGetter = PointDataFacade->GetScopedBroadcaster<FVector2D>(Settings->EndOffsetAttribute);
+
+			if (!EndOffsetGetter)
+			{
+				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("EndOffset attribute is missing on some inputs.."));
+				return false;
+			}
+		}
+
 #if PCGEX_ENGINE_VERSION <= 503
 		AssetPathReader = PointDataFacade->GetScopedBroadcaster<FString>(Settings->AssetPathAttributeName);
 #else
@@ -166,13 +188,13 @@ namespace PCGExPathSplineMeshSimple
 		return true;
 	}
 
-	void FProcessor::PrepareSingleLoopScopeForPoints(const uint32 StartIndex, const int32 Count)
+	void FProcessor::PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope)
 	{
-		PointDataFacade->Fetch(StartIndex, Count);
-		FilterScope(StartIndex, Count);
+		PointDataFacade->Fetch(Scope);
+		FilterScope(Scope);
 	}
 
-	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 Count)
+	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		auto InvalidPoint = [&]()
 		{
@@ -214,7 +236,6 @@ namespace PCGExPathSplineMeshSimple
 		//
 
 		FVector OutScale = Point.Transform.GetScale3D();
-		FVector OutTranslation = FVector::ZeroVector;
 
 		//
 
@@ -227,8 +248,8 @@ namespace PCGExPathSplineMeshSimple
 		Segment.Params.EndScale = FVector2D(Scale[C1], Scale[C2]);
 		Segment.Params.EndRoll = NextPoint.Transform.GetRotation().Rotator().Roll;
 
-		Segment.Params.StartOffset = FVector2D(OutTranslation[C1], OutTranslation[C2]);
-		Segment.Params.EndOffset = FVector2D(OutTranslation[C1], OutTranslation[C2]);
+		Segment.Params.StartOffset = StartOffsetGetter ? StartOffsetGetter->Read(Index) : Settings->StartOffset;
+		Segment.Params.EndOffset = EndOffsetGetter ? EndOffsetGetter->Read(Index) : Settings->EndOffset;
 
 		if (Settings->bApplyCustomTangents)
 		{
@@ -260,7 +281,7 @@ namespace PCGExPathSplineMeshSimple
 		bIsPreviewMode = ExecutionContext->SourceComponent.Get()->IsInPreviewMode();
 #endif
 
-		TArray<FName> DataTags = PointDataFacade->Source->Tags->ToFNameList();
+		TArray<FName> DataTags = PointDataFacade->Source->Tags->FlattenToArrayOfNames();
 
 		for (int i = 0; i < Segments.Num(); i++)
 		{
@@ -269,10 +290,13 @@ namespace PCGExPathSplineMeshSimple
 
 			const PCGExPaths::FSplineMeshSegment& Segment = Segments[i];
 
-			const FString ComponentName = TEXT("PCGSplineMeshComponent_") + Mesh->GetName();
 			const EObjectFlags ObjectFlags = (bIsPreviewMode ? RF_Transient : RF_NoFlags);
-			USplineMeshComponent* SplineMeshComponent = NewObject<USplineMeshComponent>(TargetActor, MakeUniqueObjectName(TargetActor, USplineMeshComponent::StaticClass(), FName(ComponentName)), ObjectFlags);
+			USplineMeshComponent* SplineMeshComponent = NewObject<USplineMeshComponent>(
+				TargetActor, MakeUniqueObjectName(
+					TargetActor, USplineMeshComponent::StaticClass(),
+					Context->UniqueNameGenerator->Get(TEXT("PCGSplineMeshComponent_") + Mesh->GetName())), ObjectFlags);
 
+			/*
 			SplineMeshComponent->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
 			SplineMeshComponent->SetMobility(EComponentMobility::Static);
 			SplineMeshComponent->SetSimulatePhysics(false);
@@ -282,14 +306,16 @@ namespace PCGExPathSplineMeshSimple
 			SplineMeshComponent->bUseDefaultCollision = false;
 			SplineMeshComponent->bNavigationRelevant = false;
 			SplineMeshComponent->SetbNeverNeedsCookedCollisionData(true);
+			*/
 
 			Segment.ApplySettings(SplineMeshComponent); // Init Component
-			SplineMeshComponent->SetStaticMesh(Mesh);   // Will trigger a force rebuild, so put this last
 
 			if (Settings->TaggingDetails.bForwardInputDataTags) { SplineMeshComponent->ComponentTags.Append(DataTags); }
 			if (!Segment.Tags.IsEmpty()) { SplineMeshComponent->ComponentTags.Append(Segment.Tags.Array()); }
 
 			Settings->StaticMeshDescriptor.InitComponent(SplineMeshComponent);
+
+			SplineMeshComponent->SetStaticMesh(Mesh); // Will trigger a force rebuild, so put this last
 
 			Context->AttachManagedComponent(
 				TargetActor, SplineMeshComponent,

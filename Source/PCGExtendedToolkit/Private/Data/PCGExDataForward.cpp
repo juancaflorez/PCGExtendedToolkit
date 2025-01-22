@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Data/PCGExDataForward.h"
@@ -23,6 +23,70 @@ TSharedPtr<PCGExData::FDataForwardHandler> FPCGExForwardDetails::TryGetHandler(c
 TSharedPtr<PCGExData::FDataForwardHandler> FPCGExForwardDetails::TryGetHandler(const TSharedPtr<PCGExData::FFacade>& InSourceDataFacade, const TSharedPtr<PCGExData::FFacade>& InTargetDataFacade) const
 {
 	return bEnabled ? GetHandler(InSourceDataFacade, InTargetDataFacade) : nullptr;
+}
+
+bool FPCGExAttributeToTagDetails::Init(const FPCGContext* InContext, const TSharedPtr<PCGExData::FFacade>& InSourceFacade)
+{
+	for (FPCGAttributePropertyInputSelector& Selector : Attributes)
+	{
+		if (const TSharedPtr<PCGEx::TAttributeBroadcaster<FString>>& Getter = Getters.Add_GetRef(MakeShared<PCGEx::TAttributeBroadcaster<FString>>());
+			!Getter->Prepare(Selector, InSourceFacade->Source))
+		{
+			PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("Missing specified Tag attribute."));
+			Getters.Empty();
+			return false;
+		}
+	}
+
+	SourceDataFacade = InSourceFacade;
+	return true;
+}
+
+void FPCGExAttributeToTagDetails::Tag(const int32 TagIndex, TSet<FString>& InTags) const
+{
+	if (bAddIndexTag) { InTags.Add(IndexTagPrefix + ":" + FString::Printf(TEXT("%d"), TagIndex)); }
+
+	if (!Getters.IsEmpty())
+	{
+		const FPCGPoint& Point = SourceDataFacade->GetIn()->GetPoint(TagIndex);
+		for (const TSharedPtr<PCGEx::TAttributeBroadcaster<FString>>& Getter : Getters)
+		{
+			FString Tag = Getter->SoftGet(TagIndex, Point, TEXT(""));
+			if (Tag.IsEmpty()) { continue; }
+			if (bPrefixWithAttributeName) { Tag = Getter->GetName() + ":" + Tag; }
+			InTags.Add(Tag);
+		}
+	}
+}
+
+void FPCGExAttributeToTagDetails::Tag(const int32 TagIndex, const TSharedPtr<PCGExData::FPointIO>& PointIO) const
+{
+	TSet<FString> Tags;
+	Tag(TagIndex, Tags);
+	PointIO->Tags->Append(Tags);
+}
+
+void FPCGExAttributeToTagDetails::Tag(const int32 TagIndex, UPCGMetadata* InMetadata) const
+{
+	if (bAddIndexTag)
+	{
+		if (PCGEx::IsValidName(FName(IndexTagPrefix)))
+		{
+			InMetadata->FindOrCreateAttribute<FString>(FName(IndexTagPrefix), IndexTagPrefix + ":" + FString::Printf(TEXT("%d"), TagIndex));
+		}
+	}
+
+	if (!Getters.IsEmpty())
+	{
+		const FPCGPoint& Point = SourceDataFacade->GetIn()->GetPoint(TagIndex);
+		for (const TSharedPtr<PCGEx::TAttributeBroadcaster<FString>>& Getter : Getters)
+		{
+			FString Tag = Getter->SoftGet(TagIndex, Point, TEXT(""));
+			if (Tag.IsEmpty()) { continue; }
+			if (bPrefixWithAttributeName) { Tag = Getter->GetName() + ":" + Tag; }
+			InMetadata->FindOrCreateAttribute<FString>(FName(Getter->GetName()), Tag);
+		}
+	}
 }
 
 namespace PCGExData
@@ -53,8 +117,8 @@ namespace PCGExData
 		{
 			const PCGEx::FAttributeIdentity& Identity = Identities[i];
 
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+			PCGEx::ExecuteWithRightType(
+				Identity.UnderlyingType, [&](auto DummyValue)
 				{
 					using T = decltype(DummyValue);
 					TSharedPtr<TBuffer<T>> Reader = SourceDataFacade->GetReadable<T>(Identity.Name);
@@ -72,8 +136,8 @@ namespace PCGExData
 		{
 			const PCGEx::FAttributeIdentity& Identity = Identities[i];
 
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+			PCGEx::ExecuteWithRightType(
+				Identity.UnderlyingType, [&](auto DummyValue)
 				{
 					using T = decltype(DummyValue);
 					TSharedPtr<TBuffer<T>> Reader = StaticCastSharedPtr<TBuffer<T>>(Readers[i]);
@@ -91,12 +155,11 @@ namespace PCGExData
 		{
 			for (const PCGEx::FAttributeIdentity& Identity : Identities)
 			{
-				PCGMetadataAttribute::CallbackWithRightType(
-					static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+				PCGEx::ExecuteWithRightType(
+					Identity.UnderlyingType, [&](auto DummyValue)
 					{
 						using T = decltype(DummyValue);
-
-						// 'template' spec required for clang on mac, not sure why.
+						// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 						// ReSharper disable once CppRedundantTemplateKeyword
 						const FPCGMetadataAttribute<T>* SourceAtt = SourceDataFacade->GetIn()->Metadata->template GetConstTypedAttribute<T>(Identity.Name);
 						if (!SourceAtt) { return; }
@@ -114,18 +177,18 @@ namespace PCGExData
 
 		for (const PCGEx::FAttributeIdentity& Identity : Identities)
 		{
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+			PCGEx::ExecuteWithRightType(
+				Identity.UnderlyingType, [&](auto DummyValue)
 				{
 					using T = decltype(DummyValue);
 
-					// 'template' spec required for clang on mac, not sure why.
+					// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 					// ReSharper disable once CppRedundantTemplateKeyword
 					const FPCGMetadataAttribute<T>* SourceAtt = SourceDataFacade->GetIn()->Metadata->template GetConstTypedAttribute<T>(Identity.Name);
 					if (!SourceAtt) { return; }
 
 					InTargetDataFacade->Source->DeleteAttribute(Identity.Name);
-					FPCGMetadataAttribute<T>* Mark = InTargetDataFacade->Source->FindOrCreateAttribute<T>(
+					InTargetDataFacade->Source->FindOrCreateAttribute<T>(
 						Identity.Name,
 						SourceAtt->GetValueFromItemKey(SourceDataFacade->Source->GetInPoint(SourceIndex).MetadataEntry),
 						SourceAtt->AllowsInterpolation(), true, true);
@@ -139,18 +202,18 @@ namespace PCGExData
 
 		for (const PCGEx::FAttributeIdentity& Identity : Identities)
 		{
-			PCGMetadataAttribute::CallbackWithRightType(
-				static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+			PCGEx::ExecuteWithRightType(
+				Identity.UnderlyingType, [&](auto DummyValue)
 				{
 					using T = decltype(DummyValue);
 
-					// 'template' spec required for clang on mac, not sure why.
+					// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 					// ReSharper disable once CppRedundantTemplateKeyword
 					const FPCGMetadataAttribute<T>* SourceAtt = SourceDataFacade->GetIn()->Metadata->template GetConstTypedAttribute<T>(Identity.Name);
 					if (!SourceAtt) { return; }
 
 					InTargetMetadata->DeleteAttribute(Identity.Name);
-					FPCGMetadataAttribute<T>* Mark = InTargetMetadata->FindOrCreateAttribute<T>(
+					InTargetMetadata->FindOrCreateAttribute<T>(
 						Identity.Name,
 						SourceAtt->GetValueFromItemKey(SourceDataFacade->Source->GetInPoint(SourceIndex).MetadataEntry),
 						SourceAtt->AllowsInterpolation(), true, true);

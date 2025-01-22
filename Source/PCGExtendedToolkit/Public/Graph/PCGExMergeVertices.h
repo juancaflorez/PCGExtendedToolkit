@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -47,8 +47,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMergeVerticesContext final : FPCGExEdges
 
 	FPCGExCarryOverDetails CarryOverDetails;
 
-	FString OutVtxId = TEXT("");
-	TSharedPtr<PCGExData::FFacade> CompositeIODataFacade;
+	PCGExTags::IDType OutVtxId;
+	TSharedPtr<PCGExData::FFacade> CompositeDataFacade;
 	TSharedPtr<FPCGExPointIOMerger> Merger;
 
 	virtual void ClusterProcessing_InitialProcessingDone() override;
@@ -88,8 +88,8 @@ namespace PCGExMergeVertices
 		virtual ~FProcessor() override;
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const int32 LoopIdx, const int32 Count) override;
-		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const int32 LoopIdx, const int32 Count) override;
+		virtual void ProcessSingleNode(const int32 Index, PCGExCluster::FNode& Node, const PCGExMT::FScope& Scope) override;
+		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 	};

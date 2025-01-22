@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -19,7 +19,8 @@
 /// 
 #define PCGEX_SAMPLER_CREATE\
 	NewOperation->SamplingConfig = SamplingConfig; \
-	PCGEX_LOAD_SOFTOBJECT(UCurveFloat, NewOperation->SamplingConfig.WeightCurve, NewOperation->WeightCurveObj, PCGEx::WeightDistributionLinear) \
+	if (SamplingConfig.bUseLocalCurve){	NewOperation->SamplingConfig.LocalWeightCurve.ExternalCurve = SamplingConfig.WeightCurve.Get(); }\
+	NewOperation->WeightCurveObj = SamplingConfig.LocalWeightCurve.GetRichCurveConst();\
 	NewOperation->PointFilterFactories.Append(PointFilterFactories); \
 	NewOperation->ValueFilterFactories.Append(ValueFilterFactories);
 
@@ -34,9 +35,10 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplingConfig
 {
 	GENERATED_BODY()
 
-	FPCGExSamplingConfig():
-		WeightCurve(PCGEx::WeightDistributionLinear)
+	FPCGExSamplingConfig()
 	{
+		LocalWeightCurve.EditorCurveData.AddKey(0, 0);
+		LocalWeightCurve.EditorCurveData.AddKey(1, 1);
 	}
 
 	/** Type of range for weight blending computation */
@@ -59,8 +61,17 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplingConfig
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ClampMin=0.001, EditCondition="BlendOver==EPCGExBlendOver::Fixed", EditConditionHides))
 	double FixedBlend = 1;
 
+	/** Whether to use in-editor curve or an external asset. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable, DisplayPriority=-1))
+	bool bUseLocalCurve = false;
+
+	// TODO: DirtyCache for OnDependencyChanged when this float curve is an external asset
 	/** Curve over which the blending weight will be remapped  */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NotOverridable, DisplayName="Weight Curve", EditCondition = "bUseLocalCurve", EditConditionHides))
+	FRuntimeFloatCurve LocalWeightCurve;
+
+	/** Curve over which the blending weight will be remapped  */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Weight Curve", EditCondition="!bUseLocalCurve", EditConditionHides))
 	TSoftObjectPtr<UCurveFloat> WeightCurve = TSoftObjectPtr<UCurveFloat>(PCGEx::WeightDistributionLinear);
 
 	/** Which type of neighbor to sample */
@@ -86,8 +97,7 @@ public:
 
 	FPCGExSamplingConfig SamplingConfig;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UCurveFloat> WeightCurveObj = nullptr;
+	const FRichCurve* WeightCurveObj = nullptr;
 
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
 
@@ -103,11 +113,11 @@ public:
 	{
 	}
 
-	FORCEINLINE virtual void BlendNodePoint(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const
+	FORCEINLINE virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const
 	{
 	}
 
-	FORCEINLINE virtual void BlendNodeEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const
+	FORCEINLINE virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) const
 	{
 	}
 
@@ -119,18 +129,16 @@ public:
 
 	virtual void Cleanup() override;
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> PointFilterFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> ValueFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> PointFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> ValueFilterFactories;
 
 protected:
 	bool bIsValidOperation = true;
 	TSharedPtr<PCGExCluster::FCluster> Cluster;
-
-	FORCEINLINE virtual double SampleCurve(const double InTime) const { return WeightCurveObj->GetFloatValue(InTime); }
 };
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryBase : public UPCGExParamFactoryBase
+class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
@@ -139,14 +147,17 @@ public:
 
 	FPCGExSamplingConfig SamplingConfig;
 
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> PointFilterFactories;
-	TArray<TObjectPtr<const UPCGExFilterFactoryBase>> ValueFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> PointFilterFactories;
+	TArray<TObjectPtr<const UPCGExFilterFactoryData>> ValueFilterFactories;
 
 	virtual UPCGExNeighborSampleOperation* CreateOperation(FPCGExContext* InContext) const;
-
-	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InDataFacade, PCGExData::FFacadePreloader& FacadePreloader) const
+	
+	virtual void RegisterVtxBuffersDependencies(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InVtxDataFacade, PCGExData::FFacadePreloader& FacadePreloader) const
 	{
 	}
+
+	virtual void RegisterAssetDependencies(FPCGExContext* InContext) const override;
+	
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|NeighborSample")
@@ -170,7 +181,7 @@ protected:
 	//~Begin UPCGExFactoryProviderSettings
 public:
 	virtual FName GetMainOutputPin() const override { return PCGExNeighborSample::OutputSamplerLabel; }
-	virtual UPCGExParamFactoryBase* CreateFactory(FPCGExContext* InContext, UPCGExParamFactoryBase* InFactory) const override;
+	virtual UPCGExFactoryData* CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const override;
 
 #if WITH_EDITOR
 	virtual FString GetDisplayName() const override;

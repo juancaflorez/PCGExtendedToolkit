@@ -1,15 +1,26 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Data/PCGExData.h"
 
 #include "PCGExPointsMT.h"
+#include "ScreenPass.h"
 
 namespace PCGExData
 {
 #pragma region Pools & cache
 
-	TSharedPtr<FBufferBase> FFacade::FindBufferUnsafe(const uint64 UID)
+	void FBufferBase::SetTargetOutputName(const FName InName)
+	{
+		TargetOutputName = InName;
+	}
+
+	bool FBufferBase::OutputsToDifferentName() const
+	{
+		return false;
+	}
+
+	TSharedPtr<FBufferBase> FFacade::FindBuffer_Unsafe(const uint64 UID)
 	{
 		TSharedPtr<FBufferBase>* Found = BufferMap.Find(UID);
 		if (!Found) { return nullptr; }
@@ -18,13 +29,35 @@ namespace PCGExData
 
 	TSharedPtr<FBufferBase> FFacade::FindBuffer(const uint64 UID)
 	{
-		FReadScopeLock ReadScopeLock(PoolLock);
-		return FindBufferUnsafe(UID);
+		FReadScopeLock ReadScopeLock(BufferLock);
+		return FindBuffer_Unsafe(UID);
+	}
+
+	TSharedPtr<FBufferBase> FFacade::FindReadableAttributeBuffer(const FName InName)
+	{
+		FReadScopeLock ReadScopeLock(BufferLock);
+		for (const TSharedPtr<FBufferBase>& Buffer : Buffers)
+		{
+			if (!Buffer->IsReadable()) { continue; }
+			if (Buffer->InAttribute && Buffer->InAttribute->Name == InName) { return Buffer; }
+		}
+		return nullptr;
+	}
+
+	TSharedPtr<FBufferBase> FFacade::FindWritableAttributeBuffer(const FName InName)
+	{
+		FReadScopeLock ReadScopeLock(BufferLock);
+		for (const TSharedPtr<FBufferBase>& Buffer : Buffers)
+		{
+			if (!Buffer->IsWritable()) { continue; }
+			if (Buffer->FullName == InName) { return Buffer; }
+		}
+		return nullptr;
 	}
 
 #pragma endregion
 
-#pragma region FIdxUnion
+#pragma region FFacade
 
 	void FFacade::MarkCurrentBuffersReadAsComplete()
 	{
@@ -35,51 +68,149 @@ namespace PCGExData
 		}
 	}
 
-	void FFacade::Write(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
+	void FFacade::Write(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, const bool bEnsureValidKeys)
 	{
 		if (!AsyncManager || !AsyncManager->IsAvailable() || !Source->GetOut()) { return; }
 
 		//UE_LOG(LogTemp, Warning, TEXT("{%lld} Facade -> Write"), AsyncManager->Context->GetInputSettings<UPCGSettings>()->UID)
 
-		Source->GetOutKeys(true);
-
-		for (int i = 0; i < Buffers.Num(); i++)
+		if (ValidateOutputsBeforeWriting())
 		{
-			const TSharedPtr<FBufferBase> Buffer = Buffers[i];
-			if (!Buffer.IsValid() || !Buffer->IsWritable()) { continue; }
-			PCGExMT::Write(AsyncManager, Buffer);
+			if (bEnsureValidKeys) { Source->GetOutKeys(true); }
+
+			{
+				FWriteScopeLock WriteScopeLock(BufferLock);
+
+				for (int i = 0; i < Buffers.Num(); i++)
+				{
+					const TSharedPtr<FBufferBase> Buffer = Buffers[i];
+					if (!Buffer.IsValid() || !Buffer->IsWritable() || !Buffer->IsEnabled()) { continue; }
+					WriteBuffer(AsyncManager, Buffer, false);
+				}
+			}
 		}
 
 		Flush();
 	}
 
-	void FFacade::WriteBuffersAsCallbacks(const TSharedPtr<PCGExMT::FTaskGroup>& TaskGroup)
+	int32 FFacade::WriteBuffersAsCallbacks(const TSharedPtr<PCGExMT::FTaskGroup>& TaskGroup)
 	{
 		// !!! Requires manual flush !!!
 
-		if (!TaskGroup)
+		if (!TaskGroup || !ValidateOutputsBeforeWriting())
+		{
+			Flush();
+			return -1;
+		}
+
+		int32 WritableCount = 0;
+		Source->GetOutKeys(true);
+
+		{
+			FWriteScopeLock WriteScopeLock(BufferLock);
+
+			for (int i = 0; i < Buffers.Num(); i++)
+			{
+				const TSharedPtr<FBufferBase> Buffer = Buffers[i];
+				if (!Buffer.IsValid() || !Buffer->IsWritable() || !Buffer->IsEnabled()) { continue; }
+
+				TaskGroup->AddSimpleCallback([BufferRef = Buffer]() { BufferRef->Write(); });
+				WritableCount++;
+			}
+		}
+
+		return WritableCount;
+	}
+
+	void FFacade::WriteBuffers(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager, PCGExMT::FCompletionCallback&& Callback)
+	{
+		if (!ValidateOutputsBeforeWriting())
 		{
 			Flush();
 			return;
 		}
 
-		Source->GetOutKeys(true);
+		PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, WriteBuffersWithCallback);
+		WriteBuffersWithCallback->OnCompleteCallback =
+			[PCGEX_ASYNC_THIS_CAPTURE, Callback]()
+			{
+				PCGEX_ASYNC_THIS
+				This->Flush();
+				Callback();
+			};
 
-		for (const TSharedPtr<FBufferBase>& Buffer : Buffers)
+		if (const int32 WritableCount = WriteBuffersAsCallbacks(WriteBuffersWithCallback); WritableCount <= 0)
 		{
-			if (Buffer->IsWritable()) { TaskGroup->AddSimpleCallback([BufferRef = Buffer]() { BufferRef->Write(); }); }
+			// -1 is fail so no callback
+			if (WritableCount == 0) { Callback(); }
+			return;
 		}
+
+		WriteBuffersWithCallback->StartSimpleCallbacks();
 	}
+
+	bool FFacade::ValidateOutputsBeforeWriting() const
+	{
+		FPCGExContext* Context = Source->GetContext();
+
+		// TODO : First check that no writable attempts to write to the same output twice
+		// TODO : Delete writables whose output that have
+
+		{
+			FWriteScopeLock WriteScopeLock(BufferLock);
+
+			TSet<FName> UniqueOutputs;
+			//TSet<FName> DeprecatedOutputs;
+
+			for (int i = 0; i < Buffers.Num(); i++)
+			{
+				const TSharedPtr<FBufferBase> Buffer = Buffers[i];
+				if (!Buffer.IsValid() || !Buffer->IsWritable() || !Buffer->IsEnabled()) { continue; }
+
+				PCGEx::FAttributeIdentity Identity = Buffer->GetTargetOutputIdentity();
+				bool bAlreadySet = false;
+				UniqueOutputs.Add(Identity.Name, &bAlreadySet);
+
+				if (bAlreadySet)
+				{
+					PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("Attribute \"{0}\" is used at target output at least twice by different sources."), FText::FromName(Identity.Name)));
+					return false;
+				}
+
+				if (Buffer->OutputsToDifferentName())
+				{
+					// Get rid of new attributes that are being redirected at the time of writing
+					// This is not elegant, but it's while waiting for a proper refactor
+
+					if (Buffer->bIsNewOutput && Buffer->OutAttribute)
+					{
+						// Note : there will be a problem if an output an attribute to a different name a different type than the original one
+						// i.e, From@A<double>, To@B<FVector>
+						// Although this should never be an issue due to templating
+						//DeprecatedOutputs.Add(Buffer->OutAttribute->Name);
+						Source->DeleteAttribute(Buffer->OutAttribute->Name);
+					}
+				}
+			}
+
+			// Make sure we don't deprecate any output that will be written to ?
+			// UniqueOutputs > DeprecatedOutputs
+		}
+
+		return true;
+	}
+
+#pragma endregion
 
 	bool FReadableBufferConfig::Validate(FPCGExContext* InContext, const TSharedRef<FFacade>& InFacade) const
 	{
 		return true;
 	}
 
-	void FReadableBufferConfig::Fetch(const TSharedRef<FFacade>& InFacade, const int32 StartIndex, const int32 Count) const
+	void FReadableBufferConfig::Fetch(const TSharedRef<FFacade>& InFacade, const PCGExMT::FScope& Scope) const
 	{
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+		PCGEx::ExecuteWithRightType(
+			Identity.UnderlyingType, [&](auto DummyValue)
 			{
 				using T = decltype(DummyValue);
 				TSharedPtr<TBuffer<T>> Reader = nullptr;
@@ -95,14 +226,14 @@ namespace PCGExData
 					Reader = InFacade->GetScopedBroadcaster<T>(Selector);
 					break;
 				}
-				Reader->Fetch(StartIndex, Count);
+				Reader->Fetch(Scope);
 			});
 	}
 
 	void FReadableBufferConfig::Read(const TSharedRef<FFacade>& InFacade) const
 	{
-		PCGMetadataAttribute::CallbackWithRightType(
-			static_cast<uint16>(Identity.UnderlyingType), [&](auto DummyValue)
+		PCGEx::ExecuteWithRightType(
+			Identity.UnderlyingType, [&](auto DummyValue)
 			{
 				using T = decltype(DummyValue);
 				TSharedPtr<TBuffer<T>> Reader = nullptr;
@@ -128,9 +259,9 @@ namespace PCGExData
 		return true;
 	}
 
-	void FFacadePreloader::Fetch(const TSharedRef<FFacade>& InFacade, const int32 StartIndex, const int32 Count) const
+	void FFacadePreloader::Fetch(const TSharedRef<FFacade>& InFacade, const PCGExMT::FScope& Scope) const
 	{
-		for (const FReadableBufferConfig& ExistingConfig : BufferConfigs) { ExistingConfig.Fetch(InFacade, StartIndex, Count); }
+		for (const FReadableBufferConfig& ExistingConfig : BufferConfigs) { ExistingConfig.Fetch(InFacade, Scope); }
 	}
 
 	void FFacadePreloader::Read(const TSharedRef<FFacade>& InFacade, const int32 ConfigIndex) const
@@ -138,45 +269,41 @@ namespace PCGExData
 		BufferConfigs[ConfigIndex].Read(InFacade);
 	}
 
-	void FFacadePreloader::StartLoading(TSharedPtr<PCGExMT::FTaskManager> AsyncManager, const TSharedRef<FFacade>& InDataFacade, TSharedPtr<PCGExMT::FTaskGroup> InTaskGroup)
+	void FFacadePreloader::StartLoading(
+		const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager,
+		const TSharedRef<FFacade>& InDataFacade,
+		const TSharedPtr<PCGExMT::FAsyncMultiHandle>& InParentHandle)
 	{
 		InternalDataFacadePtr = InDataFacade;
-		TaskGroupPtr = InTaskGroup;
 
 		if (!IsEmpty())
 		{
-			if (!Validate(AsyncManager->Context, InDataFacade))
+			if (!Validate(AsyncManager->GetContext(), InDataFacade))
 			{
 				InternalDataFacadePtr.Reset();
-				TaskGroupPtr.Reset();
 				OnLoadingEnd();
 				return;
 			}
 
 			PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, PrefetchAttributesTask)
-
-			if (InTaskGroup) { InTaskGroup->GrowNumStarted(); }
+			PrefetchAttributesTask->SetParent(InParentHandle);
 
 			PrefetchAttributesTask->OnCompleteCallback =
-				[WeakThis = TWeakPtr<FFacadePreloader>(SharedThis(this))]()
+				[PCGEX_ASYNC_THIS_CAPTURE]()
 				{
-					const TSharedPtr<FFacadePreloader> This = WeakThis.Pin();
-					if (!This) { return; }
-
+					PCGEX_ASYNC_THIS
 					This->OnLoadingEnd();
 				};
 
 			if (InDataFacade->bSupportsScopedGet)
 			{
 				PrefetchAttributesTask->OnSubLoopStartCallback =
-					[WeakThis = TWeakPtr<FFacadePreloader>(SharedThis(this))]
-					(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+					[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 					{
-						const TSharedPtr<FFacadePreloader> This = WeakThis.Pin();
-						if (!This) { return; }
-						if (TSharedPtr<FFacade> InternalFacade = This->InternalDataFacadePtr.Pin())
+						PCGEX_ASYNC_THIS
+						if (const TSharedPtr<FFacade> InternalFacade = This->InternalDataFacadePtr.Pin())
 						{
-							This->Fetch(InternalFacade.ToSharedRef(), StartIndex, Count);
+							This->Fetch(InternalFacade.ToSharedRef(), Scope);
 						}
 					};
 
@@ -185,14 +312,12 @@ namespace PCGExData
 			else
 			{
 				PrefetchAttributesTask->OnSubLoopStartCallback =
-					[WeakThis = TWeakPtr<FFacadePreloader>(SharedThis(this))]
-					(const int32 StartIndex, const int32 Count, const int32 LoopIdx)
+					[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 					{
-						const TSharedPtr<FFacadePreloader> This = WeakThis.Pin();
-						if (!This) { return; }
-						if (TSharedPtr<FFacade> InternalFacade = This->InternalDataFacadePtr.Pin())
+						PCGEX_ASYNC_THIS
+						if (const TSharedPtr<FFacade> InternalFacade = This->InternalDataFacadePtr.Pin())
 						{
-							This->Read(InternalFacade.ToSharedRef(), StartIndex);
+							This->Read(InternalFacade.ToSharedRef(), Scope.Start);
 						}
 					};
 
@@ -201,17 +326,17 @@ namespace PCGExData
 		}
 		else
 		{
-			TaskGroupPtr.Reset();
 			OnLoadingEnd();
 		}
 	}
 
-	void FFacadePreloader::OnLoadingEnd()
+	void FFacadePreloader::OnLoadingEnd() const
 	{
 		if (TSharedPtr<FFacade> InternalFacade = InternalDataFacadePtr.Pin()) { InternalFacade->MarkCurrentBuffersReadAsComplete(); }
 		if (OnCompleteCallback) { OnCompleteCallback(); }
-		if (const TSharedPtr<PCGExMT::FTaskGroup> TaskGroup = TaskGroupPtr.Pin()) { TaskGroup->GrowNumCompleted(); }
 	}
+
+#pragma region Union Data
 
 	void FUnionData::ComputeWeights(
 		const TArray<TSharedPtr<FFacade>>& Sources, const TMap<uint32, int32>& SourcesIdx, const FPCGPoint& Target,
@@ -238,7 +363,7 @@ namespace PCGExData
 			OutIOIdx[Index] = *IOIdx;
 			OutPointsIdx[Index] = PtIndex;
 
-			const double Weight = InDistanceDetails->GetDistance(Sources[*IOIdx]->Source->GetInPoint(PtIndex), Target);
+			const double Weight = InDistanceDetails->GetDistSquared(Sources[*IOIdx]->Source->GetInPoint(PtIndex), Target);
 			OutWeights[Index] = Weight;
 			TotalWeight += Weight;
 

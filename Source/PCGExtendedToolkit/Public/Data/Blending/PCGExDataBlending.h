@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -47,7 +47,9 @@ MACRO(UnsignedMax) \
 MACRO(AbsoluteMin) \
 MACRO(AbsoluteMax) \
 MACRO(WeightedSubtract) \
-MACRO(CopyOther)
+MACRO(CopyOther) \
+MACRO(Hash) \
+MACRO(UnsignedHash)
 
 UENUM()
 enum class EPCGExBlendOver : uint8
@@ -70,7 +72,7 @@ namespace PCGExData
 	class FUnionMetadata;
 }
 
-UENUM()
+UENUM(BlueprintType)
 enum class EPCGExDataBlendingType : uint8
 {
 	None             = 0 UMETA(DisplayName = "None", ToolTip="No blending is applied, keep the original value."),
@@ -78,7 +80,7 @@ enum class EPCGExDataBlendingType : uint8
 	Weight           = 2 UMETA(DisplayName = "Weight", ToolTip="Weights based on distance to blend targets. If the results are unexpected, try 'Lerp' instead"),
 	Min              = 3 UMETA(DisplayName = "Min", ToolTip="Component-wise MIN operation"),
 	Max              = 4 UMETA(DisplayName = "Max", ToolTip="Component-wise MAX operation"),
-	Copy             = 5 UMETA(DisplayName = "Copy", ToolTip = "Copy incoming data"),
+	Copy             = 5 UMETA(DisplayName = "Copy (Target)", ToolTip = "Copy target data (second value)"),
 	Sum              = 6 UMETA(DisplayName = "Sum", ToolTip = "Sum"),
 	WeightedSum      = 7 UMETA(DisplayName = "Weighted Sum", ToolTip = "Sum of all the data, weighted"),
 	Lerp             = 8 UMETA(DisplayName = "Lerp", ToolTip="Uses weight as lerp. If the results are unexpected, try 'Weight' instead."),
@@ -88,7 +90,9 @@ enum class EPCGExDataBlendingType : uint8
 	AbsoluteMin      = 12 UMETA(DisplayName = "Absolute Min", ToolTip="Component-wise MIN of absolute value."),
 	AbsoluteMax      = 13 UMETA(DisplayName = "Absolute Max", ToolTip="Component-wise MAX of absolute value."),
 	WeightedSubtract = 14 UMETA(DisplayName = "Weighted Subtract", ToolTip="Substraction of all the data, weighted"),
-	CopyOther        = 15 UMETA(DisplayName = "Copy (Other)", ToolTip="Same as copy, but uses the other value."),
+	CopyOther        = 15 UMETA(DisplayName = "Copy (Source)", ToolTip="Copy source data (first value)"),
+	Hash             = 16 UMETA(DisplayName = "Hash", ToolTip="Combine the values into a hash"),
+	UnsignedHash     = 17 UMETA(DisplayName = "Hash (Unsigned)", ToolTip="Combine the values into a hash but sort the values first to create an order-independent hash.")
 };
 
 USTRUCT(BlueprintType)
@@ -334,13 +338,16 @@ namespace PCGExDataBlending
 {
 	const FName SourceOverridesBlendingOps = TEXT("Overrides : Blending");
 
+	const FName SourceBlendingLabel = TEXT("Blendings");
+	const FName OutputBlendingLabel = TEXT("Blending");
+
 	/**
 	 * 
 	 */
-	class /*PCGEXTENDEDTOOLKIT_API*/ FDataBlendingOperationBase
+	class /*PCGEXTENDEDTOOLKIT_API*/ FDataBlendingProcessorBase
 	{
 	public:
-		virtual ~FDataBlendingOperationBase()
+		virtual ~FDataBlendingProcessorBase()
 		{
 		}
 
@@ -408,7 +415,7 @@ namespace PCGExDataBlending
 	};
 
 	template <typename T, EPCGExDataBlendingType BlendingType, bool bRequirePreparation = false, bool bRequireCompletion = false>
-	class /*PCGEXTENDEDTOOLKIT_API*/ TDataBlendingOperation : public FDataBlendingOperationBase
+	class /*PCGEXTENDEDTOOLKIT_API*/ TDataBlendingProcessor : public FDataBlendingProcessorBase
 	{
 	protected:
 		void Cleanup()
@@ -418,7 +425,7 @@ namespace PCGExDataBlending
 		}
 
 	public:
-		virtual ~TDataBlendingOperation() override
+		virtual ~TDataBlendingProcessor() override
 		{
 			Cleanup();
 		}
@@ -431,7 +438,7 @@ namespace PCGExDataBlending
 		{
 			Cleanup();
 
-			FDataBlendingOperationBase::PrepareForData(InWriter, InSecondaryFacade, SecondarySource);
+			FDataBlendingProcessorBase::PrepareForData(InWriter, InSecondaryFacade, SecondarySource);
 
 			Writer = StaticCastSharedPtr<PCGExData::TBuffer<T>>(InWriter);
 
@@ -443,7 +450,7 @@ namespace PCGExDataBlending
 		{
 			Cleanup();
 
-			FDataBlendingOperationBase::PrepareForData(InPrimaryFacade, InSecondaryFacade, SecondarySource);
+			FDataBlendingProcessorBase::PrepareForData(InPrimaryFacade, InSecondaryFacade, SecondarySource);
 
 			SourceAttribute = InSecondaryFacade->FindConstAttribute<T>(AttributeName, SecondarySource);
 
@@ -459,7 +466,7 @@ namespace PCGExDataBlending
 		{
 			Cleanup();
 
-			FDataBlendingOperationBase::SoftPrepareForData(InPrimaryFacade, InSecondaryFacade, SecondarySource);
+			FDataBlendingProcessorBase::SoftPrepareForData(InPrimaryFacade, InSecondaryFacade, SecondarySource);
 
 			SourceAttribute = InSecondaryFacade->FindConstAttribute<T>(AttributeName, SecondarySource);
 			TargetAttribute = InPrimaryFacade->FindMutableAttribute<T>(AttributeName, PCGExData::ESource::Out);
@@ -590,7 +597,7 @@ namespace PCGExDataBlending
 	};
 
 	template <typename T, EPCGExDataBlendingType BlendingType, bool bRequirePreparation = false, bool bRequireCompletion = false>
-	class /*PCGEXTENDEDTOOLKIT_API*/ FDataBlendingOperationWithFirstInit : public TDataBlendingOperation<T, BlendingType, bRequirePreparation, bRequireCompletion>
+	class /*PCGEXTENDEDTOOLKIT_API*/ FDataBlendingProcessorWithFirstInit : public TDataBlendingProcessor<T, BlendingType, bRequirePreparation, bRequireCompletion>
 	{
 		FORCEINLINE virtual void DoValuesRangeOperation(const int32 PrimaryReadIndex, const int32 SecondaryReadIndex, TArrayView<T>& Values, const TArrayView<double>& Weights, const int8 bFirstOperation) const override
 		{
@@ -621,7 +628,7 @@ namespace PCGExDataBlending
 			this->Writer->GetMutable(WriteIndex) = this->SingleOperation(A, B, Weight);
 		}
 	};
-
+	
 	static void AssembleBlendingDetails(
 		const FPCGExPropertiesBlendingDetails& PropertiesBlending,
 		const TMap<FName, EPCGExDataBlendingType>& PerAttributeBlending,
@@ -650,7 +657,7 @@ namespace PCGExDataBlending
 
 	static void AssembleBlendingDetails(
 		const EPCGExDataBlendingType& DefaultBlending,
-		const TSet<FName>& Attributes,
+		const TArray<FName>& Attributes,
 		const TSharedRef<PCGExData::FPointIO>& SourceIO,
 		FPCGExBlendingDetails& OutDetails,
 		TSet<FName>& OutMissingAttributes)
@@ -669,4 +676,5 @@ namespace PCGExDataBlending
 			OutDetails.FilteredAttributes.Add(Id);
 		}
 	}
+	
 }

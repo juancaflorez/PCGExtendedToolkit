@@ -1,4 +1,4 @@
-// Copyright Timothé Lapetite 2024
+// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -26,28 +26,37 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExActorCollectionEntry : public FPCGExAsse
 	}
 
 	UPROPERTY(EditAnywhere, Category = Settings, meta=(EditCondition="!bIsSubCollection", EditConditionHides))
-	TSoftObjectPtr<AActor> Actor;
+	TSoftClassPtr<AActor> Actor;
+
+	/** If enabled, the cached bounds will only account for collicable components on the actor. */
+	UPROPERTY(EditAnywhere, Category = "Settings|Bounds", meta=(EditCondition="!bIsSubCollection", EditConditionHides))
+	bool bOnlyCollidingComponents = false;
+
+	/** If enabled, the cached bounds will also account for child actors. */
+	UPROPERTY(EditAnywhere, Category = "Settings|Bounds", meta=(EditCondition="!bIsSubCollection", EditConditionHides))
+	bool bIncludeFromChildActors = true;
 
 	UPROPERTY(EditAnywhere, Category = Settings, meta=(EditCondition="bIsSubCollection", EditConditionHides))
-	TSoftObjectPtr<UPCGExActorCollection> SubCollection;
-
-	TObjectPtr<UPCGExActorCollection> SubCollectionPtr;
+	TObjectPtr<UPCGExActorCollection> SubCollection;
 
 	bool SameAs(const FPCGExActorCollectionEntry& Other) const
 	{
 		return
-			SubCollectionPtr == Other.SubCollectionPtr &&
+			SubCollection == Other.SubCollection &&
 			Weight == Other.Weight &&
 			Category == Other.Category &&
 			Actor == Other.Actor;
 	}
 
+	virtual void GetAssetPaths(TSet<FSoftObjectPath>& OutPaths) const override;
+
 	virtual bool Validate(const UPCGExAssetCollection* ParentCollection) override;
 	virtual void UpdateStaging(const UPCGExAssetCollection* OwningCollection, int32 InInternalIndex, const bool bRecursive) override;
 	virtual void SetAssetPath(const FSoftObjectPath& InPath) override;
 
-protected:
-	virtual void OnSubCollectionLoaded() override;
+#if WITH_EDITOR
+	virtual void EDITOR_Sanitize() override;
+#endif
 };
 
 UCLASS(BlueprintType, DisplayName="[PCGEx] Actor Collection")
@@ -66,6 +75,4 @@ public:
 	TArray<FPCGExActorCollectionEntry> Entries;
 
 	PCGEX_ASSET_COLLECTION_BOILERPLATE(UPCGExActorCollection, FPCGExActorCollectionEntry)
-
-	virtual void GetAssetPaths(TSet<FSoftObjectPath>& OutPaths, const PCGExAssetCollection::ELoadingFlags Flags) const override;
 };

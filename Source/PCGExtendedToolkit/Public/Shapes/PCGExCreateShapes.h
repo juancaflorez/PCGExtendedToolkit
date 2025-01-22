@@ -1,4 +1,4 @@
-﻿// Copyright Timothé Lapetite 2024
+﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #pragma once
@@ -95,21 +95,21 @@ namespace PCGExCreateShapes
 		virtual ~FProcessor() override;
 
 		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const int32 LoopIdx, const int32 LoopCount) override;
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void OnPointsProcessingComplete() override;
 		virtual void Output() override;
 		virtual void CompleteWork() override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildShape final : public PCGExMT::FPCGExTask
+	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildShape final : public PCGExMT::FTask
 	{
 	public:
-		FBuildShape(
-			const TSharedPtr<PCGExData::FPointIO>& InPointIO,
-			UPCGExShapeBuilderOperation* InOperation,
-			const TSharedRef<PCGExData::FFacade>& InShapeDataFacade,
-			const TSharedPtr<PCGExShapes::FShape>& InShape) :
-			FPCGExTask(InPointIO),
+		PCGEX_ASYNC_TASK_NAME(FBuildShape)
+
+		FBuildShape(UPCGExShapeBuilderOperation* InOperation,
+		            const TSharedRef<PCGExData::FFacade>& InShapeDataFacade,
+		            const TSharedPtr<PCGExShapes::FShape>& InShape) :
+			FTask(),
 			ShapeDataFacade(InShapeDataFacade),
 			Operation(InOperation),
 			Shape(InShape)
@@ -120,6 +120,6 @@ namespace PCGExCreateShapes
 		UPCGExShapeBuilderOperation* Operation;
 		TSharedPtr<PCGExShapes::FShape> Shape;
 
-		virtual bool ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
+		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 }
