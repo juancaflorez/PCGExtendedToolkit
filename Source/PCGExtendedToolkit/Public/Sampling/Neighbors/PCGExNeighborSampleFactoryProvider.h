@@ -32,7 +32,7 @@ namespace PCGExNeighborSample
 }
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplingConfig
+struct PCGEXTENDEDTOOLKIT_API FPCGExSamplingConfig
 {
 	GENERATED_BODY()
 
@@ -44,7 +44,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplingConfig
 
 	UPROPERTY()
 	bool bSupportsBlending = true;
-	
+
 	/** Type of range for weight blending computation */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExRangeType RangeType = EPCGExRangeType::FullRange;
@@ -87,8 +87,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplingConfig
 /**
  * 
  */
-UCLASS()
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleOperation : public UPCGExOperation
+UCLASS(Abstract)
+class PCGEXTENDEDTOOLKIT_API UPCGExNeighborSampleOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -112,23 +112,10 @@ public:
 	TSharedRef<PCGExData::FFacade> GetSourceDataFacade() const;
 
 	virtual void ProcessNode(const int32 NodeIndex);
-
-	FORCEINLINE virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const
-	{
-	}
-
-	FORCEINLINE virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight)
-	{
-	}
-
-	FORCEINLINE virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight)
-	{
-	}
-
-	FORCEINLINE virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight)
-	{
-	}
-
+	virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const;
+	virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight);
+	virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight);
+	virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight);
 	virtual void CompleteOperation();
 
 	virtual void Cleanup() override;
@@ -142,19 +129,25 @@ protected:
 	TSharedPtr<PCGExCluster::FCluster> Cluster;
 };
 
-UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryData : public UPCGExFactoryData
+UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
+class PCGEXTENDEDTOOLKIT_API UPCGExNeighborSamplerFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
 public:
-	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::Sampler; }
-
+	UPROPERTY()
 	FPCGExSamplingConfig SamplingConfig;
 
+	UPROPERTY()
 	TArray<TObjectPtr<const UPCGExFilterFactoryData>> VtxFilterFactories;
+
+	UPROPERTY()
 	TArray<TObjectPtr<const UPCGExFilterFactoryData>> EdgesFilterFactories;
+
+	UPROPERTY()
 	TArray<TObjectPtr<const UPCGExFilterFactoryData>> ValueFilterFactories;
+
+	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::Sampler; }
 
 	virtual UPCGExNeighborSampleOperation* CreateOperation(FPCGExContext* InContext) const;
 
@@ -175,7 +168,7 @@ public:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|NeighborSample")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleProviderSettings : public UPCGExFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExNeighborSampleProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -192,10 +185,9 @@ protected:
 	virtual TArray<FPCGPinProperties> InputPinProperties() const override;
 	//~End UPCGSettings
 
-protected:
 	virtual bool SupportsVtxFilters(bool& bIsRequired) const;
 	virtual bool SupportsEdgeFilters(bool& bIsRequired) const;
-	
+
 	//~Begin UPCGExFactoryProviderSettings
 public:
 	virtual FName GetMainOutputPin() const override { return PCGExNeighborSample::OutputSamplerLabel; }
@@ -205,7 +197,7 @@ public:
 	virtual FString GetDisplayName() const override;
 #endif
 	//~End UPCGExFactoryProviderSettings
-	
+
 	/** Priority for sampling order. Higher values are processed last. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayPriority=-1))
 	int32 Priority = 0;

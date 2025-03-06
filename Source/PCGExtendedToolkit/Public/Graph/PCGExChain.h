@@ -9,7 +9,7 @@
 
 namespace PCGExCluster
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FNodeChain : public TSharedFromThis<FNodeChain>
+	class PCGEXTENDEDTOOLKIT_API FNodeChain : public TSharedFromThis<FNodeChain>
 	{
 	public:
 		FLink Seed;
@@ -32,9 +32,15 @@ namespace PCGExCluster
 		void BuildChain(const TSharedRef<FCluster>& Cluster, const TSharedPtr<TArray<int8>>& Breakpoints);
 		void Dump(const TSharedRef<FCluster>& Cluster, const TSharedPtr<PCGExGraph::FGraph>& Graph, const bool bAddMetadata) const;
 		void DumpReduced(const TSharedRef<FCluster>& Cluster, const TSharedPtr<PCGExGraph::FGraph>& Graph, const bool bAddMetadata) const;
+		
+		FVector GetFirstEdgeDir(const TSharedPtr<FCluster>& Cluster) const;
+		FVector GetLastEdgeDir(const TSharedPtr<FCluster>& Cluster) const;
+		FVector GetEdgeDir(const TSharedPtr<FCluster>& Cluster, const bool bFirst) const;
+
+		int32 GetNodes(const TSharedPtr<FCluster>& Cluster, TArray<int32>& OutNodes, bool bReverse);
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FNodeChainBuilder : public TSharedFromThis<FNodeChainBuilder>
+	class PCGEXTENDEDTOOLKIT_API FNodeChainBuilder : public TSharedFromThis<FNodeChainBuilder>
 	{
 	public:
 		TSharedRef<FCluster> Cluster;

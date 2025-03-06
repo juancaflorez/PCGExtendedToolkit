@@ -16,7 +16,7 @@ class UPCGExActionFactoryData;
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBatchActionsSettings : public UPCGExPointsProcessorSettings
+class UPCGExBatchActionsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -24,7 +24,7 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(BatchActions, "Batch Actions", "Batch various actions together.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMisc; }
 #endif
 
 protected:
@@ -50,7 +50,7 @@ private:
 	friend class FPCGExBatchActionsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBatchActionsContext final : FPCGExPointsProcessorContext
+struct FPCGExBatchActionsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBatchActionsElement;
 
@@ -58,7 +58,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBatchActionsContext final : FPCGExPoints
 	TArray<TObjectPtr<const UPCGExActionFactoryData>> ActionsFactories;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBatchActionsElement final : public FPCGExPointsProcessorElement
+class FPCGExBatchActionsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -85,7 +85,7 @@ namespace PCGExBatchActions
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

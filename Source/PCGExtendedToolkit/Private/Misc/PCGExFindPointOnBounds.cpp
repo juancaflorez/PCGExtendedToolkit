@@ -5,10 +5,9 @@
 
 #include "Data/PCGExData.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExFindPointOnBoundsElement"
 #define PCGEX_NAMESPACE FindPointOnBounds
-
-PCGExData::EIOInit UPCGExFindPointOnBoundsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::New; }
 
 PCGEX_INITIALIZE_ELEMENT(FindPointOnBounds)
 
@@ -91,11 +90,13 @@ namespace PCGExFindPointOnBounds
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExFindPointOnBounds::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::New)
 
 		const FBox Bounds = PointDataFacade->Source->GetIn()->GetBounds();
 		SearchPosition = Bounds.GetCenter() + Bounds.GetExtent() * Settings->UVW;
@@ -108,7 +109,7 @@ namespace PCGExFindPointOnBounds
 	void FProcessor::ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope)
 	{
 		const double Dist = FVector::Dist(Point.Transform.GetLocation(), SearchPosition);
-		
+
 		{
 			FWriteScopeLock WriteLock(BestIndexLock);
 			if (Dist > BestDistance) { return; }
@@ -116,9 +117,9 @@ namespace PCGExFindPointOnBounds
 
 		{
 			FWriteScopeLock WriteLock(BestIndexLock);
-			
+
 			if (Dist > BestDistance) { return; }
-			
+
 			BestPosition = Point.Transform.GetLocation();
 			BestIndex = Index;
 			BestDistance = Dist;

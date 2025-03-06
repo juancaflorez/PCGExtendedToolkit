@@ -7,7 +7,6 @@
 #include "Graph/Filters/PCGExAdjacency.h"
 #include "PCGExDetails.h"
 
-
 #include "Graph/PCGExCluster.h"
 #include "Graph/Filters/PCGExClusterFilter.h"
 #include "Misc/Filters/PCGExFilterFactoryProvider.h"
@@ -16,7 +15,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExIsoEdgeDirectionFilterConfig
+struct FPCGExIsoEdgeDirectionFilterConfig
 {
 	GENERATED_BODY()
 
@@ -61,7 +60,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExIsoEdgeDirectionFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExIsoEdgeDirectionFilterFactory : public UPCGExEdgeFilterFactoryData
+class UPCGExIsoEdgeDirectionFilterFactory : public UPCGExEdgeFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -73,19 +72,15 @@ public:
 	TArray<FPCGExSortRuleConfig> EdgeSortingRules;
 
 	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const override;
-
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
+	
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FIsoEdgeDirectionFilter final : public PCGExClusterFilter::TEdgeFilter
+class FIsoEdgeDirectionFilter final : public PCGExClusterFilter::FEdgeFilter
 {
 public:
-	explicit FIsoEdgeDirectionFilter(const UPCGExIsoEdgeDirectionFilterFactory* InFactory)
-		: TEdgeFilter(InFactory), TypedFilterFactory(InFactory)
-	{
-		DotComparison = InFactory->Config.DotComparisonDetails;
-		HashComparison = InFactory->Config.HashComparisonDetails;
-	}
+	explicit FIsoEdgeDirectionFilter(const UPCGExIsoEdgeDirectionFilterFactory* InFactory);
 
 	const UPCGExIsoEdgeDirectionFilterFactory* TypedFilterFactory;
 
@@ -104,15 +99,11 @@ public:
 	bool TestDot(const int32 PtIndex, const FVector& EdgeDir) const;
 	bool TestHash(const int32 PtIndex, const FVector& EdgeDir) const;
 
-	virtual ~FIsoEdgeDirectionFilter() override
-	{
-		TypedFilterFactory = nullptr;
-	}
+	virtual ~FIsoEdgeDirectionFilter() override;
 };
 
-
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExIsoEdgeDirectionFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExIsoEdgeDirectionFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 
@@ -120,9 +111,9 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
-		IsoEdgeDirectionFilterFactory, "Cluster Filter : Edge Direction (Edge)", "Dot product comparison of the edge direction against a local attribute or constant.",
+		IsoEdgeDirectionFilterFactory, "Edge Filter : Edge Direction", "Dot product comparison of the edge direction against a local attribute or constant.",
 		PCGEX_FACTORY_NAME_PRIORITY)
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter); }
 #endif
 
 	virtual TArray<FPCGPinProperties> InputPinProperties() const override;

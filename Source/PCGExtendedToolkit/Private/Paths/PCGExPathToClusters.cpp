@@ -2,6 +2,8 @@
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Paths/PCGExPathToClusters.h"
+
+
 #include "Graph/PCGExGraph.h"
 #include "Graph/Data/PCGExClusterData.h"
 #include "Graph/PCGExUnionHelpers.h"
@@ -19,11 +21,6 @@ UPCGExPathToClustersSettings::OutputPinProperties() const
 		Required,
 		{})
 	return PinProperties;
-}
-
-PCGExData::EIOInit UPCGExPathToClustersSettings::GetMainOutputInitMode() const
-{
-	return PCGExData::EIOInit::None;
 }
 
 PCGEX_INITIALIZE_ELEMENT(PathToClusters)
@@ -180,7 +177,7 @@ namespace PCGExPathToClusters
 	{
 	}
 
-	bool FNonFusingProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FNonFusingProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
@@ -238,7 +235,7 @@ namespace PCGExPathToClusters
 	{
 	}
 
-	bool FFusingProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FFusingProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 

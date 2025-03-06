@@ -3,10 +3,10 @@
 
 #include "Graph/PCGExBreakClustersToPaths.h"
 
-
 #include "Curve/CurveUtil.h"
 #include "Graph/PCGExChain.h"
 #include "Graph/Filters/PCGExClusterFilter.h"
+#include "Paths/PCGExPaths.h"
 
 #define LOCTEXT_NAMESPACE "PCGExBreakClustersToPaths"
 #define PCGEX_NAMESPACE BreakClustersToPaths
@@ -14,7 +14,7 @@
 TArray<FPCGPinProperties> UPCGExBreakClustersToPathsSettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties;
-	PCGEX_PIN_POINTS(PCGExGraph::OutputPathsLabel, "Paths", Required, {})
+	PCGEX_PIN_POINTS(PCGExPaths::OutputPathsLabel, "Paths", Required, {})
 	return PinProperties;
 }
 
@@ -30,7 +30,7 @@ bool FPCGExBreakClustersToPathsElement::Boot(FPCGExContext* InContext) const
 	PCGEX_CONTEXT_AND_SETTINGS(BreakClustersToPaths)
 
 	Context->Paths = MakeShared<PCGExData::FPointIOCollection>(Context);
-	Context->Paths->OutputPin = PCGExGraph::OutputPathsLabel;
+	Context->Paths->OutputPin = PCGExPaths::OutputPathsLabel;
 
 	return true;
 }
@@ -72,15 +72,39 @@ namespace PCGExBreakClustersToPaths
 
 		if (Settings->OperateOn == EPCGExBreakClusterOperationTarget::Paths)
 		{
-			ChainBuilder = MakeShared<PCGExCluster::FNodeChainBuilder>(Cluster.ToSharedRef());
-			ChainBuilder->Breakpoints = Breakpoints;
-			if (Settings->LeavesHandling == EPCGExBreakClusterLeavesHandling::Only)
+			if (!Context->FilterFactories.IsEmpty())
 			{
-				bIsProcessorValid = ChainBuilder->CompileLeavesOnly(AsyncManager);
+				// Process breakpoint filters
+				BreakpointFilterManager = MakeShared<PCGExClusterFilter::FManager>(Cluster.ToSharedRef(), VtxDataFacade, EdgeDataFacade);
+				if (!BreakpointFilterManager->Init(ExecutionContext, Context->FilterFactories)) { return false; }
+
+				PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FilterBreakpoints)
+
+				FilterBreakpoints->OnCompleteCallback =
+					[PCGEX_ASYNC_THIS_CAPTURE]()
+					{
+						PCGEX_ASYNC_THIS
+						This->BreakpointFilterManager.Reset();
+						This->BuildChains();
+					};
+
+				FilterBreakpoints->OnSubLoopStartCallback =
+					[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
+					{
+						PCGEX_ASYNC_THIS
+						TArray<int8>& Breaks = *This->Breakpoints;
+						for (int i = Scope.Start; i < Scope.End; i++)
+						{
+							const PCGExCluster::FNode* Node = This->Cluster->GetNode(i);
+							Breaks[Node->PointIndex] = This->BreakpointFilterManager->Test(*Node);
+						}
+					};
+
+				FilterBreakpoints->StartSubLoops(NumNodes, GetDefault<UPCGExGlobalSettings>()->GetClusterBatchChunkSize());
 			}
 			else
 			{
-				bIsProcessorValid = ChainBuilder->Compile(AsyncManager);
+				return BuildChains();
 			}
 		}
 		else
@@ -89,6 +113,22 @@ namespace PCGExBreakClustersToPaths
 		}
 
 		return true;
+	}
+
+	bool FProcessor::BuildChains()
+	{
+		ChainBuilder = MakeShared<PCGExCluster::FNodeChainBuilder>(Cluster.ToSharedRef());
+		ChainBuilder->Breakpoints = Breakpoints;
+		if (Settings->LeavesHandling == EPCGExBreakClusterLeavesHandling::Only)
+		{
+			bIsProcessorValid = ChainBuilder->CompileLeavesOnly(AsyncManager);
+		}
+		else
+		{
+			bIsProcessorValid = ChainBuilder->Compile(AsyncManager);
+		}
+
+		return bIsProcessorValid;
 	}
 
 
@@ -118,44 +158,46 @@ namespace PCGExBreakClustersToPaths
 		if (ChainSize < Settings->MinPointCount) { return; }
 		if (Settings->bOmitAbovePointCount && ChainSize > Settings->MaxPointCount) { return; }
 
-		PCGExGraph::FEdge ChainDir = PCGExGraph::FEdge(Chain->Seed.Edge, Cluster->GetNode(Chain->Seed)->PointIndex, Cluster->GetNode(Chain->Links.Last())->PointIndex);
-		const bool bReverse = DirectionSettings.SortEndpoints(Cluster.Get(), ChainDir);
+		const bool bReverse = DirectionSettings.SortExtrapolation(Cluster.Get(), Chain->Seed.Edge, Chain->Seed.Node, Chain->Links.Last().Node);
 
 		const TSharedPtr<PCGExData::FPointIO> PathIO = Context->Paths->Emplace_GetRef<UPCGPointData>(VtxDataFacade->Source, PCGExData::EIOInit::New);
 		if (!PathIO) { return; }
 
+		bool bDoReverse = bReverse;
+
 		TArray<FPCGPoint>& MutablePoints = PathIO->GetOut()->GetMutablePoints();
 		MutablePoints.SetNumUninitialized(ChainSize);
+		MutablePoints[0] = PathIO->GetInPoint(Cluster->GetNode(Chain->Seed)->PointIndex);
 
-		int32 PtIndex = 0;
+		if (ProjectedPositions && (!Settings->bWindOnlyClosedLoops || Chain->bIsClosedLoop))
+		{
+			const TArray<FVector2D>& PP = *ProjectedPositions;
+			TArray<FVector2D> ProjectedPoints;
+			ProjectedPoints.SetNumUninitialized(ChainSize);
 
-		MutablePoints[PtIndex++] = PathIO->GetInPoint(Cluster->GetNode(Chain->Seed)->PointIndex);
-		for (const PCGExGraph::FLink& Lk : Chain->Links) { MutablePoints[PtIndex++] = PathIO->GetInPoint(Cluster->GetNode(Lk)->PointIndex); }
+			ProjectedPoints[0] = PP[Cluster->GetNode(Chain->Seed)->PointIndex];
+
+			for (int i = 1; i < ChainSize; i++)
+			{
+				const int32 PtIndex = Cluster->GetNode(Chain->Links[i - 1])->PointIndex;
+				MutablePoints[i] = PathIO->GetInPoint(PtIndex);
+				ProjectedPoints[i] = PP[PtIndex];
+			}
+
+			if (!PCGExGeo::IsWinded(Settings->Winding, UE::Geometry::CurveUtil::SignedArea2<double, FVector2D>(ProjectedPoints) < 0))
+			{
+				bDoReverse = true;
+			}
+		}
+		else
+		{
+			for (int i = 1; i < ChainSize; i++) { MutablePoints[i] = PathIO->GetInPoint(Cluster->GetNode(Chain->Links[i - 1])->PointIndex); }
+		}
+
+		if (bDoReverse) { Algo::Reverse(MutablePoints); }
 
 		if (!Chain->bIsClosedLoop) { if (Settings->bTagIfOpenPath) { PathIO->Tags->AddRaw(Settings->IsOpenPathTag); } }
 		else { if (Settings->bTagIfClosedLoop) { PathIO->Tags->AddRaw(Settings->IsClosedLoopTag); } }
-
-		if (bReverse) { Algo::Reverse(MutablePoints); }
-
-		if (ProjectedPositions)
-		{
-			// TODO : Reverse once only
-
-			if (!Settings->bWindOnlyClosedLoops || Chain->bIsClosedLoop)
-			{
-				const TArray<FVector2D>& PP = *ProjectedPositions;
-				TArray<FVector2D> WindingPoints;
-				PCGEx::InitArray(WindingPoints, PtIndex);
-				WindingPoints[0] = PP[Cluster->GetNode(Chain->Seed)->PointIndex];
-				for (int i = 0; i < PtIndex; i++) { WindingPoints[i + 1] = PP[Cluster->GetNode(Chain->Links[i])->PointIndex]; }
-
-				if (!PCGExGeo::IsWinded(Settings->Winding, UE::Geometry::CurveUtil::SignedArea2<double, FVector2D>(WindingPoints) < 0)
-					&& !bReverse)
-				{
-					Algo::Reverse(MutablePoints);
-				}
-			}
-		}
 	}
 
 	void FProcessor::ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope)
@@ -170,6 +212,13 @@ namespace PCGExBreakClustersToPaths
 
 		MutablePoints[0] = PathIO->GetInPoint(Edge.Start);
 		MutablePoints[1] = PathIO->GetInPoint(Edge.End);
+	}
+
+	void FProcessor::Cleanup()
+	{
+		TProcessor<FPCGExBreakClustersToPathsContext, UPCGExBreakClustersToPathsSettings>::Cleanup();
+		ChainBuilder.Reset();
+		BreakpointFilterManager.Reset();
 	}
 
 	void FBatch::RegisterBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader)
@@ -213,22 +262,14 @@ namespace PCGExBreakClustersToPaths
 		Breakpoints = MakeShared<TArray<int8>>();
 		Breakpoints->Init(false, NumPoints);
 
-		if (Context->FilterFactories.IsEmpty() || Settings->Winding != EPCGExWindingMutation::Unchanged)
+		if (Settings->Winding != EPCGExWindingMutation::Unchanged)
 		{
-			if (!Context->FilterFactories.IsEmpty())
-			{
-				// Process breakpoint filters
-				BreakpointFilterManager = MakeShared<PCGExPointFilter::FManager>(VtxDataFacade);
-				if (!BreakpointFilterManager->Init(ExecutionContext, Context->FilterFactories)) { return; }
-			}
+			// We're after a specific winding, project points first.
 
-			if (Settings->Winding != EPCGExWindingMutation::Unchanged)
-			{
-				ProjectionDetails = Settings->ProjectionDetails;
-				if (!ProjectionDetails.Init(Context, VtxDataFacade)) { return; }
+			ProjectionDetails = Settings->ProjectionDetails;
+			if (!ProjectionDetails.Init(Context, VtxDataFacade)) { return; }
 
-				PCGEx::InitArray(ProjectedPositions, VtxDataFacade->GetNum());
-			}
+			PCGEx::InitArray(ProjectedPositions, VtxDataFacade->GetNum());
 
 			PCGEX_ASYNC_GROUP_CHKD_VOID(AsyncManager, ProjectionTaskGroup)
 
@@ -243,16 +284,7 @@ namespace PCGExBreakClustersToPaths
 				[PCGEX_ASYNC_THIS_CAPTURE](const PCGExMT::FScope& Scope)
 				{
 					PCGEX_ASYNC_THIS
-					if (This->BreakpointFilterManager)
-					{
-						TArray<int8>& Breaks = *This->Breakpoints;
-						for (int i = Scope.Start; i < Scope.End; i++) { Breaks[i] = This->BreakpointFilterManager->Test(i); }
-					}
-
-					if (This->ProjectedPositions)
-					{
-						This->ProjectionDetails.ProjectFlat(This->VtxDataFacade, *This->ProjectedPositions, Scope);
-					}
+					This->ProjectionDetails.ProjectFlat(This->VtxDataFacade, *This->ProjectedPositions, Scope);
 				};
 
 			ProjectionTaskGroup->StartSubLoops(VtxDataFacade->GetNum(), GetDefault<UPCGExGlobalSettings>()->GetPointsBatchChunkSize());

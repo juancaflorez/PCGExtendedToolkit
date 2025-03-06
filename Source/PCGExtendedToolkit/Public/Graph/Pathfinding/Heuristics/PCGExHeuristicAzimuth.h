@@ -13,7 +13,7 @@
 #include "PCGExHeuristicAzimuth.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigAzimuth : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigAzimuth : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -27,44 +27,30 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigAzimuth : public FPCGExHe
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Azimuth")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicAzimuth : public UPCGExHeuristicOperation
+class UPCGExHeuristicAzimuth : public UPCGExHeuristicOperation
 {
 	GENERATED_BODY()
 
 public:
-	virtual void PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster) override;
-
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		const FVector Dir = Cluster->GetDir(Seed, Goal);
-		const double Dot = FVector::DotProduct(Dir, Cluster->GetDir(From, Goal)) * -1;
-		return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, OutMin, OutMax));
-	}
+		const PCGExCluster::FNode& Goal) const override;
 
-	FORCEINLINE virtual double GetEdgeScore(
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
-	{
-		const double Dot = (FVector::DotProduct(Cluster->GetDir(From, To), Cluster->GetDir(From, Goal)) * -1);
-		return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, OutMin, OutMax));
-	}
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override;
 
-protected:
-	double OutMin = 0;
-	double OutMax = 1;
 };
 
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryAzimuth : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactoryAzimuth : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
@@ -77,7 +63,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsAzimuthProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicsAzimuthProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

@@ -54,7 +54,7 @@ enum class EPCGExCellSeedBounds : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCellConstraintsDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExCellConstraintsDetails
 {
 	GENERATED_BODY()
 
@@ -91,7 +91,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCellConstraintsDetails
 	bool bOmitWrappingBounds = true;
 
 	/** Omit cells with areas that closely match the computed wrapper. 0 to disable. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName=" └─ Classification Tolerance", EditCondition="bOmitWrappingBounds", ClampMin=0, HideInDetailPanel))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName=" ├─ Classification Tolerance", EditCondition="bOmitWrappingBounds", ClampMin=0, HideInDetailPanel))
 	double WrapperClassificationTolerance = 0;
 
 	/** */
@@ -201,7 +201,7 @@ namespace PCGExTopology
 }
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCellSeedMutationDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExCellSeedMutationDetails
 {
 	GENERATED_BODY()
 
@@ -253,7 +253,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCellSeedMutationDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTopologyDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExTopologyDetails
 {
 	GENERATED_BODY()
 
@@ -306,24 +306,9 @@ namespace PCGExTopology
 		return FGeomTools2D::IsPointInPolygon(FVector2D(Point[0], Point[1]), *Polygon.Vertices);
 	}
 
-	static bool IsAnyPointInPolygon(const TArray<FVector2D>& Points, const FGeometryScriptSimplePolygon& Polygon)
-	{
-		if (Points.IsEmpty()) { return false; }
-		const TArray<FVector2D>& Vertices = *Polygon.Vertices;
-		for (const FVector2D& P : Points) { if (FGeomTools2D::IsPointInPolygon(P, Vertices)) { return true; } }
-		return false;
-	}
+	bool IsAnyPointInPolygon(const TArray<FVector2D>& Points, const FGeometryScriptSimplePolygon& Polygon);
 
-	static bool IsPolygonInPolygon(const FGeometryScriptSimplePolygon& ContainerPolygon, const FGeometryScriptSimplePolygon& Polygon)
-	{
-		const TArray<FVector2D>& ContainerPoints = *ContainerPolygon.Vertices;
-		const TArray<FVector2D>& PolyPoints = *Polygon.Vertices;
-		for (const FVector2D& Point : PolyPoints)
-		{
-			if (!FGeomTools2D::IsPointInPolygon(Point, ContainerPoints)) { return false; }
-		}
-		return true;
-	}
+	bool IsPolygonInPolygon(const FGeometryScriptSimplePolygon& ContainerPolygon, const FGeometryScriptSimplePolygon& Polygon);
 
 	static FORCEINLINE void MarkTriangle(
 		const TSharedPtr<PCGExCluster::FCluster>& InCluster,
@@ -460,7 +445,7 @@ namespace PCGExTopology
 	};
 
 	USTRUCT(BlueprintType)
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FCellData
+	struct PCGEXTENDEDTOOLKIT_API FCellData
 	{
 		int8 bIsValid = 0;
 		uint32 CellHash = 0;
@@ -525,7 +510,7 @@ namespace PCGExTopology
 }
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCellArtifactsDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExCellArtifactsDetails
 {
 	GENERATED_BODY()
 

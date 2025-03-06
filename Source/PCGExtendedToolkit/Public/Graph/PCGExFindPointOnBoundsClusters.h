@@ -9,7 +9,7 @@
 #include "PCGExFindPointOnBoundsClusters.generated.h"
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFindPointOnBoundsClustersSettings : public UPCGExEdgesProcessorSettings
+class UPCGExFindPointOnBoundsClustersSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -17,7 +17,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(FindPointOnBoundsClusters, "Cluster : Find point on Bounds", "Find the closest vtx or edge on each cluster' bounds.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorCluster; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorCluster); }
 #endif
 
 protected:
@@ -35,7 +36,7 @@ public:
 
 	/** What type of proximity to look for */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
-	EPCGExClusterClosestSearchMode SearchMode = EPCGExClusterClosestSearchMode::Node;
+	EPCGExClusterClosestSearchMode SearchMode = EPCGExClusterClosestSearchMode::Vtx;
 
 	/** Data output mode */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -61,7 +62,7 @@ private:
 	friend class FPCGExFindPointOnBoundsClustersElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsClustersContext final : FPCGExEdgesProcessorContext
+struct FPCGExFindPointOnBoundsClustersContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExFindPointOnBoundsClustersElement;
 
@@ -75,7 +76,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsClustersContext final :
 	virtual void ClusterProcessing_InitialProcessingDone() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsClustersElement final : public FPCGExEdgesProcessorElement
+class FPCGExFindPointOnBoundsClustersElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

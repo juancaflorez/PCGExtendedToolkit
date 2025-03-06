@@ -14,7 +14,7 @@ namespace PCGExPartition
 {
 	class FKPartition;
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FKPartition : public TSharedFromThis<FKPartition>
+	class FKPartition : public TSharedFromThis<FKPartition>
 	{
 	protected:
 		mutable FRWLock LayersLock;
@@ -38,11 +38,8 @@ namespace PCGExPartition
 		int32 GetSubPartitionsNum();
 
 		TSharedPtr<FKPartition> GetPartition(int64 Key, FRule* InRule);
-		FORCEINLINE void Add(const int64 Index)
-		{
-			FWriteScopeLock WriteLock(PointLock);
-			Points.Add(Index);
-		}
+
+		void Add(const int64 Index);
 
 		void Register(TArray<TSharedPtr<FKPartition>>& Partitions);
 
@@ -55,7 +52,7 @@ namespace PCGExPartition
  * 
  */
 UCLASS(Abstract, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPartitionByValuesBaseSettings : public UPCGExPointsProcessorSettings
+class UPCGExPartitionByValuesBaseSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -63,7 +60,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(PartitionByValuesStatic, "Partition by Values (Static)", "Outputs separate buckets of points based on an attribute' value. Each bucket is named after a unique attribute value. Note that it is recommended to use a Merge before.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd); }
 #endif
 
 protected:
@@ -73,7 +71,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual bool GetMainAcceptMultipleData() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** If false, will only write partition identifier values instead of splitting partitions into new point datasets. */
@@ -95,7 +92,7 @@ public:
  * 
  */
 UCLASS(BlueprintType, MinimalAPI, Hidden, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPartitionByValuesSettings : public UPCGExPartitionByValuesBaseSettings
+class UPCGExPartitionByValuesSettings : public UPCGExPartitionByValuesBaseSettings
 {
 	GENERATED_BODY()
 
@@ -119,14 +116,14 @@ public:
 	virtual bool GetPartitionRules(FPCGExContext* InContext, TArray<FPCGExPartitonRuleConfig>& OutRules) const override;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPartitionByValuesBaseContext final : FPCGExPointsProcessorContext
+struct FPCGExPartitionByValuesBaseContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExPartitionByValuesBaseElement;
 
 	TArray<FPCGExPartitonRuleConfig> RulesConfigs;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPartitionByValuesBaseElement final : public FPCGExPointsProcessorElement
+class FPCGExPartitionByValuesBaseElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -157,7 +154,7 @@ namespace PCGExPartitionByValues
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;

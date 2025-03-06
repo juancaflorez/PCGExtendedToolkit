@@ -15,7 +15,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExRefreshSeedSettings : public UPCGExPointsProcessorSettings
+class UPCGExRefreshSeedSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -23,29 +23,26 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(RefreshSeed, "Refresh Seed", "Refresh point seed based on position.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Generic; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Base seed.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	int32 Base = 0;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefreshSeedContext final : FPCGExPointsProcessorContext
+struct FPCGExRefreshSeedContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExRefreshSeedElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefreshSeedElement final : public FPCGExPointsProcessorElement
+class FPCGExRefreshSeedElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -58,7 +55,7 @@ protected:
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefreshSeedTask final : public PCGExMT::FPCGExIndexedTask
+class FPCGExRefreshSeedTask final : public PCGExMT::FPCGExIndexedTask
 {
 public:
 	explicit FPCGExRefreshSeedTask(const int32 InPointIndex,

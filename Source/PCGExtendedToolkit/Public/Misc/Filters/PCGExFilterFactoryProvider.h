@@ -16,10 +16,12 @@
 #define PCGEX_CREATE_FILTER_FACTORY(_FILTERID)\
 UPCGExFactoryData* UPCGEx##_FILTERID##FilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const{\
 	UPCGEx##_FILTERID##FilterFactory* NewFactory = InContext->ManagedObjects->New<UPCGEx##_FILTERID##FilterFactory>();\
-	Super::CreateFactory(InContext, InFactory); NewFactory->Config = Config; if(!NewFactory->Init(InContext)){ InContext->ManagedObjects->Destroy(NewFactory); };	return NewFactory; }
+	NewFactory->Config = Config; Super::CreateFactory(InContext, NewFactory);\
+	if(!NewFactory->Init(InContext)){ InContext->ManagedObjects->Destroy(NewFactory); return nullptr; }\
+	return NewFactory; }
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFilterProviderSettings : public UPCGExFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExFilterProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -29,7 +31,7 @@ public:
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
 		AbstractFilterFactory, "Filter : Abstract", "Creates an abstract filter definition.",
 		PCGEX_FACTORY_NAME_PRIORITY)
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorFilter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorFilter); }
 	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Filter; }
 #endif
 	//~End UPCGSettings

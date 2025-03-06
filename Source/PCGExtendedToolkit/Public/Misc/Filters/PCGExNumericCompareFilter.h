@@ -17,7 +17,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNumericCompareFilterConfig
+struct FPCGExNumericCompareFilterConfig
 {
 	GENERATED_BODY()
 
@@ -55,7 +55,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNumericCompareFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNumericCompareFilterFactory : public UPCGExFilterFactoryData
+class UPCGExNumericCompareFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -67,9 +67,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FNumericCompareFilter final : public PCGExPointFilter::FSimpleFilter
+	class FNumericCompareFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FNumericCompareFilter(const TObjectPtr<const UPCGExNumericCompareFilterFactory>& InDefinition)
@@ -82,13 +82,9 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGExData::TBuffer<double>> OperandA;
 		TSharedPtr<PCGExData::TBuffer<double>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const double A = OperandA->Read(PointIndex);
-			const double B = OperandB ? OperandB->Read(PointIndex) : TypedFilterFactory->Config.OperandBConstant;
-			return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B, TypedFilterFactory->Config.Tolerance);
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FNumericCompareFilter() override
 		{
@@ -99,7 +95,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNumericCompareFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExNumericCompareFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

@@ -13,7 +13,7 @@
 #include "PCGExHeuristicInertia.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigInertia : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigInertia : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -43,7 +43,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigInertia : public FPCGExHe
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Inertia")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicInertia : public UPCGExHeuristicOperation
+class UPCGExHeuristicInertia : public UPCGExHeuristicOperation
 {
 	GENERATED_BODY()
 
@@ -53,80 +53,38 @@ public:
 	int32 MaxSamples = 1;
 	bool bIgnoreIfNotEnoughSamples = true;
 
-	virtual void PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster) override;
-
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		return GetScoreInternal(GlobalInertiaScore);
-	}
+		const PCGExCluster::FNode& Goal) const override;
 
-	FORCEINLINE virtual double GetEdgeScore(
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
-	{
-		if (TravelStack)
-		{
-			int32 PathNodeIndex = PCGEx::NH64A(TravelStack->Get(From.Index));
-			int32 PathEdgeIndex = -1;
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override;
 
-			if (PathNodeIndex != -1)
-			{
-				FVector Avg = Cluster->GetDir(PathNodeIndex, From.Index);
-				int32 Sampled = 1;
-				while (PathNodeIndex != -1 && Sampled < MaxSamples)
-				{
-					const int32 CurrentIndex = PathNodeIndex;
-					PCGEx::NH64(TravelStack->Get(CurrentIndex), PathNodeIndex, PathEdgeIndex);
-					if (PathNodeIndex != -1)
-					{
-						Avg += Cluster->GetDir(PathNodeIndex, CurrentIndex);
-						Sampled++;
-					}
-				}
-
-				if (!bIgnoreIfNotEnoughSamples || Sampled == MaxSamples)
-				{
-					const double Dot = FVector::DotProduct(
-						(Avg / Sampled).GetSafeNormal(),
-						Cluster->GetDir(From.Index, To.Index));
-
-					return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, OutMin, OutMax)) * ReferenceWeight;
-				}
-			}
-		}
-
-		return GetScoreInternal(FallbackInertiaScore);
-	}
-
-protected:
-	double OutMin = 0;
-	double OutMax = 1;
 };
 
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryInertia : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactoryInertia : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
 public:
 	UPROPERTY()
 	FPCGExHeuristicConfigInertia Config;
-
+	
 	virtual UPCGExHeuristicOperation* CreateOperation(FPCGExContext* InContext) const override;
 	PCGEX_HEURISTIC_FACTORY_BOILERPLATE
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsInertiaProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicsInertiaProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

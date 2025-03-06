@@ -7,8 +7,6 @@
 #define LOCTEXT_NAMESPACE "PCGExCollocationCountElement"
 #define PCGEX_NAMESPACE CollocationCount
 
-PCGExData::EIOInit UPCGExCollocationCountSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(CollocationCount)
 
 bool FPCGExCollocationCountElement::Boot(FPCGExContext* InContext) const
@@ -50,11 +48,13 @@ bool FPCGExCollocationCountElement::ExecuteInternal(FPCGContext* InContext) cons
 
 namespace PCGExCollocationCount
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExCollocationCount::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		NumPoints = PointDataFacade->GetNum();
 		ToleranceConstant = Settings->Tolerance;

@@ -11,6 +11,7 @@
 
 #include "Graph/Pathfinding/Heuristics/PCGExHeuristicDistance.h"
 #include "Graph/Pathfinding/Search/PCGExSearchAStar.h"
+#include "Paths/PCGExPaths.h"
 
 #define LOCTEXT_NAMESPACE "PCGExPathfindingPlotEdgesElement"
 #define PCGEX_NAMESPACE PathfindingPlotEdges
@@ -34,7 +35,7 @@ TArray<FPCGPinProperties> UPCGExPathfindingPlotEdgesSettings::InputPinProperties
 TArray<FPCGPinProperties> UPCGExPathfindingPlotEdgesSettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties;
-	PCGEX_PIN_POINTS(PCGExGraph::OutputPathsLabel, "Paths output.", Required, {})
+	PCGEX_PIN_POINTS(PCGExPaths::OutputPathsLabel, "Paths output.", Required, {})
 	return PinProperties;
 }
 
@@ -117,6 +118,8 @@ void FPCGExPathfindingPlotEdgesContext::BuildPath(const TSharedPtr<PCGExPathfind
 	{
 		// TODO : Implement
 	}
+
+	if (!Settings->PathOutputDetails.Validate(MutablePoints)) { return; }
 
 	const TSharedPtr<PCGExData::FPointIO> PathIO = OutputPaths->Emplace_GetRef<UPCGPointData>(ReferenceIO->GetIn(), PCGExData::EIOInit::New);
 	if (!PathIO) { return; }
@@ -208,10 +211,10 @@ namespace PCGExPathfindingPlotEdge
 
 		if (Settings->bUseOctreeSearch)
 		{
-			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Node ||
-				Settings->GoalPicking.PickingMethod == EPCGExClusterClosestSearchMode::Node)
+			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Vtx ||
+				Settings->GoalPicking.PickingMethod == EPCGExClusterClosestSearchMode::Vtx)
 			{
-				Cluster->RebuildOctree(EPCGExClusterClosestSearchMode::Node);
+				Cluster->RebuildOctree(EPCGExClusterClosestSearchMode::Vtx);
 			}
 
 			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Edge ||
@@ -238,13 +241,13 @@ namespace PCGExPathfindingPlotEdge
 				PCGEX_ASYNC_THIS
 				TSharedPtr<PCGExPathfinding::FPlotQuery> Query = This->Queries[Index];
 				Query->BuildPlotQuery(This->Context->Plots[Index], This->Settings->SeedPicking, This->Settings->GoalPicking);
-				Query->FindPaths(This->AsyncManager, This->SearchOperation, This->HeuristicsHandler);
 				Query->OnCompleteCallback = [AsyncThis](const TSharedPtr<PCGExPathfinding::FPlotQuery>& Plot)
 				{
 					PCGEX_ASYNC_NESTED_THIS
 					NestedThis->Context->BuildPath(Plot);
 					Plot->Cleanup();
 				};
+				Query->FindPaths(This->AsyncManager, This->SearchOperation, This->HeuristicsHandler);
 			};
 
 		ResolveQueriesTask->StartIterations(Queries.Num(), 1, HeuristicsHandler->HasGlobalFeedback());

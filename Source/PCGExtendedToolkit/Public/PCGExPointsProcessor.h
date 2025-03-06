@@ -14,6 +14,9 @@
 #include "PCGExOperation.h"
 #include "PCGExPointsMT.h"
 
+#include "PCGComponent.h"
+#include "PCGContext.h"
+
 #include "PCGExPointsProcessor.generated.h"
 
 #define PCGEX_EXECUTION_CHECK_C(_CONTEXT) if(!_CONTEXT->CanExecute()){ return true; } if (!_CONTEXT->IsAsyncWorkComplete()) { return false; }
@@ -42,7 +45,15 @@ class PCGEXTENDEDTOOLKIT_API UPCGExPointsProcessorSettings : public UPCGSettings
 public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
-	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual EPCGSettingsType GetType() const override
+	{
+#if PCGEX_ENGINE_VERSION > 503
+		return EPCGSettingsType::PointOps;
+#else
+		return EPCGSettingsType::Spatial;
+#endif
+	}
+
 	virtual bool GetPinExtraIcon(const UPCGPin* InPin, FName& OutExtraIcon, FText& OutTooltip) const override;
 #endif
 
@@ -60,6 +71,7 @@ public:
 	virtual FName GetMainOutputPin() const { return PCGEx::OutputPointsLabel; }
 	virtual bool GetMainAcceptMultipleData() const { return true; }
 	virtual bool GetIsMainTransactional() const { return false; }
+
 	virtual PCGExData::EIOInit GetMainOutputInitMode() const;
 
 	virtual FName GetPointFilterPin() const { return NAME_None; }
@@ -188,7 +200,7 @@ struct PCGEXTENDEDTOOLKIT_API FPCGExPointsProcessorContext : FPCGExContext
 		if (MainBatch->PrepareProcessing())
 		{
 			SetAsyncState(PCGExPointsMT::MTState_PointsProcessing);
-			MainBatch->Process(GetAsyncManager());
+			ScheduleBatch(GetAsyncManager(), MainBatch);
 		}
 		else
 		{
@@ -198,17 +210,9 @@ struct PCGEXTENDEDTOOLKIT_API FPCGExPointsProcessorContext : FPCGExContext
 		return bBatchProcessingEnabled;
 	}
 
-	virtual void BatchProcessing_InitialProcessingDone()
-	{
-	}
-
-	virtual void BatchProcessing_WorkComplete()
-	{
-	}
-
-	virtual void BatchProcessing_WritingDone()
-	{
-	}
+	virtual void BatchProcessing_InitialProcessingDone();
+	virtual void BatchProcessing_WorkComplete();
+	virtual void BatchProcessing_WritingDone();
 
 	template <typename T>
 	void GatherProcessors(TArray<T*> OutProcessors)

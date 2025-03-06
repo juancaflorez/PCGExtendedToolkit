@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExMeanFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FMeanFilter>(this);
+	return MakeShared<PCGExPointFilter::FMeanFilter>(this);
 }
 
 void UPCGExMeanFilterFactory::RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
@@ -28,7 +28,7 @@ bool UPCGExMeanFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext
 	return true;
 }
 
-bool PCGExPointsFilter::FMeanFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FMeanFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -36,7 +36,7 @@ bool PCGExPointsFilter::FMeanFilter::Init(FPCGExContext* InContext, const TShare
 
 	if (!Target)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Target attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.Target.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Target", TypedFilterFactory->Config.Target)
 		return false;
 	}
 
@@ -49,7 +49,7 @@ bool PCGExPointsFilter::FMeanFilter::Init(FPCGExContext* InContext, const TShare
 	return true;
 }
 
-void PCGExPointsFilter::FMeanFilter::PostInit()
+void PCGExPointFilter::FMeanFilter::PostInit()
 {
 	const int32 NumPoints = PointDataFacade->Source->GetNum();
 	Results.Init(false, NumPoints);
@@ -101,6 +101,11 @@ void PCGExPointsFilter::FMeanFilter::PostInit()
 
 	ReferenceMin = FMath::Min(RMin, RMax);
 	ReferenceMax = FMath::Max(RMin, RMax);
+}
+
+bool PCGExPointFilter::FMeanFilter::Test(const int32 PointIndex) const
+{
+	return FMath::IsWithin(Values[PointIndex], ReferenceMin, ReferenceMax);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(Mean)

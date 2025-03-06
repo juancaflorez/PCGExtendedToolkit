@@ -9,8 +9,10 @@
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
 #include "PCGExDetails.h"
+#include "PCGExScopedContainers.h"
 #include "Data/Blending/PCGExDataBlending.h"
 #include "Data/Blending/PCGExMetadataBlender.h"
+
 
 #include "PCGExSampleNearestPoint.generated.h"
 
@@ -27,7 +29,7 @@ MACRO(SampledIndex, int32, -1)
 
 namespace PCGExNearestPoint
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSample
+	struct FSample
 	{
 		FSample()
 		{
@@ -42,7 +44,7 @@ namespace PCGExNearestPoint
 		double Distance = 0;
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSamplesStats
+	struct FSamplesStats
 	{
 		FSamplesStats()
 		{
@@ -67,7 +69,7 @@ namespace PCGExNearestPoint
 }
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleNearestPointSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleNearestPointSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -88,7 +90,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 
 	//~End UPCGExPointsProcessorSettings
@@ -166,6 +167,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Blending", meta=(PCG_Overridable, EditCondition="bBlendPointProperties"))
 	FPCGExPropertiesBlendingDetails PointPropertiesBlendingSettings = FPCGExPropertiesBlendingDetails(EPCGExDataBlendingType::None);
 
+	/** Whether and how to apply sampled result directly (not mutually exclusive with output)*/
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	FPCGExApplySamplingDetails ApplySampling;
+
 	/** Write whether the sampling was sucessful or not to a boolean attribute. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteSuccess = false;
@@ -192,19 +197,19 @@ public:
 	FName LookAtTransformAttributeName = FName("WeightedLookAt");
 
 	/** The axis to align transform the look at vector to.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Align", EditCondition="bWriteLookAtTransform", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Align"))
 	EPCGExAxisAlign LookAtAxisAlign = EPCGExAxisAlign::Forward;
 
 	/** Up vector source.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Use Up from...", EditCondition="bWriteLookAtTransform", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Use Up from..."))
 	EPCGExSampleSource LookAtUpSelection = EPCGExSampleSource::Constant;
 
 	/** The attribute or property on selected source to use as Up vector for the look at transform.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="bWriteLookAtTransform && LookAtUpSelection!=EPCGExSampleSource::Constant", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector (Attr)", EditCondition="LookAtUpSelection!=EPCGExSampleSource::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector LookAtUpSource;
 
 	/** The constant to use as Up vector for the look at transform.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="bWriteLookAtTransform && LookAtUpSelection==EPCGExSampleSource::Constant", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="LookAtUpSelection==EPCGExSampleSource::Constant", EditConditionHides))
 	FVector LookAtUpConstant = FVector::UpVector;
 
 	/** Write the sampled distance. */
@@ -216,8 +221,12 @@ public:
 	FName DistanceAttributeName = FName("WeightedDistance");
 
 	/** Whether to output normalized distance or not*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Normalized", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Normalized", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
 	bool bOutputNormalizedDistance = false;
+
+	/** Scale factor applied to the distance output; allows to easily invert it using -1 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Scale", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
+	double DistanceScale = 1;
 
 	/** Write the sampled Signed distance. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -228,8 +237,12 @@ public:
 	FName SignedDistanceAttributeName = FName("WeightedSignedDistance");
 
 	/** Axis to use to calculate the distance' sign*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Axis", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Axis", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
 	EPCGExAxis SignAxis = EPCGExAxis::Forward;
+
+	/** Scale factor applied to the signed distance output; allows to easily invert it using -1 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Scale", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
+	double SignedDistanceScale = 1;
 
 	/** Write the sampled component-wise distance. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -252,7 +265,7 @@ public:
 	FName AngleAttributeName = FName("WeightedAngle");
 
 	/** Axis to use to calculate the angle*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Axis", EditCondition="bWriteAngle", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Axis", EditCondition="bWriteAngle", EditConditionHides, HideEditConditionToggle))
 	EPCGExAxis AngleAxis = EPCGExAxis::Forward;
 
 	/** Unit/range to output the angle to.*/
@@ -302,7 +315,7 @@ public:
 	bool bPruneFailedSamples = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestPointContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleNearestPointContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleNearestPointElement;
 
@@ -310,6 +323,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestPointContext final : FPCGEx
 	TSharedPtr<PCGExData::FFacade> TargetsFacade;
 	const UPCGPointData::PointOctree* TargetOctree = nullptr;
 	TSharedPtr<PCGExSorting::PointSorter<false>> Sorter;
+
+	FPCGExApplySamplingDetails ApplySampling;
 
 	TSharedPtr<PCGExDetails::FDistances> DistanceDetails;
 	FPCGExBlendingDetails BlendingDetails;
@@ -326,7 +341,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestPointContext final : FPCGEx
 	virtual void RegisterAssetDependencies() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestPointElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleNearestPointElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -373,7 +388,7 @@ namespace PCGExSampleNearestPoints
 
 		void SamplingFailed(const int32 Index, const FPCGPoint& Point);
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;

@@ -16,7 +16,7 @@ class UPCGExTensorFactoryData;
  * 
  */
 UCLASS(Abstract)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorOperation : public UPCGExOperation
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -28,7 +28,9 @@ public:
 
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory);
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const;
+
+	virtual bool PrepareForData(const TSharedPtr<PCGExData::FFacade>& InDataFacade);
 
 	template <bool bFast = false>
 	bool ComputeFactor(const FVector& InPosition, const FPCGPointRef& InEffector, PCGExTensor::FEffectorMetrics& OutMetrics) const
@@ -85,7 +87,7 @@ public:
  * 
  */
 UCLASS(Abstract)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorPointOperation : public UPCGExTensorOperation
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorPointOperation : public UPCGExTensorOperation
 {
 	GENERATED_BODY()
 

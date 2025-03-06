@@ -17,7 +17,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExStringCompareFilterConfig
+struct FPCGExStringCompareFilterConfig
 {
 	GENERATED_BODY()
 
@@ -51,7 +51,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExStringCompareFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExStringCompareFilterFactory : public UPCGExFilterFactoryData
+class UPCGExStringCompareFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -63,9 +63,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FStringCompareFilter final : public PCGExPointFilter::FSimpleFilter
+	class FStringCompareFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FStringCompareFilter(const TObjectPtr<const UPCGExStringCompareFilterFactory>& InFactory)
@@ -78,14 +78,9 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGEx::TAttributeBroadcaster<FString>> OperandA;
 		TSharedPtr<PCGEx::TAttributeBroadcaster<FString>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
-			const FString A = OperandA->SoftGet(PointIndex, Point, TEXT(""));
-			const FString B = TypedFilterFactory->Config.CompareAgainst == EPCGExInputValueType::Attribute ? OperandB->SoftGet(PointIndex, Point, TEXT("")) : TypedFilterFactory->Config.OperandBConstant;
-			return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B);
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FStringCompareFilter() override
 		{
@@ -96,7 +91,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExStringCompareFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExStringCompareFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

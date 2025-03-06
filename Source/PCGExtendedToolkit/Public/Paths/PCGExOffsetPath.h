@@ -8,6 +8,7 @@
 
 #include "PCGExPointsProcessor.h"
 
+
 #include "PCGExOffsetPath.generated.h"
 
 UENUM()
@@ -37,7 +38,7 @@ enum class EPCGExOffsetMethod : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExOffsetPathSettings : public UPCGExPathProcessorSettings
+class UPCGExOffsetPathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -53,7 +54,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceFiltersLabel, "Filters which points will be offset", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -138,12 +138,12 @@ public:
 	FName MutatedAttributeName = FName("IsMutated");
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExOffsetPathContext final : FPCGExPathProcessorContext
+struct FPCGExOffsetPathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExOffsetPathElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExOffsetPathElement final : public FPCGExPathProcessorElement
+class FPCGExOffsetPathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -183,7 +183,7 @@ namespace PCGExOffsetPath
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void OnPointsProcessingComplete() override;

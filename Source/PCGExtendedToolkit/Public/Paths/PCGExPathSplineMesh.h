@@ -15,33 +15,22 @@
 
 #include "PCGExPathSplineMesh.generated.h"
 
-
-USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplineParamsMapping
-{
-	GENERATED_BODY()
-
-	FPCGExSplineParamsMapping()
-	{
-	}
-
-	/** Write whether the sampling was sucessful or not to a boolean attribute. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_NotOverridable, InlineEditConditionToggle))
-	bool bLocalParam = false;
-};
-
 /**
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathSplineMeshSettings : public UPCGExPathProcessorSettings
+class UPCGExPathSplineMeshSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
 public:
+	UPCGExPathSplineMeshSettings(const FObjectInitializer& ObjectInitializer);
+
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(PathSplineMesh, "Path : Spline Mesh", "Create spline mesh components from paths.");
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spawner; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(UPCGExPathProcessorSettings::GetNodeTitleColor()); }
 #endif
 
 protected:
@@ -51,7 +40,6 @@ protected:
 
 public:
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExCollectionSource CollectionSource = EPCGExCollectionSource::Asset;
@@ -70,14 +58,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Distribution", meta=(PCG_Overridable))
 	FName AssetPathAttributeName = "AssetPath";
 
-	/**  */
-	//UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Target Actor", meta = (PCG_Overridable))
-	//bool bPerSegmentTargetActor = false;
-
-	/**  */
-	//UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Target Actor", meta=(PCG_Overridable, EditCondition="bPerSegmentTargetActor", EditConditionHides))
-	//FName TargetActorAttributeName;
-
 	/** Whether to read tangents from attributes or not. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	bool bApplyCustomTangents = false;
@@ -91,7 +71,7 @@ public:
 	FName LeaveTangentAttribute = "LeaveTangent";
 
 	/**  */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Axis Align"))
 	EPCGExMinimalAxis SplineMeshAxisConstant = EPCGExMinimalAxis::X;
 
 	/** If enabled, will break scaling interpolation across the spline. */
@@ -117,6 +97,19 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, EditCondition="WeightToAttribute!=EPCGExWeightOutputMode::NoOutput && WeightToAttribute!=EPCGExWeightOutputMode::NormalizedToDensity && WeightToAttribute!=EPCGExWeightOutputMode::NormalizedInvertedToDensity"))
 	FName WeightAttributeName = "AssetWeight";
 
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	EPCGExSplineMeshUpMode SplineMeshUpMode = EPCGExSplineMeshUpMode::Constant;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Mesh Up Vector (Attr)", EditCondition="SplineMeshUpMode==EPCGExSplineMeshUpMode::Attribute", EditConditionHides))
+	FPCGAttributePropertyInputSelector SplineMeshUpVectorAttribute;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Mesh Up Vector", EditCondition="SplineMeshUpMode==EPCGExSplineMeshUpMode::Constant", EditConditionHides))
+	FVector SplineMeshUpVector = FVector::UpVector;
+
+
 	/** Default static mesh config applied to spline mesh components. */
 	UPROPERTY(EditAnywhere, Category = Settings)
 	FPCGExStaticMeshComponentDescriptor DefaultDescriptor;
@@ -136,7 +129,7 @@ protected:
 	virtual bool IsCacheable() const override { return false; }
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshContext final : FPCGExPathProcessorContext
+struct FPCGExPathSplineMeshContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathSplineMeshElement;
 
@@ -147,7 +140,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshContext final : FPCGExPath
 	TObjectPtr<UPCGExMeshCollection> MainCollection;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshElement final : public FPCGExPathProcessorElement
+class FPCGExPathSplineMeshElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -188,8 +181,9 @@ namespace PCGExPathSplineMesh
 		TUniquePtr<PCGExAssetCollection::TDistributionHelper<UPCGExMeshCollection, FPCGExMeshCollectionEntry>> Helper;
 		FPCGExJustificationDetails Justification;
 
-		TSharedPtr<PCGExData::TBuffer<FVector>> ArriveReader;
-		TSharedPtr<PCGExData::TBuffer<FVector>> LeaveReader;
+		TSharedPtr<PCGExData::TBuffer<FVector>> UpGetter;
+		TSharedPtr<PCGExData::TBuffer<FVector>> ArriveGetter;
+		TSharedPtr<PCGExData::TBuffer<FVector>> LeaveGetter;
 
 		TSharedPtr<PCGExData::TBuffer<int32>> WeightWriter;
 		TSharedPtr<PCGExData::TBuffer<double>> NormalizedWeightWriter;
@@ -212,7 +206,7 @@ namespace PCGExPathSplineMesh
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

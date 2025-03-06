@@ -9,12 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExAttributesToTagsElement"
 #define PCGEX_NAMESPACE AttributesToTags
 
-PCGExData::EIOInit UPCGExAttributesToTagsSettings::GetMainOutputInitMode() const
-{
-	if (Action == EPCGExAttributeToTagsAction::Attribute) { return PCGExData::EIOInit::None; }
-	return bCleanupConsumableAttributes ? PCGExData::EIOInit::Duplicate : PCGExData::EIOInit::Forward;
-}
-
 TArray<FPCGPinProperties> UPCGExAttributesToTagsSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
@@ -132,11 +126,21 @@ bool FPCGExAttributesToTagsElement::ExecuteInternal(FPCGContext* InContext) cons
 
 namespace PCGExAttributesToTags
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExAttributesToTags::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		if (Settings->Action == EPCGExAttributeToTagsAction::Attribute)
+		{
+			PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::None)
+		}
+		else
+		{
+			PCGEX_INIT_IO(PointDataFacade->Source, Settings->bCleanupConsumableAttributes ? PCGExData::EIOInit::Duplicate : PCGExData::EIOInit::Forward)
+		}
+
 
 		FRandomStream RandomSource(BatchIndex);
 

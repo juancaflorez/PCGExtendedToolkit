@@ -5,6 +5,8 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExSubSystem.h"
+
+
 #include "Misc/PCGExSortPoints.h"
 
 
@@ -262,8 +264,6 @@ TArray<FPCGPinProperties> UPCGExPackActorDataSettings::OutputPinProperties() con
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExPackActorDataSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(PackActorData)
 
 FName UPCGExPackActorDataSettings::GetMainInputPin() const
@@ -336,11 +336,13 @@ namespace PCGExPackActorDatas
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExPackActorDatas::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		Packer = static_cast<UPCGExCustomActorDataPacker*>(PrimaryOperation);
 		Packer->UniqueNameGenerator = Context->UniqueNameGenerator;

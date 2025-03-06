@@ -1,7 +1,7 @@
 ﻿// Copyright 2025 Timothé Lapetite and contributors
 // Released under the MIT license https://opensource.org/license/MIT/
 
-#include "Sampling/PCGExWaitForPCGData.h"
+#include "System/PCGExWaitForPCGData.h"
 
 #include "PCGExPointsProcessor.h"
 #include "PCGGraph.h"
@@ -51,8 +51,6 @@ TArray<FPCGPinProperties> UPCGExWaitForPCGDataSettings::OutputPinProperties() co
 	PCGEX_PIN_ANY(RoamingPin, "Roaming data that isn't part of the template output but still exists.", Normal, {})
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExWaitForPCGDataSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 #if WITH_EDITOR
 void UPCGExWaitForPCGDataSettings::EDITOR_RefreshPins()
@@ -148,7 +146,7 @@ namespace PCGExWaitForPCGData
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExWaitForPCGData::Process);
 

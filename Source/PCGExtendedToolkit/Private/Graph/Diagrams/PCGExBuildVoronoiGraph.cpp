@@ -19,8 +19,6 @@ namespace PCGExGeoTask
 	class FLloydRelax3;
 }
 
-PCGExData::EIOInit UPCGExBuildVoronoiGraphSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 TArray<FPCGPinProperties> UPCGExBuildVoronoiGraphSettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::OutputPinProperties();
@@ -91,7 +89,7 @@ namespace PCGExBuildVoronoi
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExBuildVoronoi::Process);
 

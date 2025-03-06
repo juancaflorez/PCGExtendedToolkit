@@ -41,7 +41,7 @@ MACRO(DirectionToPrev, FVector, FVector::OneVector)
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExWritePathPropertiesSettings : public UPCGExPathProcessorSettings
+class UPCGExWritePathPropertiesSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -56,11 +56,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 #pragma region Path attributes
 
 	/** Projection settings. Some path data must be computed on a 2D plane. */
@@ -290,7 +286,7 @@ public:
 	bool WriteAnyPathData() const;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWritePathPropertiesContext final : FPCGExPathProcessorContext
+struct FPCGExWritePathPropertiesContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExWritePathPropertiesElement;
 
@@ -301,7 +297,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWritePathPropertiesContext final : FPCGE
 	TArray<int64> MergedAttributeSetKeys;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWritePathPropertiesElement final : public FPCGExPathProcessorElement
+class FPCGExWritePathPropertiesElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -318,7 +314,7 @@ namespace PCGExWritePathProperties
 {
 	const FName OutputPathProperties = TEXT("PathProperties");
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FPointDetails
+	struct PCGEXTENDEDTOOLKIT_API FPointDetails
 	{
 		int32 Index;
 		FVector Normal;
@@ -352,7 +348,7 @@ namespace PCGExWritePathProperties
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

@@ -15,7 +15,7 @@
 #include "PCGExBitmaskFilter.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBitmaskFilterConfig
+struct FPCGExBitmaskFilterConfig
 {
 	GENERATED_BODY()
 
@@ -34,7 +34,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBitmaskFilterConfig
 	/** Type of Mask */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
 	EPCGExInputValueType MaskInput = EPCGExInputValueType::Constant;
-	
+
 	/** Mask for testing -- Must be int64. (Operand B) */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Bitmask (Attr)", EditCondition="MaskInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FName BitmaskAttribute = FName("Mask");
@@ -53,7 +53,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBitmaskFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBitmaskFilterFactory : public UPCGExFilterFactoryData
+class UPCGExBitmaskFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -65,9 +65,9 @@ public:
 	virtual bool RegisterConsumableAttributes(FPCGExContext* InContext) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBitmaskFilter final : public PCGExPointFilter::FSimpleFilter
+	class FBitmaskFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FBitmaskFilter(const TObjectPtr<const UPCGExBitmaskFilterFactory>& InDefinition)
@@ -82,17 +82,8 @@ namespace PCGExPointsFilter
 
 		int64 Bitmask;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const bool Result = PCGExCompare::Compare(
-				TypedFilterFactory->Config.Comparison,
-				FlagsReader->Read(PointIndex),
-				MaskReader ? MaskReader->Read(PointIndex) : Bitmask);
-
-			return TypedFilterFactory->Config.bInvertResult ? !Result : Result;
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FBitmaskFilter() override
 		{
@@ -104,7 +95,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBitmaskFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExBitmaskFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

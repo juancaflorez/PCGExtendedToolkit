@@ -9,10 +9,10 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExWithinRangeFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FWithinRangeFilter>(this);
+	return MakeShared<PCGExPointFilter::FWithinRangeFilter>(this);
 }
 
-bool PCGExPointsFilter::FWithinRangeFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FWithinRangeFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -20,7 +20,7 @@ bool PCGExPointsFilter::FWithinRangeFilter::Init(FPCGExContext* InContext, const
 
 	if (!OperandA)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -31,6 +31,12 @@ bool PCGExPointsFilter::FWithinRangeFilter::Init(FPCGExContext* InContext, const
 	bInvert = TypedFilterFactory->Config.bInvert;
 
 	return true;
+}
+
+bool PCGExPointFilter::FWithinRangeFilter::Test(const int32 PointIndex) const
+{
+	if (!bInclusive) { return FMath::IsWithin(OperandA->Read(PointIndex), RealMin, RealMax) ? !bInvert : bInvert; }
+	return FMath::IsWithinInclusive(OperandA->Read(PointIndex), RealMin, RealMax) ? !bInvert : bInvert;
 }
 
 PCGEX_CREATE_FILTER_FACTORY(WithinRange)

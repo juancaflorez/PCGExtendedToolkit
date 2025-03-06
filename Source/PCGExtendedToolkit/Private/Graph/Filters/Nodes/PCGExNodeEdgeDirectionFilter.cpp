@@ -14,6 +14,19 @@ TSharedPtr<PCGExPointFilter::FFilter> UPCGExNodeEdgeDirectionFilterFactory::Crea
 	return MakeShared<FNodeEdgeDirectionFilter>(this);
 }
 
+bool UPCGExNodeEdgeDirectionFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.Direction, Consumable)
+
+	if (Config.ComparisonQuality == EPCGExDirectionCheckMode::Dot) { Config.DotComparisonDetails.RegisterConsumableAttributesWithData(InContext, InData); }
+	else { Config.HashComparisonDetails.RegisterConsumableAttributesWithData(InContext, InData); }
+
+	return true;
+}
+
 bool FNodeEdgeDirectionFilter::Init(FPCGExContext* InContext, const TSharedRef<PCGExCluster::FCluster>& InCluster, const TSharedRef<PCGExData::FFacade>& InPointDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade)
 {
 	if (!FFilter::Init(InContext, InCluster, InPointDataFacade, InEdgeDataFacade)) { return false; }
@@ -26,7 +39,7 @@ bool FNodeEdgeDirectionFilter::Init(FPCGExContext* InContext, const TSharedRef<P
 		OperandDirection = PointDataFacade->GetBroadcaster<FVector>(TypedFilterFactory->Config.Direction);
 		if (!OperandDirection)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Direction attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.Direction.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Direction", TypedFilterFactory->Config.Direction)
 			return false;
 		}
 	}
@@ -175,6 +188,11 @@ bool FNodeEdgeDirectionFilter::TestHash(const PCGExCluster::FNode& Node) const
 	for (const FInt32Vector Hash : Hashes) { if (A == Hash) { LocalSuccessCount++; } }
 
 	return PCGExCompare::Compare(Adjacency.ThresholdComparison, LocalSuccessCount, Threshold);
+}
+
+FNodeEdgeDirectionFilter::~FNodeEdgeDirectionFilter()
+{
+	TypedFilterFactory = nullptr;
 }
 
 

@@ -9,7 +9,7 @@
 #include "PCGExAttributeBlendFactoryProvider.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeBlendConfig
+struct PCGEXTENDEDTOOLKIT_API FPCGExAttributeBlendConfig
 {
 	GENERATED_BODY()
 
@@ -19,9 +19,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeBlendConfig
 		LocalWeightCurve.EditorCurveData.AddKey(1, 1);
 	}
 
-	~FPCGExAttributeBlendConfig()
-	{
-	}
+	~FPCGExAttributeBlendConfig() = default;
 
 	UPROPERTY(meta=(PCG_NotOverridable, HideInDetailPanel))
 	bool bRequiresWeight = true;
@@ -75,8 +73,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeBlendConfig
 /**
  * 
  */
-UCLASS(MinimalAPI, DisplayName = "Blending")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeBlendOperation : public UPCGExOperation
+UCLASS(DisplayName = "Blending")
+class PCGEXTENDEDTOOLKIT_API UPCGExAttributeBlendOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -93,7 +91,7 @@ public:
 };
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Blending")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeBlendFactory : public UPCGExFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExAttributeBlendFactory : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
@@ -106,8 +104,8 @@ public:
 	virtual void RegisterAssetDependencies(FPCGExContext* InContext) const override;
 };
 
-UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Blending")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeBlendFactoryProviderSettings : public UPCGExFactoryProviderSettings
+UCLASS(Hidden, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Blending")
+class PCGEXTENDEDTOOLKIT_API UPCGExAttributeBlendFactoryProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 

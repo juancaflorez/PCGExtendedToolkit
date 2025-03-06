@@ -18,8 +18,6 @@ TArray<FPCGPinProperties> UPCGExSampleNearestSurfaceSettings::InputPinProperties
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExSampleNearestSurfaceSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(SampleNearestSurface)
 
 bool FPCGExSampleNearestSurfaceElement::Boot(FPCGExContext* InContext) const
@@ -101,7 +99,7 @@ namespace PCGExSampleNearestSurface
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSampleNearestSurface::Process);
 
@@ -111,6 +109,8 @@ namespace PCGExSampleNearestSurface
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		SampleState.SetNumUninitialized(PointDataFacade->GetNum());
 

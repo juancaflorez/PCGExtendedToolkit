@@ -8,7 +8,10 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
+#include "PCGExScopedContainers.h"
 #include "Data/PCGSplineData.h"
+
+
 #include "Misc/PCGExSortPoints.h"
 
 
@@ -18,6 +21,8 @@
 MACRO(Success, bool, false)\
 MACRO(Transform, FTransform, FTransform::Identity)\
 MACRO(LookAtTransform, FTransform, FTransform::Identity)\
+MACRO(ArriveTangent, FVector, FVector::ZeroVector)\
+MACRO(LeaveTangent, FVector, FVector::ZeroVector)\
 MACRO(Distance, double, 0)\
 MACRO(Depth, double, -1)\
 MACRO(SignedDistance, double, 0)\
@@ -56,7 +61,7 @@ enum class EPCGExSplineSampleAlphaMode : uint8
 
 namespace PCGExPolyLine
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSample
+	struct FSample
 	{
 		FSample()
 		{
@@ -68,11 +73,12 @@ namespace PCGExPolyLine
 		}
 
 		FTransform Transform;
+		FVector Tangent = FVector::ZeroVector;
 		double Distance = 0;
 		double Time = 0;
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSamplesStats
+	struct FSamplesStats
 	{
 		FSamplesStats()
 		{
@@ -100,7 +106,7 @@ namespace PCGExPolyLine
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleNearestSplineSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleNearestSplineSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -120,7 +126,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -170,19 +175,19 @@ public:
 	EPCGExInputValueType SampleAlphaInput = EPCGExInputValueType::Constant;
 
 	/** How to interpret the sample alpha value. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Mode", EditCondition="bSampleSpecificAlpha", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" ├─ Mode", EditCondition="bSampleSpecificAlpha", EditConditionHides))
 	EPCGExSplineSampleAlphaMode SampleAlphaMode = EPCGExSplineSampleAlphaMode::Alpha;
 
 	/** Whether to wrap out of bounds value on closed loops. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Wrap Closed Loops", EditCondition="bSampleSpecificAlpha", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" ├─ Wrap Closed Loops", EditCondition="bSampleSpecificAlpha", EditConditionHides))
 	bool bWrapClosedLoopAlpha = true;
 
 	/** Per-point sample alpha -- Will be translated to `double` under the hood. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha (Attr)", EditCondition="bSampleSpecificAlpha&&SampleAlphaInput!=EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha (Attr)", EditCondition="bSampleSpecificAlpha && SampleAlphaInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FPCGAttributePropertyInputSelector SampleAlphaAttribute;
 
 	/** Constant sample alpha. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha", EditCondition="bSampleSpecificAlpha&&SampleAlphaInput==EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, DisplayName=" └─ Sample Alpha", EditCondition="bSampleSpecificAlpha && SampleAlphaInput==EPCGExInputValueType::Constant", EditConditionHides))
 	double SampleAlphaConstant = 0.5;
 
 
@@ -206,6 +211,10 @@ public:
 	/** Curve that balances weight over distance */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Sampling", meta=(PCG_Overridable, EditCondition="!bUseLocalCurve", EditConditionHides))
 	TSoftObjectPtr<UCurveFloat> WeightOverDistance;
+
+	/** Whether and how to apply sampled result directly (not mutually exclusive with output)*/
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	FPCGExApplySamplingDetails ApplySampling;
 
 	/** Write whether the sampling was sucessful or not to a boolean attribute. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -233,23 +242,23 @@ public:
 	FName LookAtTransformAttributeName = FName("WeightedLookAt");
 
 	/** The axis to align transform the look at vector to.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Align", EditCondition="bWriteLookAtTransform", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Align"))
 	EPCGExAxisAlign LookAtAxisAlign = EPCGExAxisAlign::Forward;
 
 	/** Up vector source.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Use Up from...", EditCondition="bWriteLookAtTransform", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Use Up from..."))
 	EPCGExSampleSource LookAtUpSelection = EPCGExSampleSource::Constant;
 
 	/** The attribute or property on selected source to use as Up vector for the look at transform.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="bWriteLookAtTransform && LookAtUpSelection==EPCGExSampleSource::Source", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector (Attr)", EditCondition="LookAtUpSelection==EPCGExSampleSource::Source", EditConditionHides))
 	FPCGAttributePropertyInputSelector LookAtUpSource;
 
 	/** The axis on the target to use as Up vector for the look at transform.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="bWriteLookAtTransform && LookAtUpSelection==EPCGExSampleSource::Target", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector (Axis)", EditCondition="LookAtUpSelection==EPCGExSampleSource::Target", EditConditionHides))
 	EPCGExAxis LookAtUpAxis = EPCGExAxis::Up;
 
 	/** The constant to use as Up vector for the look at transform.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="bWriteLookAtTransform && LookAtUpSelection==EPCGExSampleSource::Constant", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Up Vector", EditCondition="LookAtUpSelection==EPCGExSampleSource::Constant", EditConditionHides))
 	FVector LookAtUpConstant = FVector::UpVector;
 
 	/** Write the sampled distance. */
@@ -261,8 +270,12 @@ public:
 	FName DistanceAttributeName = FName("WeightedDistance");
 
 	/** Whether to output normalized distance or not*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Normalized", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Normalized", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
 	bool bOutputNormalizedDistance = false;
+
+	/** Scale factor applied to the distance output; allows to easily invert it using -1 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Scale", EditCondition="bWriteDistance", EditConditionHides, HideEditConditionToggle))
+	double DistanceScale = 1;
 
 	/** Write the sampled Signed distance. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -273,12 +286,16 @@ public:
 	FName SignedDistanceAttributeName = FName("WeightedSignedDistance");
 
 	/** Axis to use to calculate the distance' sign*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Axis", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Axis", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
 	EPCGExAxis SignAxis = EPCGExAxis::Forward;
 
 	/** Only sign the distance if at least one sampled spline is a bClosedLoop spline. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Only if Closed Spline", EditCondition="bWriteSignedDistance && SampleInputs==EPCGExSplineSamplingIncludeMode::All", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Only if Closed Spline", EditCondition="bWriteSignedDistance && SampleInputs==EPCGExSplineSamplingIncludeMode::All", EditConditionHides, HideEditConditionToggle))
 	bool bOnlySignIfClosed = false;
+
+	/** Scale factor applied to the signed distance output; allows to easily invert it using -1 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Scale", EditCondition="bWriteSignedDistance", EditConditionHides, HideEditConditionToggle))
+	double SignedDistanceScale = 1;
 
 	/** Write the sampled component-wise distance. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
@@ -301,7 +318,7 @@ public:
 	FName AngleAttributeName = FName("WeightedAngle");
 
 	/** Axis to use to calculate the angle*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Axis", EditCondition="bWriteAngle", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Axis", EditCondition="bWriteAngle", EditConditionHides, HideEditConditionToggle))
 	EPCGExAxis AngleAxis = EPCGExAxis::Forward;
 
 	/** Unit/range to output the angle to.*/
@@ -316,32 +333,48 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="Time", PCG_Overridable, EditCondition="bWriteTime"))
 	FName TimeAttributeName = FName("WeightedTime");
 
+	/**  */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bWriteArriveTangent = false;
+
+	/** Arrive tangent */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="Arrive Tangent", PCG_Overridable, EditCondition="bWriteArriveTangent"))
+	FName ArriveTangentAttributeName = "ArriveTangent";
+
+	/**  */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bWriteLeaveTangent = false;
+
+	/** Leave tangent */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="Leave Tangent", PCG_Overridable, EditCondition="bWriteLeaveTangent"))
+	FName LeaveTangentAttributeName = "LeaveTangent";
+
 	/** Write the inside/outside status of the point toward any sampled spline. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteNumInside = false;
 
 	/** Name of the 'int32' attribute to write the number of spline this point lies inside*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="NumInside", PCG_Overridable, EditCondition="bWriteNumInside"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(DisplayName="NumInside", PCG_Overridable, EditCondition="bWriteNumInside"))
 	FName NumInsideAttributeName = FName("NumInside");
 
 	/** Only increment num inside count when comes from a bClosedLoop spline. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, DisplayName=" └─ Only if Closed Spline", EditCondition="bWriteNumInside && SampleInputs==EPCGExSplineSamplingIncludeMode::All", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" └─ Only if Closed Spline", EditCondition="bWriteNumInside && SampleInputs==EPCGExSplineSamplingIncludeMode::All", EditConditionHides, HideEditConditionToggle))
 	bool bOnlyIncrementInsideNumIfClosed = false;
 
 	/** Write the sampled distance. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteNumSamples = false;
 
 	/** Name of the 'int32' attribute to write the number of sampled neighbors to.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="NumSamples", PCG_Overridable, EditCondition="bWriteNumSamples"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(DisplayName="NumSamples", PCG_Overridable, EditCondition="bWriteNumSamples"))
 	FName NumSamplesAttributeName = FName("NumSamples");
 
 	/** Write the whether the sampled spline is closed or not. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteClosedLoop = false;
 
 	/** Name of the 'bool' attribute to write whether a closed spline was sampled or not.*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta=(DisplayName="ClosedLoop", PCG_Overridable, EditCondition="bWriteClosedLoop"))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(DisplayName="ClosedLoop", PCG_Overridable, EditCondition="bWriteClosedLoop"))
 	FName ClosedLoopAttributeName = FName("ClosedLoop");
 
 	/** Write the sampled depth. */
@@ -353,11 +386,11 @@ public:
 	FName DepthAttributeName = FName("Depth");
 
 	/** Depth range */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" └─ Range", EditCondition="bWriteDepth", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Range", EditCondition="bWriteDepth", EditConditionHides, HideEditConditionToggle))
 	double DepthRange = 100;
 
 	/** Inverts depth */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" └─ Invert", EditCondition="bWriteDepth", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta=(PCG_Overridable, DisplayName=" ├─ Invert", EditCondition="bWriteDepth", EditConditionHides, HideEditConditionToggle))
 	bool bInvertDepth = false;
 
 	/** Depth mode */
@@ -389,11 +422,13 @@ public:
 	bool bPruneFailedSamples = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSplineContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleNearestSplineContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleNearestSplineElement;
 
 	TSharedPtr<PCGExDetails::FDistances> DistanceDetails;
+
+	FPCGExApplySamplingDetails ApplySampling;
 
 	TArray<const UPCGSplineData*> Targets;
 	TArray<FPCGSplineStruct> Splines;
@@ -404,13 +439,14 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSplineContext final : FPCGE
 
 	FRuntimeFloatCurve RuntimeWeightCurve;
 	const FRichCurve* WeightCurve = nullptr;
+	bool bComputeTangents = false;
 
 	PCGEX_FOREACH_FIELD_NEARESTPOLYLINE(PCGEX_OUTPUT_DECL_TOGGLE)
 
 	virtual void RegisterAssetDependencies() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSplineElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleNearestSplineElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -457,7 +493,7 @@ namespace PCGExSampleNearestSpline
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 

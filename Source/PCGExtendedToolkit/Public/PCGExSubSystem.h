@@ -27,7 +27,7 @@ class UPCGExSharedDataManager;
 
 namespace PCGEx
 {
-	struct FPolledEvent
+	struct PCGEXTENDEDTOOLKIT_API FPolledEvent
 	{
 		UPCGComponent* Source = nullptr;
 		EPCGExSubsystemEventType Type = EPCGExSubsystemEventType::None;
@@ -93,6 +93,9 @@ protected:
 
 	TArray<FTickAction> BeginTickActions;
 	TSet<PCGEx::FPolledEvent> PolledEvents;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UPCGComponent>> PCGComponentPool;
 
 	void ExecuteBeginTickActions();
 };

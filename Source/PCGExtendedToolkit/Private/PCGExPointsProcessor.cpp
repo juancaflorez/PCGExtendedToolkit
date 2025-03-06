@@ -65,7 +65,7 @@ TArray<FPCGPinProperties> UPCGExPointsProcessorSettings::OutputPinProperties() c
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExPointsProcessorSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::New; }
+PCGExData::EIOInit UPCGExPointsProcessorSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 bool UPCGExPointsProcessorSettings::ShouldCache() const
 {
@@ -171,6 +171,18 @@ bool FPCGExPointsProcessorContext::ProcessPointsBatch(const PCGEx::ContextState 
 	}
 
 	return false;
+}
+
+void FPCGExPointsProcessorContext::BatchProcessing_InitialProcessingDone()
+{
+}
+
+void FPCGExPointsProcessorContext::BatchProcessing_WorkComplete()
+{
+}
+
+void FPCGExPointsProcessorContext::BatchProcessing_WritingDone()
+{
 }
 
 TSharedPtr<PCGExMT::FTaskManager> FPCGExPointsProcessorContext::GetAsyncManager()

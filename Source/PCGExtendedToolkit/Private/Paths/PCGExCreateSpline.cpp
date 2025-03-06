@@ -3,13 +3,12 @@
 
 #include "Paths/PCGExCreateSpline.h"
 
+
 #include "Helpers/PCGHelpers.h"
 
 
 #define LOCTEXT_NAMESPACE "PCGExCreateSplineElement"
 #define PCGEX_NAMESPACE CreateSpline
-
-PCGExData::EIOInit UPCGExCreateSplineSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 PCGEX_INITIALIZE_ELEMENT(CreateSpline)
 
@@ -95,7 +94,7 @@ bool FPCGExCreateSplineElement::IsCacheable(const UPCGSettings* InSettings) cons
 
 namespace PCGExCreateSpline
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExCreateSpline::Process);
 

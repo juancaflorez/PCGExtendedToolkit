@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExMovePivotElement"
 #define PCGEX_NAMESPACE MovePivot
 
-PCGExData::EIOInit UPCGExMovePivotSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(MovePivot)
 
 bool FPCGExMovePivotElement::Boot(FPCGExContext* InContext) const
@@ -54,11 +52,13 @@ namespace PCGExMovePivot
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExMovePivot::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		UVW = Settings->UVW;
 		if (!UVW.Init(ExecutionContext, PointDataFacade)) { return false; }

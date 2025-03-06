@@ -7,6 +7,8 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
+
+
 #include "Misc/PCGExDiscardByOverlap.h"
 
 #include "PCGExSampleOverlapStats.generated.h"
@@ -25,7 +27,7 @@ namespace PCGExSampleOverlapStats
 }
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleOverlapStatsSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleOverlapStatsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -42,7 +44,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters used to know whether a point should be considered for overlap or not.", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -121,7 +122,7 @@ private:
 	friend class FPCGExSampleOverlapStatsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleOverlapStatsContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleOverlapStatsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleOverlapStatsElement;
 
@@ -141,7 +142,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleOverlapStatsContext final : FPCGEx
 	double SharedOverlapCountMax = 0;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleOverlapStatsElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleOverlapStatsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -157,7 +158,7 @@ namespace PCGExSampleOverlapStats
 {
 	class FProcessor;
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FOverlapStats
+	struct PCGEXTENDEDTOOLKIT_API FOverlapStats
 	{
 		int32 OverlapCount = 0;
 		double OverlapVolume = 0;
@@ -197,7 +198,7 @@ namespace PCGExSampleOverlapStats
 		}
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FOverlap
+	struct PCGEXTENDEDTOOLKIT_API FOverlap
 	{
 		uint64 HashID = 0;
 		FBox Intersection = FBox(NoInit);
@@ -263,7 +264,7 @@ namespace PCGExSampleOverlapStats
 
 		void RegisterOverlap(FProcessor* InOtherProcessor, const FBox& Intersection);
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		void ResolveOverlap(const int32 Index);
 		void WriteSingleData(const int32 Index);
 		virtual void CompleteWork() override;

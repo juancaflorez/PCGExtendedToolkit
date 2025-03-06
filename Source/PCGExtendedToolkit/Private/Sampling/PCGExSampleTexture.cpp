@@ -3,6 +3,7 @@
 
 #include "Sampling/PCGExSampleTexture.h"
 
+
 #include "Sampling/PCGExTexParamFactoryProvider.h"
 
 
@@ -23,8 +24,6 @@ TArray<FPCGPinProperties> UPCGExSampleTextureSettings::InputPinProperties() cons
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExSampleTextureSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(SampleTexture)
 
 bool FPCGExSampleTextureElement::Boot(FPCGExContext* InContext) const
@@ -44,7 +43,7 @@ bool FPCGExSampleTextureElement::Boot(FPCGExContext* InContext) const
 		bool bAlreadySet = false;
 		if (Factory->Config.OutputType == EPCGExTexSampleAttributeType::Invalid)
 		{
-			PCGE_LOG_C(Warning, GraphAndLog, Context, FText::Format(FTEXT("A Texture Config with sample name \"{0}\" has invalid sample settings and will be ignored."), FText::FromName(Factory->Config.SampleAttributeName)));
+			PCGEX_LOG_INVALID_ATTR_C(InContext, "Sample Name (Texture Params)", Factory->Config.SampleAttributeName)
 			continue;
 		}
 
@@ -93,7 +92,7 @@ namespace PCGExSampleTexture
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSampleTexture::Process);
 
@@ -102,13 +101,15 @@ namespace PCGExSampleTexture
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
+
 		SampleState.Init(false, PointDataFacade->GetNum());
 
 		UVGetter = PointDataFacade->GetScopedBroadcaster<FVector2D>(Settings->UVSource);
 
 		if (!UVGetter)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("UV attribute : \"{0}\" does not exists."), FText::FromName(Settings->UVSource.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(Context, "UV Attribute", Settings->UVSource)
 			return false;
 		}
 
@@ -124,7 +125,7 @@ namespace PCGExSampleTexture
 					TSharedPtr<TSampler<T>> Sampler = MakeShared<TSampler<T>>(Factory->Config, Context->TextureMap, PointDataFacade);
 					if (!Sampler->IsValid())
 					{
-						PCGE_LOG_C(Warning, GraphAndLog, Context, FText::Format(FTEXT("Some inputs are missing the ID attribute : \"{0}\"."), FText::FromName(Factory->Config.TextureIDAttributeName)));
+						PCGEX_LOG_INVALID_ATTR_C(Context, "ID", Factory->Config.TextureIDAttributeName)
 						return;
 					}
 

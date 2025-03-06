@@ -12,7 +12,7 @@
 #include "PCGExGetGUID.generated.h"
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExGetGUIDSettings : public UPCGExPointsProcessorSettings
+class UPCGExGetGUIDSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -34,7 +34,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual bool GetIsMainTransactional() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Point Index */
@@ -50,12 +49,12 @@ public:
 	FPCGExGUIDDetails Config;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExGetGUIDContext final : FPCGExPointsProcessorContext
+struct FPCGExGetGUIDContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExGetGUIDElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExGetGUIDElement final : public FPCGExPointsProcessorElement
+class FPCGExGetGUIDElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

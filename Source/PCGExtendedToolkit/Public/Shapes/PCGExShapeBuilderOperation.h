@@ -13,7 +13,7 @@
  * 
  */
 UCLASS(Abstract)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExShapeBuilderOperation : public UPCGExOperation
+class PCGEXTENDEDTOOLKIT_API UPCGExShapeBuilderOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -45,14 +45,7 @@ protected:
 		if (BaseConfig.bRemoveAbove && Shape->NumPoints > BaseConfig.MaxPointCount) { Shape->bValid = 0; }
 	}
 
-	FORCEINLINE double GetResolution(const PCGExData::FPointRef& Seed) const
-	{
-		if (BaseConfig.ResolutionMode == EPCGExResolutionMode::Distance)
-		{
-			return FMath::Abs(ResolutionGetter ? ResolutionGetter->SoftGet(Seed, ResolutionConstant) : ResolutionConstant) * 0.01;
-		}
-		return FMath::Abs(ResolutionGetter ? ResolutionGetter->SoftGet(Seed, ResolutionConstant) : ResolutionConstant);
-	}
+	double GetResolution(const PCGExData::FPointRef& Seed) const;
 
 	double ResolutionConstant = 1;
 	TSharedPtr<PCGEx::TAttributeBroadcaster<double>> ResolutionGetter;

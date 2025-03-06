@@ -7,17 +7,16 @@
 #include "Elements/Metadata/PCGMetadataElementCommon.h"
 #include "Geometry/PCGExGeoDelaunay.h"
 #include "Graph/PCGExCluster.h"
+#include "Paths/PCGExPaths.h"
 
 #define LOCTEXT_NAMESPACE "PCGExGraph"
 #define PCGEX_NAMESPACE BuildConvexHull2D
-
-PCGExData::EIOInit UPCGExBuildConvexHull2DSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::New; }
 
 TArray<FPCGPinProperties> UPCGExBuildConvexHull2DSettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::OutputPinProperties();
 	PCGEX_PIN_POINTS(PCGExGraph::OutputEdgesLabel, "Point data representing edges.", Required, {})
-	PCGEX_PIN_POINTS(PCGExGraph::OutputPathsLabel, "Point data representing closed convex hull paths.", Required, {})
+	PCGEX_PIN_POINTS(PCGExPaths::OutputPathsLabel, "Point data representing closed convex hull paths.", Required, {})
 	return PinProperties;
 }
 
@@ -30,7 +29,7 @@ bool FPCGExBuildConvexHull2DElement::Boot(FPCGExContext* InContext) const
 	PCGEX_CONTEXT_AND_SETTINGS(BuildConvexHull2D)
 
 	Context->PathsIO = MakeShared<PCGExData::FPointIOCollection>(Context);
-	Context->PathsIO->OutputPin = PCGExGraph::OutputPathsLabel;
+	Context->PathsIO->OutputPin = PCGExPaths::OutputPathsLabel;
 
 	return true;
 }
@@ -126,11 +125,13 @@ void FPCGExBuildConvexHull2DContext::BuildPath(const PCGExGraph::FGraphBuilder* 
 
 namespace PCGExConvexHull2D
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExConvexHull2D::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::New)
 
 		ProjectionDetails = Settings->ProjectionDetails;
 		ProjectionDetails.Init(ExecutionContext, PointDataFacade);

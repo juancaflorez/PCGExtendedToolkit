@@ -10,10 +10,8 @@
 #include "GameFramework/Actor.h"
 
 #include "PCGContext.h"
-#include "PCGElement.h"
 #include "PCGExMacros.h"
 #include "PCGManagedResource.h"
-#include "PCGModule.h"
 #include "Data/PCGSpatialData.h"
 #include "Engine/AssetManager.h"
 #include "Metadata/PCGMetadataAttributeTraits.h"
@@ -34,7 +32,7 @@ enum class EPCGExPointPropertyOutput : uint8
 };
 
 UCLASS(Hidden)
-class UPCGExComponentCallback : public UObject
+class PCGEXTENDEDTOOLKIT_API UPCGExComponentCallback : public UObject
 {
 	GENERATED_BODY()
 
@@ -45,11 +43,7 @@ public:
 	UFUNCTION()
 	void Callback(UActorComponent* InComponent);
 
-	virtual void BeginDestroy() override
-	{
-		CallbackFn = nullptr;
-		UObject::BeginDestroy();
-	}
+	virtual void BeginDestroy() override;
 
 	template <typename T>
 	void Bind(T& Delegate, TFunction<void(UActorComponent* InComponent)>&& InCallback, const bool bOnce = false)
@@ -62,7 +56,7 @@ public:
 };
 
 UCLASS(Hidden)
-class UPCGExPCGComponentCallback : public UObject
+class PCGEXTENDEDTOOLKIT_API UPCGExPCGComponentCallback : public UObject
 {
 	GENERATED_BODY()
 
@@ -73,11 +67,7 @@ public:
 	UFUNCTION()
 	void Callback(UPCGComponent* InComponent);
 
-	virtual void BeginDestroy() override
-	{
-		CallbackFn = nullptr;
-		UObject::BeginDestroy();
-	}
+	virtual void BeginDestroy() override;
 
 	template <typename T>
 	void Bind(T& Delegate, TFunction<void(UPCGComponent* InComponent)>&& InCallback, const bool bOnce = false)
@@ -89,13 +79,13 @@ public:
 	}
 };
 
-UINTERFACE(MinimalAPI)
-class UPCGExManagedObjectInterface : public UInterface
+UINTERFACE()
+class PCGEXTENDEDTOOLKIT_API UPCGExManagedObjectInterface : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class IPCGExManagedObjectInterface
+class PCGEXTENDEDTOOLKIT_API IPCGExManagedObjectInterface
 {
 	GENERATED_BODY()
 
@@ -103,13 +93,13 @@ public:
 	virtual void Cleanup() = 0;
 };
 
-UINTERFACE(MinimalAPI)
-class UPCGExManagedComponentInterface : public UInterface
+UINTERFACE()
+class PCGEXTENDEDTOOLKIT_API UPCGExManagedComponentInterface : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class IPCGExManagedComponentInterface
+class PCGEXTENDEDTOOLKIT_API IPCGExManagedComponentInterface
 {
 	GENERATED_BODY()
 
@@ -120,14 +110,8 @@ public:
 
 namespace PCGExHelpers
 {
-	static bool TryGetAttributeName(const FPCGAttributePropertyInputSelector& InSelector, const UPCGData* InData, FName& OutName)
-	{
-		FPCGAttributePropertyInputSelector FixedSelector = InSelector.CopyAndFixLast(InData);
-		if (!FixedSelector.IsValid()) { return false; }
-		if (FixedSelector.GetSelection() != EPCGAttributePropertySelection::Attribute) { return false; }
-		OutName = FixedSelector.GetName();
-		return true;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	bool TryGetAttributeName(const FPCGAttributePropertyInputSelector& InSelector, const UPCGData* InData, FName& OutName);
 
 	template <typename T>
 	static TObjectPtr<T> LoadBlocking_AnyThread(const TSoftObjectPtr<T>& SoftObjectPtr, const FSoftObjectPath& FallbackPath = nullptr)
@@ -173,197 +157,28 @@ namespace PCGExHelpers
 		return TSoftObjectPtr<T>(ToBeLoaded).Get();
 	}
 
-	static void LoadBlocking_AnyThread(const TSharedPtr<TSet<FSoftObjectPath>>& Paths)
-	{
-		if (IsInGameThread())
-		{
-			UAssetManager::GetStreamableManager().RequestSyncLoad(Paths->Array());
-		}
-		else
-		{
-			TWeakPtr<TSet<FSoftObjectPath>> WeakPaths = Paths;
-			FEvent* BlockingEvent = FPlatformProcess::GetSynchEventFromPool();
-			AsyncTask(
-				ENamedThreads::GameThread, [BlockingEvent, WeakPaths]()
-				{
-					const TSharedPtr<TSet<FSoftObjectPath>> ToBeLoaded = WeakPaths.Pin();
-					if (!ToBeLoaded)
-					{
-						BlockingEvent->Trigger();
-						return;
-					}
+	PCGEXTENDEDTOOLKIT_API
+	void LoadBlocking_AnyThread(const TSharedPtr<TSet<FSoftObjectPath>>& Paths);
 
-					const TSharedPtr<FStreamableHandle> Handle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-						ToBeLoaded->Array(), [BlockingEvent]() { BlockingEvent->Trigger(); });
+	PCGEXTENDEDTOOLKIT_API
+	void CopyStructProperties(const void* SourceStruct, void* TargetStruct, const UStruct* SourceStructType, const UStruct* TargetStructType);
 
-					if (!Handle || !Handle->IsActive()) { BlockingEvent->Trigger(); }
-				});
+	PCGEXTENDEDTOOLKIT_API
+	bool CopyProperties(UObject* Target, const UObject* Source, const TSet<FString>* Exclusions = nullptr);
 
-			BlockingEvent->Wait();
-			FPlatformProcess::ReturnSynchEventToPool(BlockingEvent);
-		}
-	}
+	PCGEXTENDEDTOOLKIT_API
+	void SetPointProperty(FPCGPoint& InPoint, const double InValue, const EPCGExPointPropertyOutput InProperty);
 
-	static void CopyStructProperties(const void* SourceStruct, void* TargetStruct, const UStruct* SourceStructType, const UStruct* TargetStructType)
-	{
-		for (TFieldIterator<FProperty> SourceIt(SourceStructType); SourceIt; ++SourceIt)
-		{
-			const FProperty* SourceProperty = *SourceIt;
-			const FProperty* TargetProperty = TargetStructType->FindPropertyByName(SourceProperty->GetFName());
-			if (!TargetProperty || SourceProperty->GetClass() != TargetProperty->GetClass()) { continue; }
+	PCGEXTENDEDTOOLKIT_API
+	TArray<FString> GetStringArrayFromCommaSeparatedList(const FString& InCommaSeparatedString);
 
-			if (SourceProperty->SameType(TargetProperty))
-			{
-				const void* SourceValue = SourceProperty->ContainerPtrToValuePtr<void>(SourceStruct);
-				void* TargetValue = TargetProperty->ContainerPtrToValuePtr<void>(TargetStruct);
-
-				SourceProperty->CopyCompleteValue(TargetValue, SourceValue);
-			}
-		}
-	}
-
-	static bool CopyProperties(UObject* Target, const UObject* Source, const TSet<FString>* Exclusions = nullptr)
-	{
-		const UClass* SourceClass = Source->GetClass();
-		const UClass* TargetClass = Target->GetClass();
-		const UClass* CommonBaseClass = nullptr;
-
-		if (SourceClass->IsChildOf(TargetClass)) { CommonBaseClass = TargetClass; }
-		else if (TargetClass->IsChildOf(SourceClass)) { CommonBaseClass = SourceClass; }
-		else
-		{
-			// Traverse up the hierarchy to find a shared base class
-			const UClass* TempClass = SourceClass;
-			while (TempClass)
-			{
-				if (TargetClass->IsChildOf(TempClass))
-				{
-					CommonBaseClass = TempClass;
-					break;
-				}
-				TempClass = TempClass->GetSuperClass();
-			}
-		}
-
-		if (!CommonBaseClass) { return false; }
-
-		// Iterate over source properties
-		for (TFieldIterator<FProperty> It(CommonBaseClass); It; ++It)
-		{
-			const FProperty* Property = *It;
-			if (Exclusions && Exclusions->Contains(Property->GetName())) { continue; }
-
-			// Skip properties that shouldn't be copied (like transient properties)
-			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_ConstParm | CPF_OutParm)) { continue; }
-
-			// Copy the value from source to target
-			const void* SourceValue = Property->ContainerPtrToValuePtr<void>(Source);
-			void* TargetValue = Property->ContainerPtrToValuePtr<void>(Target);
-			Property->CopyCompleteValue(TargetValue, SourceValue);
-		}
-
-		return true;
-	}
-
-	static void SetPointProperty(FPCGPoint& InPoint, const double InValue, const EPCGExPointPropertyOutput InProperty)
-	{
-		switch (InProperty)
-		{
-		default:
-		case EPCGExPointPropertyOutput::None:
-			break;
-		case EPCGExPointPropertyOutput::Density:
-			InPoint.Density = InValue;
-			break;
-		case EPCGExPointPropertyOutput::Steepness:
-			InPoint.Steepness = InValue;
-			break;
-		case EPCGExPointPropertyOutput::ColorR:
-			InPoint.Color.Component(0) = InValue;
-			break;
-		case EPCGExPointPropertyOutput::ColorG:
-			InPoint.Color.Component(1) = InValue;
-			break;
-		case EPCGExPointPropertyOutput::ColorB:
-			InPoint.Color.Component(2) = InValue;
-			break;
-		case EPCGExPointPropertyOutput::ColorA:
-			InPoint.Color.Component(3) = InValue;
-			break;
-		}
-	}
-
-	static TArray<FString> GetStringArrayFromCommaSeparatedList(const FString& InCommaSeparatedString)
-	{
-		TArray<FString> Result;
-		InCommaSeparatedString.ParseIntoArray(Result, TEXT(","));
-		// Trim leading and trailing spaces
-		for (int i = 0; i < Result.Num(); i++)
-		{
-			FString& String = Result[i];
-			String.TrimStartAndEndInline();
-			if (String.IsEmpty())
-			{
-				Result.RemoveAt(i);
-				i--;
-			}
-		}
-
-		return Result;
-	}
-
-	static TArray<UFunction*> FindUserFunctions(const TSubclassOf<AActor>& ActorClass, const TArray<FName>& FunctionNames, const TArray<const UFunction*>& FunctionPrototypes, const FPCGContext* InContext)
-	{
-		TArray<UFunction*> Functions;
-
-		if (!ActorClass)
-		{
-			return Functions;
-		}
-
-		for (FName FunctionName : FunctionNames)
-		{
-			if (FunctionName == NAME_None)
-			{
-				continue;
-			}
-
-			if (UFunction* Function = ActorClass->FindFunctionByName(FunctionName))
-			{
-#if WITH_EDITOR
-				if (!Function->GetBoolMetaData(TEXT("CallInEditor")))
-				{
-					PCGE_LOG_C(Warning, GraphAndLog, InContext, FText::Format(FTEXT( "Function '{0}' in class '{1}' requires CallInEditor to be true while in-editor."), FText::FromName(FunctionName), FText::FromName(ActorClass->GetFName())));
-					continue;
-				}
-#endif
-				for (const UFunction* Prototype : FunctionPrototypes)
-				{
-					if (Function->IsSignatureCompatibleWith(Prototype))
-					{
-						Functions.Add(Function);
-						break;
-					}
-				}
-
-				if (Functions.IsEmpty() || Functions.Last() != Function)
-				{
-					PCGE_LOG_C(Warning, GraphAndLog, InContext, FText::Format(FTEXT("Function '{0}' in class '{1}' has incorrect parameters."), FText::FromName(FunctionName), FText::FromName(ActorClass->GetFName())));
-				}
-			}
-			else
-			{
-				PCGE_LOG_C(Warning, GraphAndLog, InContext, FText::Format(FTEXT("Function '{0}' was not found in class '{1}'."), FText::FromName(FunctionName), FText::FromName(ActorClass->GetFName())));
-			}
-		}
-
-		return Functions;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	TArray<UFunction*> FindUserFunctions(const TSubclassOf<AActor>& ActorClass, const TArray<FName>& FunctionNames, const TArray<const UFunction*>& FunctionPrototypes, const FPCGContext* InContext);
 }
 
 /** Holds function prototypes used to match against actor function signatures. */
-UCLASS(MinimalAPI)
-class UPCGExFunctionPrototypes : public UBlueprintFunctionLibrary
+UCLASS()
+class PCGEXTENDEDTOOLKIT_API UPCGExFunctionPrototypes : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
@@ -385,14 +200,14 @@ private:
 
 namespace PCGEx
 {
-	class FWorkPermit final : public TSharedFromThis<FWorkPermit>
+	class PCGEXTENDEDTOOLKIT_API FWorkPermit final : public TSharedFromThis<FWorkPermit>
 	{
 	public:
 		FWorkPermit() = default;
 		~FWorkPermit() = default;
 	};
 
-	class FIntTracker final : public TSharedFromThis<FIntTracker>
+	class PCGEXTENDEDTOOLKIT_API FIntTracker final : public TSharedFromThis<FIntTracker>
 	{
 		FRWLock Lock;
 		bool bTriggered = false;
@@ -429,7 +244,7 @@ namespace PCGEx
 		void TriggerInternal();
 	};
 
-	class FUniqueNameGenerator final : public TSharedFromThis<FUniqueNameGenerator>
+	class PCGEXTENDEDTOOLKIT_API FUniqueNameGenerator final : public TSharedFromThis<FUniqueNameGenerator>
 	{
 		int32 Idx = 0;
 
@@ -441,21 +256,20 @@ namespace PCGEx
 		FName Get(const FName& BaseName);
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FManagedObjects
+	class PCGEXTENDEDTOOLKIT_API FManagedObjects : public TSharedFromThis<FManagedObjects>
 	{
+	protected:
 		mutable FRWLock ManagedObjectLock;
 		mutable FRWLock DuplicatedObjectLock;
 
+	public:
 		FPCGContext* Context = nullptr;
 		TWeakPtr<FWorkPermit> WorkPermit;
 		TSet<UObject*> ManagedObjects;
 
 		bool IsFlushing() const { return bIsFlushing.load(std::memory_order_acquire); }
 
-		explicit FManagedObjects(FPCGContext* InContext, const TSharedPtr<FWorkPermit>& InLifeline):
-			Context(InContext), WorkPermit(InLifeline)
-		{
-		}
+		explicit FManagedObjects(FPCGContext* InContext, const TSharedPtr<FWorkPermit>& InLifeline);
 
 		~FManagedObjects();
 
@@ -465,6 +279,7 @@ namespace PCGEx
 
 		void Add(UObject* InObject);
 		bool Remove(UObject* InObject);
+		void Remove(const TArray<FPCGTaggedData>& InTaggedData);
 
 		template <class T, typename... Args>
 		T* New(Args&&... InArgs)
@@ -583,17 +398,39 @@ namespace PCGEx
 		std::atomic<bool> bIsFlushing{false};
 	};
 
-	static FVector GetPointsCentroid(const TArray<FPCGPoint>& InPoints)
-	{
-		FVector Position = FVector::ZeroVector;
-		for (const FPCGPoint& Pt : InPoints) { Position += Pt.Transform.GetLocation(); }
-		return Position / static_cast<double>(InPoints.Num());
-	}
+	FVector GetPointsCentroid(const TArray<FPCGPoint>& InPoints);
 
 #pragma region Metadata Type
 
+	constexpr static int32 GetMetadataSize(const EPCGMetadataTypes InType)
+	{
+		switch (InType)
+		{
+		case EPCGMetadataTypes::Float:
+		case EPCGMetadataTypes::Double:
+		case EPCGMetadataTypes::Integer32:
+		case EPCGMetadataTypes::Integer64:
+			return 1;
+		case EPCGMetadataTypes::Vector2:
+			return 2;
+		case EPCGMetadataTypes::Vector:
+		case EPCGMetadataTypes::Rotator:
+			return 3;
+		case EPCGMetadataTypes::Vector4:
+		case EPCGMetadataTypes::Quaternion:
+			return 4;
+		default:
+		case EPCGMetadataTypes::Transform:
+		case EPCGMetadataTypes::String:
+		case EPCGMetadataTypes::Boolean:
+		case EPCGMetadataTypes::Name:
+		case EPCGMetadataTypes::Unknown:
+			return -1;
+		}
+	}
+
 	template <typename T>
-	FORCEINLINE constexpr static EPCGMetadataTypes GetMetadataType()
+	constexpr static EPCGMetadataTypes GetMetadataType()
 	{
 		if constexpr (std::is_same_v<T, bool>) { return EPCGMetadataTypes::Boolean; }
 		else if constexpr (std::is_same_v<T, int32>) { return EPCGMetadataTypes::Integer32; }
@@ -615,7 +452,7 @@ namespace PCGEx
 		else { return EPCGMetadataTypes::Unknown; }
 	}
 
-	FORCEINLINE constexpr static EPCGMetadataTypes GetPropertyType(const EPCGPointProperties Property)
+	constexpr static EPCGMetadataTypes GetPropertyType(const EPCGPointProperties Property)
 	{
 		switch (Property)
 		{
@@ -665,7 +502,7 @@ namespace PCGEx
 	const FSoftObjectPath DummySoftObjectPath = FSoftObjectPath{};
 
 	template <typename T, typename Func>
-	FORCEINLINE static void ExecuteWithRightType(Func&& Callback)
+	static void ExecuteWithRightType(Func&& Callback)
 	{
 		if constexpr (std::is_same_v<T, bool>) { Callback(DummyBoolean); }
 		else if constexpr (std::is_same_v<T, int32>) { Callback(DummyInteger32); }
@@ -688,7 +525,7 @@ namespace PCGEx
 	}
 
 	template <typename Func>
-	FORCEINLINE static void ExecuteWithRightType(const EPCGMetadataTypes Type, Func&& Callback)
+	static void ExecuteWithRightType(const EPCGMetadataTypes Type, Func&& Callback)
 	{
 #define PCGEX_EXECUTE_WITH_TYPE(_TYPE, _ID, ...) case EPCGMetadataTypes::_ID : ExecuteWithRightType<_TYPE>(Callback); break;
 
@@ -702,7 +539,7 @@ namespace PCGEx
 	}
 
 	template <typename Func>
-	FORCEINLINE static void ExecuteWithRightType(const int16 Type, Func&& Callback)
+	static void ExecuteWithRightType(const int16 Type, Func&& Callback)
 	{
 		ExecuteWithRightType(static_cast<EPCGMetadataTypes>(Type), Callback);
 	}
@@ -712,14 +549,14 @@ namespace PCGEx
 #pragma region Array
 
 	template <typename T>
-	FORCEINLINE static void InitArray(TArray<T>& InArray, const int32 Num)
+	static void InitArray(TArray<T>& InArray, const int32 Num)
 	{
 		if constexpr (std::is_trivially_copyable_v<T>) { InArray.SetNumUninitialized(Num); }
 		else { InArray.SetNum(Num); }
 	}
 
 	template <typename T>
-	FORCEINLINE static void InitArray(TSharedPtr<TArray<T>>& InArray, const int32 Num)
+	static void InitArray(TSharedPtr<TArray<T>>& InArray, const int32 Num)
 	{
 		if (!InArray) { InArray = MakeShared<TArray<T>>(); }
 		if constexpr (std::is_trivially_copyable_v<T>) { InArray->SetNumUninitialized(Num); }
@@ -727,14 +564,14 @@ namespace PCGEx
 	}
 
 	template <typename T>
-	FORCEINLINE static void InitArray(TSharedRef<TArray<T>> InArray, const int32 Num)
+	static void InitArray(TSharedRef<TArray<T>> InArray, const int32 Num)
 	{
 		if constexpr (std::is_trivially_copyable_v<T>) { InArray.SetNumUninitialized(Num); }
 		else { InArray.SetNum(Num); }
 	}
 
 	template <typename T>
-	FORCEINLINE static void InitArray(TArray<T>* InArray, const int32 Num)
+	static void InitArray(TArray<T>* InArray, const int32 Num)
 	{
 		if constexpr (std::is_trivially_copyable_v<T>) { InArray->SetNumUninitialized(Num); }
 		else { InArray->SetNum(Num); }
@@ -751,7 +588,10 @@ namespace PCGEx
 
 		for (int32 i = 0; i < NumElements; ++i)
 		{
-			if (Visited[i]) continue;
+			if (Visited[i])
+			{
+				continue;
+			}
 
 			int32 Current = i;
 			T Temp = MoveTemp(InArray[i]);
@@ -773,7 +613,7 @@ namespace PCGEx
 		}
 	}
 
-	template<typename D>
+	template <typename D>
 	struct TOrder
 	{
 		int32 Index = -1;
@@ -836,7 +676,10 @@ namespace PCGEx
 
 		for (int32 i = 0; i < NumElements; ++i)
 		{
-			if (Visited[i]) continue; // Skip already visited elements in a cycle.
+			if (Visited[i])
+			{
+				continue; // Skip already visited elements in a cycle.
+			}
 
 			int32 Current = i;
 			T Temp = MoveTemp(InArray[i]); // Temporarily hold the current element.

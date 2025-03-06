@@ -12,12 +12,12 @@
  * 
  */
 UCLASS(MinimalAPI, DisplayName="Catmull-Rom")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCatmullRomTangents : public UPCGExTangentsOperation
+class UPCGExCatmullRomTangents : public UPCGExTangentsOperation
 {
 	GENERATED_BODY()
 
 public:
-	FORCEINLINE virtual void ProcessPoint(
+	virtual void ProcessPoint(
 		const TArray<FPCGPoint>& InPoints,
 		const int32 Index, const int32 NextIndex, const int32 PrevIndex,
 		const FVector& ArriveScale, FVector& OutArrive,

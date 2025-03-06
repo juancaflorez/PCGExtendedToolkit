@@ -12,7 +12,7 @@
 #include "PCGExTensorInertiaConstant.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorInertiaConstantConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorInertiaConstantConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -28,13 +28,17 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorInertiaConstantConfig : public FPC
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	FRotator Offset = FRotator::ZeroRotator;
+
+	/** If enabled, will set a constant per-point inertia based on the original point transform */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bSetInertiaOnce = false;
 };
 
 /**
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorInertiaConstant : public UPCGExTensorOperation
+class UPCGExTensorInertiaConstant : public UPCGExTensorOperation
 {
 	GENERATED_BODY()
 
@@ -43,12 +47,12 @@ public:
 	FQuat Offset = FQuat::Identity;
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorInertiaConstantFactory : public UPCGExTensorFactoryData
+class UPCGExTensorInertiaConstantFactory : public UPCGExTensorFactoryData
 {
 	GENERATED_BODY()
 
@@ -63,7 +67,7 @@ protected:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorInertiaConstantSettings : public UPCGExTensorFactoryProviderSettings
+class UPCGExCreateTensorInertiaConstantSettings : public UPCGExTensorFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -90,6 +94,10 @@ public:
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	double Potency = 1;
+
+	/** If enabled, will set a constant per-point inertia based on the original point transform */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bSetInertiaOnce = false;
 
 	/** Tensor properties */
 	UPROPERTY(meta=(PCG_NotOverridable, HideInDetailPanel))

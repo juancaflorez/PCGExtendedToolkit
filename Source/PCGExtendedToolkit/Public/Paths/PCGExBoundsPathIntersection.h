@@ -8,6 +8,7 @@
 
 #include "PCGExPointsProcessor.h"
 
+
 #include "Graph/PCGExIntersections.h"
 #include "PCGExBoundsPathIntersection.generated.h"
 
@@ -15,7 +16,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBoundsPathIntersectionSettings : public UPCGExPathProcessorSettings
+class UPCGExBoundsPathIntersectionSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -32,7 +33,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -41,14 +41,14 @@ public:
 	FPCGExBoxIntersectionDetails OutputSettings;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsPathIntersectionContext final : FPCGExPathProcessorContext
+struct FPCGExBoundsPathIntersectionContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExBoundsPathIntersectionElement;
 
 	TSharedPtr<PCGExData::FFacade> BoundsDataFacade;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsPathIntersectionElement final : public FPCGExPathProcessorElement
+class FPCGExBoundsPathIntersectionElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -80,24 +80,12 @@ namespace PCGExPathIntersections
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		void FindIntersections(const int32 Index) const;
 		void InsertIntersections(const int32 Index) const;
 		void OnInsertionComplete();
 
-		FORCEINLINE virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override
-		{
-			if (Details.InsideForwardHandler)
-			{
-				TArray<TSharedPtr<PCGExGeo::FPointBox>> Overlaps;
-				const bool bContained = Cloud->IsInside<EPCGExBoxCheckMode::ExpandedBox>(Point.Transform.GetLocation(), Overlaps); // Avoid intersections being captured
-				Details.SetIsInside(Index, bContained, bContained ? Overlaps[0]->Index : -1);
-			}
-			else
-			{
-				Details.SetIsInside(Index, Cloud->IsInside<EPCGExBoxCheckMode::ExpandedBox>(Point.Transform.GetLocation()));
-			}
-		}
+		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 
 		virtual void CompleteWork() override;
 		virtual void Write() override;

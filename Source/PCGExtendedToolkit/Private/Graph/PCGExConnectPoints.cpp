@@ -3,6 +3,7 @@
 
 #include "Graph/PCGExConnectPoints.h"
 
+
 #include "Graph/PCGExGraph.h"
 #include "Graph/Data/PCGExClusterData.h"
 #include "Graph/PCGExUnionHelpers.h"
@@ -30,8 +31,6 @@ TArray<FPCGPinProperties> UPCGExConnectPointsSettings::OutputPinProperties() con
 	PCGEX_PIN_POINTS(PCGExGraph::OutputEdgesLabel, "Point data representing edges.", Required, {})
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExConnectPointsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 PCGEX_INITIALIZE_ELEMENT(ConnectPoints)
 
@@ -101,7 +100,7 @@ namespace PCGExConnectPoints
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExConnectPoints::Process);
 

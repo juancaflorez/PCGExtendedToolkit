@@ -5,14 +5,24 @@
 
 #include "CoreMinimal.h"
 #include "PCGExCluster.h"
+#include "PCGExCompare.h"
 #include "PCGExEdgesProcessor.h"
 #include "Data/PCGExDataForward.h"
 
 
 #include "PCGExCopyClustersToPoints.generated.h"
 
+UENUM()
+enum class EPCGExClusterComponentTagMatchMode : uint8
+{
+	Vtx   = 0 UMETA(DisplayName = "Vtx", ToolTip="Only match vtx (most efficient check)"),
+	Edges = 1 UMETA(DisplayName = "Edges", ToolTip="Only match edges"),
+	Any   = 2 UMETA(DisplayName = "Any", ToolTip="Match either vtx or edges"),
+	Both  = 3 UMETA(DisplayName = "Vtx and Edges", ToolTip="Match no vtx and edges"),
+};
+
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCopyClustersToPointsSettings : public UPCGExEdgesProcessorSettings
+class UPCGExCopyClustersToPointsSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -35,19 +45,31 @@ public:
 	//~End UPCGExEdgesProcessorSettings interface
 
 	/** Target inherit behavior */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, ShowOnlyInnerProperties))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExTransformDetails TransformDetails;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bDoMatchByTags = false;
+
+	/** Which cluster component must match the tags */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bDoMatchByTags"))
+	EPCGExClusterComponentTagMatchMode MatchMode = EPCGExClusterComponentTagMatchMode::Vtx;
+
+	/** Use tag to filter which cluster gets copied to which target point. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="bDoMatchByTags", HideEditConditionToggle))
+	FPCGExAttributeToTagComparisonDetails MatchByTagValue;
 
 	/** TBD */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging & Forwarding")
-	FPCGExAttributeToTagDetails TargetsAttributesToPathTags;
+	FPCGExAttributeToTagDetails TargetsAttributesToClusterTags;
 
-	/** Which Seed attributes to forward on paths. */
+	/** Which target attributes to forward on clusters. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging & Forwarding")
 	FPCGExForwardDetails TargetsForwarding;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCopyClustersToPointsContext final : FPCGExEdgesProcessorContext
+struct FPCGExCopyClustersToPointsContext final : FPCGExEdgesProcessorContext
 {
 	friend class UPCGExCopyClustersToPointsSettings;
 	friend class FPCGExCopyClustersToPointsElement;
@@ -56,11 +78,12 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCopyClustersToPointsContext final : FPCG
 
 	TSharedPtr<PCGExData::FFacade> TargetsDataFacade;
 
-	FPCGExAttributeToTagDetails TargetsAttributesToPathTags;
+	FPCGExAttributeToTagComparisonDetails MatchByTagValue;
+	FPCGExAttributeToTagDetails TargetsAttributesToClusterTags;
 	TSharedPtr<PCGExData::FDataForwardHandler> TargetsForwardHandler;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCopyClustersToPointsElement final : public FPCGExEdgesProcessorElement
+class FPCGExCopyClustersToPointsElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -77,6 +100,11 @@ namespace PCGExCopyClusters
 {
 	class FProcessor final : public PCGExClusterMT::TProcessor<FPCGExCopyClustersToPointsContext, UPCGExCopyClustersToPointsSettings>
 	{
+		friend class FBatch;
+
+	protected:
+		int32 NumCopies = 0;
+
 	public:
 		TArray<TSharedPtr<PCGExData::FPointIO>>* VtxDupes = nullptr;
 		TArray<PCGExTags::IDType>* VtxTag = nullptr;
@@ -98,6 +126,9 @@ namespace PCGExCopyClusters
 	{
 		friend class FProcessor;
 
+	protected:
+		int32 NumCopies = 0;
+
 	public:
 		TArray<TSharedPtr<PCGExData::FPointIO>> VtxDupes;
 		TArray<PCGExTags::IDType> VtxTag;
@@ -110,5 +141,6 @@ namespace PCGExCopyClusters
 		virtual ~FBatch() override;
 		virtual void Process() override;
 		virtual bool PrepareSingle(const TSharedPtr<FProcessor>& ClusterProcessor) override;
+		virtual void CompleteWork() override;
 	};
 }

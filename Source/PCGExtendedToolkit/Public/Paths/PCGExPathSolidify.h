@@ -14,7 +14,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathSolidifySettings : public UPCGExPathProcessorSettings
+class UPCGExPathSolidifySettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -28,11 +28,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** If the path is not closed, the last point cannot be solidified, thus it's usually preferable to remove it. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	bool bRemoveLastPoint = true;
@@ -105,12 +101,12 @@ public:
 	double RadiusZConstant = 1;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSolidifyContext final : FPCGExPathProcessorContext
+struct FPCGExPathSolidifyContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathSolidifyElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSolidifyElement final : public FPCGExPathProcessorElement
+class FPCGExPathSolidifyElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -146,7 +142,7 @@ namespace PCGExPathSolidify
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 	};

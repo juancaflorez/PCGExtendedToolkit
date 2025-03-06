@@ -9,21 +9,25 @@ namespace PCGExCluster
 	void FNodeChain::FixUniqueHash()
 	{
 		UniqueHash = 0;
-		SingleEdge = -1;
 
-		if (Links.Num() <= 1) { SingleEdge = Seed.Edge; }
+		if (Links.Num() <= 1)
+		{
+			SingleEdge = Seed.Edge;
+			UniqueHash = SingleEdge;
+			return;
+		}
 
-		if (SingleEdge != -1) { UniqueHash = PCGEx::H64U(SingleEdge, SingleEdge); }
-		else { UniqueHash = PCGEx::H64U(bIsClosedLoop ? Seed.Edge : Links[0].Edge, Links.Last().Edge); }
+		const FLink LastLink = Links.Last();
+		UniqueHash = PCGEx::H64U(HashCombineFast(Seed.Node, Seed.Edge), HashCombineFast(LastLink.Node, LastLink.Edge));
 	}
 
 	void FNodeChain::BuildChain(const TSharedRef<FCluster>& Cluster, const TSharedPtr<TArray<int8>>& Breakpoints)
 	{
 		ON_SCOPE_EXIT
 		{
-			FixUniqueHash();
 			bIsLeaf = Cluster->GetNode(Seed.Node)->IsLeaf() || Cluster->GetNode(Links.Last().Node)->IsLeaf();
 			if (bIsClosedLoop) { bIsLeaf = false; }
+			FixUniqueHash();
 		};
 
 		TSet<int32> Visited;
@@ -111,6 +115,13 @@ namespace PCGExCluster
 		}
 		else
 		{
+			if (bIsClosedLoop)
+			{
+				// TODO : Handle closed loop properly
+				Dump(Cluster, Graph, bAddMetadata);
+				return;
+			}
+
 			if (bAddMetadata)
 			{
 				Graph->InsertEdge(
@@ -130,9 +141,66 @@ namespace PCGExCluster
 		}
 	}
 
+	FVector FNodeChain::GetFirstEdgeDir(const TSharedPtr<FCluster>& Cluster) const
+	{
+		return Cluster->GetDir(Seed.Node, (*Cluster->NodeIndexLookup)[Cluster->GetEdge(Seed.Edge)->Other(Cluster->GetNodePointIndex(Seed.Node))]);
+	}
+
+	FVector FNodeChain::GetLastEdgeDir(const TSharedPtr<FCluster>& Cluster) const
+	{
+		const FLink& Lk = Links.Last();
+		return Cluster->GetDir(Lk.Node, (*Cluster->NodeIndexLookup)[Cluster->GetEdge(Lk.Edge)->Other(Cluster->GetNodePointIndex(Lk.Node))]);
+	}
+
+	FVector FNodeChain::GetEdgeDir(const TSharedPtr<FCluster>& Cluster, const bool bFirst) const
+	{
+		if (bFirst) { return GetFirstEdgeDir(Cluster); }
+		else { return GetLastEdgeDir(Cluster); }
+	}
+
+	int32 FNodeChain::GetNodes(const TSharedPtr<FCluster>& Cluster, TArray<int32>& OutNodes, const bool bReverse)
+	{
+		if (SingleEdge != -1)
+		{
+			OutNodes.Reset(2);
+			FEdge* Edge = Cluster->GetEdge(SingleEdge);
+
+			if (bReverse)
+			{
+				OutNodes.Add(Cluster->GetNode((*Cluster->NodeIndexLookup)[Edge->End])->Index);
+				OutNodes.Add(Cluster->GetNode((*Cluster->NodeIndexLookup)[Edge->Start])->Index);
+			}
+			else
+			{
+				OutNodes.Add(Cluster->GetNode((*Cluster->NodeIndexLookup)[Edge->Start])->Index);
+				OutNodes.Add(Cluster->GetNode((*Cluster->NodeIndexLookup)[Edge->End])->Index);
+			}
+
+			return 2;
+		}
+
+		const int32 ChainSize = Links.Num();
+
+		OutNodes.Reset(ChainSize + 1);
+
+		if (bReverse)
+		{
+			for (int i = ChainSize - 1; i >= 0; i--) { OutNodes.Add(Links[i].Node); }
+			OutNodes.Add(Seed.Node);
+		}
+		else
+		{
+			OutNodes.Add(Seed.Node);
+			for (int i = 0; i < ChainSize; i++) { OutNodes.Add(Links[i].Node); }
+		}
+
+		return OutNodes.Num();
+	}
+
 	bool FNodeChainBuilder::Compile(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager)
 	{
 		Chains.Reserve(Cluster->Edges->Num());
+		int32 NumBinaries = 0;
 
 		for (int i = 0; i < Cluster->Nodes->Num(); i++)
 		{
@@ -147,23 +215,39 @@ namespace PCGExCluster
 				continue;
 			}
 
-			if (Node->IsBinary()) { continue; }
-			if (Breakpoints && !(*Breakpoints)[Node->PointIndex])
-
+			if (Node->IsBinary())
 			{
-				for (const FLink& Lk : Node->Links)
+				if (!Breakpoints || !(*Breakpoints)[Node->PointIndex])
 				{
-					// Skip immediately known leaves or already seeded nodes. Avoid double-sampling simple cases
-					if (Cluster->GetNode(Lk.Node)->IsLeaf()) { continue; }
-
-					PCGEX_MAKE_SHARED(NewChain, FNodeChain, FLink(Node->Index, Lk.Edge))
-					Chains.Add(NewChain);
+					NumBinaries++;
+					continue;
 				}
+			}
+
+			for (const FLink& Lk : Node->Links)
+			{
+				// Skip immediately known leaves or already seeded nodes. Avoid double-sampling simple cases
+				if (Cluster->GetNode(Lk.Node)->IsLeaf()) { continue; }
+
+				PCGEX_MAKE_SHARED(NewChain, FNodeChain, FLink(Node->Index, Lk.Edge))
+				Chains.Add(NewChain);
 			}
 		}
 
 		Chains.Shrink();
-		if (Chains.IsEmpty()) { return false; }
+		if (Chains.IsEmpty())
+		{
+			if (NumBinaries > 0 && NumBinaries == Cluster->Nodes->Num())
+			{
+				// That's an isolated closed loop
+				PCGEX_MAKE_SHARED(NewChain, FNodeChain, Cluster->GetNode(0)->Links[0])
+				Chains.Add(NewChain);
+			}
+			else
+			{
+				return false;
+			}
+		}
 		return DispatchTasks(AsyncManager);
 	}
 

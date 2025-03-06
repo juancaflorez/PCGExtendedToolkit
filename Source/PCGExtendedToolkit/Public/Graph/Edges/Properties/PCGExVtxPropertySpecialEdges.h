@@ -16,7 +16,7 @@
 #include "PCGExVtxPropertySpecialEdges.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSpecialEdgesConfig
+struct FPCGExSpecialEdgesConfig
 {
 	GENERATED_BODY()
 
@@ -37,7 +37,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSpecialEdgesConfig
  * ó
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExVtxPropertySpecialEdges : public UPCGExVtxPropertyOperation
+class UPCGExVtxPropertySpecialEdges : public UPCGExVtxPropertyOperation
 {
 	GENERATED_BODY()
 
@@ -46,7 +46,7 @@ public:
 
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
 	virtual bool PrepareForCluster(
-		const FPCGContext* InContext,
+		const FPCGExContext* InContext,
 		TSharedPtr<PCGExCluster::FCluster> InCluster,
 		const TSharedPtr<PCGExData::FFacade>& InVtxDataFacade,
 		const TSharedPtr<PCGExData::FFacade>& InEdgeDataFacade) override;
@@ -60,7 +60,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExVtxPropertySpecialEdgesFactory : public UPCGExVtxPropertyFactoryData
+class UPCGExVtxPropertySpecialEdgesFactory : public UPCGExVtxPropertyFactoryData
 {
 	GENERATED_BODY()
 
@@ -70,7 +70,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|VtxProperty")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExVtxPropertySpecialEdgesSettings : public UPCGExVtxPropertyProviderSettings
+class UPCGExVtxPropertySpecialEdgesSettings : public UPCGExVtxPropertyProviderSettings
 {
 	GENERATED_BODY()
 

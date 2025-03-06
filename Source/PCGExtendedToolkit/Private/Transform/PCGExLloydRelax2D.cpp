@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExLloydRelax2DElement"
 #define PCGEX_NAMESPACE LloydRelax2D
 
-PCGExData::EIOInit UPCGExLloydRelax2DSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 PCGEX_INITIALIZE_ELEMENT(LloydRelax2D)
 
 bool FPCGExLloydRelax2DElement::Boot(FPCGExContext* InContext) const
@@ -61,7 +59,7 @@ bool FPCGExLloydRelax2DElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExLloydRelax2D
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExLloydRelax2D::Process);
 

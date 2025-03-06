@@ -8,6 +8,7 @@
 #include "PCGExPathfinding.h"
 #include "PCGExPointsProcessor.h"
 #include "Graph/PCGExEdgesProcessor.h"
+#include "Paths/PCGExPaths.h"
 
 #include "PCGExPathfindingPlotEdges.generated.h"
 
@@ -18,7 +19,7 @@ class UPCGExSearchOperation;
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathfindingPlotEdgesSettings : public UPCGExEdgesProcessorSettings
+class UPCGExPathfindingPlotEdgesSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -100,10 +101,14 @@ public:
 	/** ... */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Tagging", meta=(EditCondition="bTagIfOpenPath"))
 	FString IsOpenPathTag = TEXT("OpenPath");
+
+	/** ... */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(DisplayName="Paths Output Settings"))
+	FPCGExPathOutputDetails PathOutputDetails;
 };
 
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingPlotEdgesContext final : FPCGExEdgesProcessorContext
+struct FPCGExPathfindingPlotEdgesContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExPathfindingPlotEdgesElement;
 
@@ -115,7 +120,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingPlotEdgesContext final : FPCG
 	void BuildPath(const TSharedPtr<PCGExPathfinding::FPlotQuery>& Query) const;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingPlotEdgesElement final : public FPCGExEdgesProcessorElement
+class FPCGExPathfindingPlotEdgesElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

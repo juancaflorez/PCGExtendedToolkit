@@ -6,10 +6,9 @@
 #include "OrientedBoxTypes.h"
 #include "PCGExDataMath.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExWritePathPropertiesElement"
 #define PCGEX_NAMESPACE WritePathProperties
-
-PCGExData::EIOInit UPCGExWritePathPropertiesSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 bool UPCGExWritePathPropertiesSettings::WriteAnyPathData() const
 {
@@ -100,7 +99,7 @@ bool FPCGExWritePathPropertiesElement::ExecuteInternal(FPCGContext* InContext) c
 
 namespace PCGExWritePathProperties
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExWritePathProperties::Process);
 
@@ -108,6 +107,8 @@ namespace PCGExWritePathProperties
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		ProjectionDetails = Settings->ProjectionDetails;
 		if (!ProjectionDetails.Init(Context, PointDataFacade)) { return false; }

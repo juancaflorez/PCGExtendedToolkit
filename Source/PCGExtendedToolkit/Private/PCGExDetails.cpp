@@ -3,6 +3,68 @@
 
 #include "PCGExDetails.h"
 
+#include "PCGComponent.h"
+
+namespace PCGExDetails
+{
+	TSharedPtr<FDistances> MakeDistances(const EPCGExDistance Source, const EPCGExDistance Target, const bool bOverlapIsZero)
+	{
+		if (Source == EPCGExDistance::None || Target == EPCGExDistance::None)
+		{
+			return MakeShared<TDistances<EPCGExDistance::None, EPCGExDistance::None>>();
+		}
+		if (Source == EPCGExDistance::Center)
+		{
+			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::Center>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
+		}
+		else if (Source == EPCGExDistance::SphereBounds)
+		{
+			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::Center>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
+		}
+		else if (Source == EPCGExDistance::BoxBounds)
+		{
+			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::Center>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
+			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
+		}
+
+		return nullptr;
+	}
+
+	TSharedPtr<FDistances> MakeNoneDistances()
+	{
+		return MakeShared<TDistances<EPCGExDistance::None, EPCGExDistance::None>>();
+	}
+}
+
+TSharedPtr<PCGExDetails::FDistances> FPCGExDistanceDetails::MakeDistances() const
+{
+	return PCGExDetails::MakeDistances(Source, Target);
+}
+
+void FPCGExFuseDetails::Init()
+{
+	if (FuseMethod == EPCGExFuseMethod::Voxel)
+	{
+		Tolerances *= 2;
+		Tolerance *= 2;
+
+		if (bComponentWiseTolerance) { CWTolerance = FVector(1 / Tolerances.X, 1 / Tolerances.Y, 1 / Tolerances.Z); }
+		else { CWTolerance = FVector(1 / Tolerance); }
+	}
+	else
+	{
+		if (bComponentWiseTolerance) { CWTolerance = Tolerances; }
+		else { CWTolerance = FVector(Tolerance); }
+	}
+
+	DistanceDetails = PCGExDetails::MakeDistances(SourceDistance, TargetDistance);
+}
+
 void FPCGExCollisionDetails::Init(const FPCGExContext* InContext)
 {
 	World = InContext->SourceComponent->GetWorld();

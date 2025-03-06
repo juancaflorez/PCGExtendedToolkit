@@ -17,14 +17,14 @@
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Six Points", meta=(DisplayName = "Six Points", ToolTip ="Samples the field using six points around the sampling target location, and averaging the results."))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSamplerSixPoints : public UPCGExTensorSampler
+class UPCGExTensorSamplerSixPoints : public UPCGExTensorSampler
 {
 	GENERATED_BODY()
 
 public:
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
 	virtual bool PrepareForData(FPCGExContext* InContext) override;
-	virtual PCGExTensor::FTensorSample Sample(const TArray<UPCGExTensorOperation*>& InTensors, const FTransform& InProbe, bool& OutSuccess) const override;
+	virtual PCGExTensor::FTensorSample Sample(const TArray<UPCGExTensorOperation*>& InTensors, int32 InSeedIndex, const FTransform& InProbe, bool& OutSuccess) const override;
 
 protected:
 	const FVector Points[6] = {FVector::ForwardVector, FVector::BackwardVector, FVector::UpVector, FVector::DownVector, FVector::LeftVector, FVector::RightVector};

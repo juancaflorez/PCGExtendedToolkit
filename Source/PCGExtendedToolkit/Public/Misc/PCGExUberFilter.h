@@ -19,7 +19,7 @@ enum class EPCGExUberFilterMode : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExUberFilterSettings : public UPCGExPointsProcessorSettings
+class UPCGExUberFilterSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -33,7 +33,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(UberFilter, "Uber Filter", "Filter points based on multiple rules & conditions.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub); }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Filter; }
 #endif
 
 protected:
@@ -44,7 +45,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual FName GetMainOutputPin() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceFiltersLabel, "Filters", PCGExFactories::PointFilters, true)
 	//~End UPCGExPointsProcessorSettings
 
@@ -88,7 +88,7 @@ private:
 	friend class FPCGExUberFilterElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterContext final : FPCGExPointsProcessorContext
+struct FPCGExUberFilterContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExUberFilterElement;
 
@@ -98,7 +98,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterContext final : FPCGExPointsPr
 	int32 NumPairs = 0;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterElement final : public FPCGExPointsProcessorElement
+class FPCGExUberFilterElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -130,7 +130,7 @@ namespace PCGExUberFilter
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		TSharedPtr<PCGExData::FPointIO> CreateIO(const TSharedRef<PCGExData::FPointIOCollection>& InCollection, const PCGExData::EIOInit InitMode) const;

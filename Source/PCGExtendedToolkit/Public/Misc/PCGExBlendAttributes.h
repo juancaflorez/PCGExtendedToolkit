@@ -13,8 +13,8 @@
 
 class UPCGExAttributeBlendFactory;
 
-UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBlendAttributesSettings : public UPCGExPointsProcessorSettings
+UCLASS(Hidden, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
+class UPCGExBlendAttributesSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -22,7 +22,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(BlendAttributes, "Blend Attributes", "Blend attribute values based on individual rules.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Metadata; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
@@ -30,24 +31,20 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Whther to write the index as a normalized output value. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bOutputNormalizedIndex = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBlendAttributesContext final : FPCGExPointsProcessorContext
+struct FPCGExBlendAttributesContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBlendAttributesElement;
 
 	TArray<TObjectPtr<const UPCGExAttributeBlendFactory>> BlendingFactories;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBlendAttributesElement final : public FPCGExPointsProcessorElement
+class FPCGExBlendAttributesElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -78,7 +75,7 @@ namespace PCGExBlendAttributes
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};

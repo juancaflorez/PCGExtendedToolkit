@@ -32,7 +32,7 @@ namespace PCGExOrient
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExOrientSettings : public UPCGExPathProcessorSettings
+class UPCGExOrientSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -51,7 +51,7 @@ protected:
 
 	//~Begin UPCGExPointProcessorSettings
 public:
-	PCGEX_NODE_POINT_FILTER(FName("Flip Orientation Conditions"), "Filters used to know whether an orientation should be flipped or not", PCGExFactories::PointFilters, false)
+	PCGEX_NODE_POINT_FILTER(FName("Flip Conditions"), "Filters used to know whether an orientation should be flipped or not", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointProcessorSettings
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -84,14 +84,14 @@ public:
 	FName DotAttribute = "Dot";
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExOrientContext final : FPCGExPathProcessorContext
+struct FPCGExOrientContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExOrientElement;
 
 	UPCGExOrientOperation* Orientation;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExOrientElement final : public FPCGExPathProcessorElement
+class FPCGExOrientElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -125,7 +125,7 @@ namespace PCGExOrient
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

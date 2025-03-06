@@ -27,7 +27,7 @@ void UPCGExHeuristicAttribute::PrepareForCluster(const TSharedPtr<const PCGExClu
 
 	if (!ModifiersCache)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("Invalid Heuristic attribute: \"{0}\"."), FText::FromName(Attribute.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(Context, "Heuristic", Attribute)
 		return;
 	}
 
@@ -55,6 +55,24 @@ void UPCGExHeuristicAttribute::PrepareForCluster(const TSharedPtr<const PCGExClu
 			CachedScores[i] += FMath::Max(0, ScoreCurve->Eval(NormalizedValue)) * Factor;
 		}
 	}
+}
+
+double UPCGExHeuristicAttribute::GetEdgeScore(
+	const PCGExCluster::FNode& From,
+	const PCGExCluster::FNode& To,
+	const PCGExGraph::FEdge& Edge,
+	const PCGExCluster::FNode& Seed,
+	const PCGExCluster::FNode& Goal,
+	const TSharedPtr<PCGEx::FHashLookup> TravelStack) const
+{
+	return CachedScores[Source == EPCGExClusterComponentSource::Edge ? Edge.PointIndex : To.Index];
+}
+
+void UPCGExHeuristicAttribute::Cleanup()
+{
+	CachedScores.Empty();
+	LastPoints.Reset();
+	Super::Cleanup();
 }
 
 UPCGExHeuristicOperation* UPCGExHeuristicsFactoryAttribute::CreateOperation(FPCGExContext* InContext) const

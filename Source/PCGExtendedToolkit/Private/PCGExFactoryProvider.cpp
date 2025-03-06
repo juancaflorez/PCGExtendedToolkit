@@ -2,6 +2,8 @@
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "PCGExFactoryProvider.h"
+
+#include "PCGComponent.h"
 #include "PCGExContext.h"
 #include "PCGPin.h"
 #include "Tasks/Task.h"
@@ -10,6 +12,24 @@
 #define PCGEX_NAMESPACE PCGExFactoryProvider
 
 void UPCGExParamDataBase::OutputConfigToMetadata()
+{
+}
+
+bool UPCGExFactoryData::RegisterConsumableAttributes(FPCGExContext* InContext) const
+{
+	return bCleanupConsumableAttributes;
+}
+
+bool UPCGExFactoryData::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	return bCleanupConsumableAttributes;
+}
+
+void UPCGExFactoryData::RegisterAssetDependencies(FPCGExContext* InContext) const
+{
+}
+
+void UPCGExFactoryData::RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
 {
 }
 
@@ -90,6 +110,8 @@ void FPCGExFactoryProviderContext::LaunchDeferredCallback(PCGExMT::FSimpleCallba
 
 UPCGExFactoryData* UPCGExFactoryProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
+	InFactory->bCleanupConsumableAttributes = bCleanupConsumableAttributes;
+	InFactory->bQuietMissingInputError = bQuietMissingInputError;
 	return InFactory;
 }
 
@@ -106,12 +128,12 @@ bool FPCGExFactoryProviderElement::ExecuteInternal(FPCGContext* Context) const
 	if (InContext->IsState(PCGEx::State_InitialExecution))
 	{
 		InContext->OutFactory = Settings->CreateFactory(InContext, nullptr);
+
 		if (!InContext->OutFactory) { return true; }
 
-		InContext->OutFactory->bCleanupConsumableAttributes = Settings->bCleanupConsumableAttributes;
 		InContext->OutFactory->OutputConfigToMetadata();
 
-		if (InContext->OutFactory->GetRequiresPreparation(InContext))
+		if (InContext->OutFactory->WantsPreparation(InContext))
 		{
 			InContext->PauseContext();
 			InContext->LaunchDeferredCallback(

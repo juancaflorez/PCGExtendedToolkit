@@ -12,7 +12,7 @@ bool UPCGExTensorConstant::Init(FPCGExContext* InContext, const UPCGExTensorFact
 	return true;
 }
 
-PCGExTensor::FTensorSample UPCGExTensorConstant::Sample(const FTransform& InProbe) const
+PCGExTensor::FTensorSample UPCGExTensorConstant::Sample(const int32 InSeedIndex, const FTransform& InProbe) const
 {
 	PCGExTensor::FEffectorSamples Samples = PCGExTensor::FEffectorSamples();
 
@@ -26,6 +26,7 @@ PCGExTensor::FTensorSample UPCGExTensorConstant::Sample(const FTransform& InProb
 
 PCGEX_TENSOR_BOILERPLATE(
 	Constant, {
+	NewFactory->Config.Mutations = Mutations;
 	NewFactory->Config.Direction = Direction;
 	NewFactory->Config.Potency = Potency;
 	NewFactory->Config.PotencyInput = EPCGExInputValueType::Constant;

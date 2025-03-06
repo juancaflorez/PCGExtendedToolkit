@@ -16,7 +16,7 @@
 #include "PCGExNodeAdjacencyFilter.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNodeAdjacencyFilterConfig
+struct FPCGExNodeAdjacencyFilterConfig
 {
 	GENERATED_BODY()
 
@@ -61,7 +61,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNodeAdjacencyFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNodeAdjacencyFilterFactory : public UPCGExNodeFilterFactoryData
+class UPCGExNodeAdjacencyFilterFactory : public UPCGExNodeFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -70,15 +70,16 @@ public:
 	FPCGExNodeAdjacencyFilterConfig Config;
 
 	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const override;
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FNodeAdjacencyFilter final : public PCGExClusterFilter::TNodeFilter
+class FNodeAdjacencyFilter final : public PCGExClusterFilter::FVtxFilter
 {
 public:
 	explicit FNodeAdjacencyFilter(const UPCGExNodeAdjacencyFilterFactory* InFactory)
-		: TNodeFilter(InFactory), TypedFilterFactory(InFactory)
+		: FVtxFilter(InFactory), TypedFilterFactory(InFactory)
 	{
 		Adjacency = InFactory->Config.Adjacency;
 	}
@@ -100,16 +101,13 @@ public:
 
 	virtual bool Test(const PCGExCluster::FNode& Node) const override;
 
-	virtual ~FNodeAdjacencyFilter() override
-	{
-		TypedFilterFactory = nullptr;
-	}
+	virtual ~FNodeAdjacencyFilter() override;
 };
 
 
 /** Outputs a single GraphParam to be consumed by other nodes */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNodeAdjacencyFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExNodeAdjacencyFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 
@@ -117,9 +115,9 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
-		NodeAdjacencyFilterFactory, "Cluster Filter : Adjacency (Node)", "Numeric comparison of adjacent values, testing either adjacent nodes or connected edges.",
+		NodeAdjacencyFilterFactory, "Vtx Filter : Adjacency", "Numeric comparison of adjacent values, testing either adjacent nodes or connected edges.",
 		PCGEX_FACTORY_NAME_PRIORITY)
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter); }
 #endif
 
 	virtual FName GetMainOutputPin() const override { return PCGExPointFilter::OutputFilterLabelNode; }

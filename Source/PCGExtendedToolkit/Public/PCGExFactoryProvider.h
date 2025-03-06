@@ -9,13 +9,14 @@
 #include "PCGExMacros.h"
 #include "PCGExGlobalSettings.h"
 #include "PCGParamData.h"
+#include "PCGSettings.h"
 #include "Data/PCGExData.h"
 #include "Data/PCGPointData.h"
 #include "UObject/Object.h"
 
 #include "PCGExFactoryProvider.generated.h"
 
-#define PCGEX_FACTORY_NAME_PRIORITY FName(FString::Printf(TEXT("(%02d) "), Priority) +  GetDisplayName())
+#define PCGEX_FACTORY_NAME_PRIORITY FName(FString::Printf(TEXT("(%d) "), Priority) +  GetDisplayName())
 
 
 ///
@@ -29,6 +30,7 @@ namespace PCGExFactories
 		FilterPoint,
 		FilterNode,
 		FilterEdge,
+		FilterCollection,
 		RuleSort,
 		RulePartition,
 		Probe,
@@ -41,10 +43,11 @@ namespace PCGExFactories
 		Blending,
 		TexParam,
 		Tensor,
+		IndexPicker,
 	};
 
-	static inline TSet<EType> AnyFilters = {EType::FilterPoint, EType::FilterNode, EType::FilterEdge, EType::FilterGroup};
-	static inline TSet<EType> PointFilters = {EType::FilterPoint, EType::FilterGroup};
+	static inline TSet<EType> AnyFilters = {EType::FilterPoint, EType::FilterNode, EType::FilterEdge, EType::FilterGroup, EType::FilterCollection};
+	static inline TSet<EType> PointFilters = {EType::FilterPoint, EType::FilterGroup, EType::FilterCollection};
 	static inline TSet<EType> ClusterNodeFilters = {EType::FilterPoint, EType::FilterNode, EType::FilterGroup};
 	static inline TSet<EType> ClusterEdgeFilters = {EType::FilterPoint, EType::FilterEdge, EType::FilterGroup};
 	static inline TSet<EType> SupportsClusterFilters = {EType::FilterEdge, EType::FilterNode, EType::NodeState, EType::FilterGroup};
@@ -83,29 +86,23 @@ class PCGEXTENDEDTOOLKIT_API UPCGExFactoryData : public UPCGExParamDataBase
 	GENERATED_BODY()
 
 public:
+	UPROPERTY()
 	int32 Priority = 0;
+
+	UPROPERTY()
 	bool bCleanupConsumableAttributes = false;
+
+	UPROPERTY()
+	bool bQuietMissingInputError = false;
+
 	virtual PCGExFactories::EType GetFactoryType() const { return PCGExFactories::EType::None; }
 
-	virtual bool RegisterConsumableAttributes(FPCGExContext* InContext) const
-	{
-		return bCleanupConsumableAttributes;
-	}
+	virtual bool RegisterConsumableAttributes(FPCGExContext* InContext) const;
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const;
+	virtual void RegisterAssetDependencies(FPCGExContext* InContext) const;
+	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const;
 
-	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
-	{
-		return bCleanupConsumableAttributes;
-	}
-
-	virtual void RegisterAssetDependencies(FPCGExContext* InContext) const
-	{
-	}
-
-	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
-	{
-	}
-
-	virtual bool GetRequiresPreparation(FPCGExContext* InContext) { return false; }
+	virtual bool WantsPreparation(FPCGExContext* InContext) { return false; }
 	virtual bool Prepare(FPCGExContext* InContext) { return true; }
 
 protected:
@@ -115,7 +112,7 @@ protected:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFactoryProviderSettings : public UPCGSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExFactoryProviderSettings : public UPCGSettings
 {
 	GENERATED_BODY()
 
@@ -156,12 +153,16 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Cleanup", meta = (PCG_NotOverridable))
 	bool bCleanupConsumableAttributes = false;
 
+	/** If enabled, will turn off missing input errors on factories that have inputs with missing or no data. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Warning and Errors", meta=(PCG_NotOverridable, AdvancedDisplay))
+	bool bQuietMissingInputError = false;
+
 protected:
 	virtual bool IsCacheable() const { return false; } // Until I find a way to properly cache factories :(
 	virtual bool ShouldCache() const;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFactoryProviderContext : FPCGExContext
+struct PCGEXTENDEDTOOLKIT_API FPCGExFactoryProviderContext : FPCGExContext
 {
 	friend class FPCGExFactoryProviderElement;
 
@@ -175,7 +176,7 @@ protected:
 	TArray<TSharedPtr<PCGExMT::FDeferredCallbackHandle>> DeferredTasks;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFactoryProviderElement final : public IPCGElement
+class PCGEXTENDEDTOOLKIT_API FPCGExFactoryProviderElement final : public IPCGElement
 {
 public:
 #if WITH_EDITOR

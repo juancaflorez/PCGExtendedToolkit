@@ -9,59 +9,56 @@
 #include "PCGExPointsProcessor.h"
 
 
+#include "Pickers/PCGExPickerFactoryProvider.h"
+
+
 #include "PCGExCherryPickPoints.generated.h"
 
 UENUM()
 enum class EPCGExCherryPickSource : uint8
 {
-	Self   = 0 UMETA(DisplayName = "Self", ToolTip="Read indices from an attribute on the currently cherry-picked data set."),
-	Target = 1 UMETA(DisplayName = "Targets", ToolTip="Read indices from a list of target points."),
+	Self    = 0 UMETA(DisplayName = "Self", ToolTip="Read indices from an attribute on the currently cherry-picked data set."),
+	Sources = 1 UMETA(DisplayName = "Sources", ToolTip="Read indices from a list of sources inputs."),
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCherryPickPointsSettings : public UPCGExPointsProcessorSettings
+class UPCGExCherryPickPointsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
 public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
-	PCGEX_NODE_INFOS(CherryPickPoints, "Cherry Pick Points", "Filter points by indices, either read from local attributes or using another list of points.");
+	PCGEX_NODE_INFOS(CherryPickPoints, "Cherry Pick Points", "Filter points by indices, either read from local attributes or using external sources.");
 	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscRemove; }
 #endif
 
+	/** Whether to invert the picking (picked indices will be discarded instead or kept) */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bInvert = false;
+
+	/** Whether to output discard points to their own dataset */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bOutputDiscardedPoints = false;
+
+	/** Whether to output discard points collections to be empty */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bAllowEmptyOutputs = false;
+
 protected:
 	virtual TArray<FPCGPinProperties> InputPinProperties() const override;
+	virtual TArray<FPCGPinProperties> OutputPinProperties() const override;
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
-
-	//~Begin UPCGExPointsProcessorSettings
-public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
-	EPCGExCherryPickSource IndicesSource = EPCGExCherryPickSource::Target;
-
-	/** Attribute to read value from. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
-	FPCGAttributePropertyInputSelector ReadIndexFromAttribute;
-
-	/** . */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
-	EPCGExIndexSafety Safety = EPCGExIndexSafety::Ignore;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCherryPickPointsContext final : FPCGExPointsProcessorContext
+struct FPCGExCherryPickPointsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExCherryPickPointsElement;
-
-	bool TryGetUniqueIndices(const TSharedRef<PCGExData::FPointIO>& InSource, TArray<int32>& OutUniqueIndices, int32 MaxIndex = -1) const;
-	TArray<int32> SharedTargetIndices;
+	TArray<TObjectPtr<const UPCGExPickerFactoryData>> PickerFactories;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCherryPickPointsElement final : public FPCGExPointsProcessorElement
+class FPCGExCherryPickPointsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -78,15 +75,12 @@ namespace PCGExCherryPickPoints
 {
 	class FProcessor final : public PCGExPointsMT::TPointsProcessor<FPCGExCherryPickPointsContext, UPCGExCherryPickPointsSettings>
 	{
-		TArray<int32> PickedIndices;
-
 	public:
 		explicit FProcessor(const TSharedRef<PCGExData::FFacade>& InPointDataFacade)
 			: TPointsProcessor(InPointDataFacade)
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
-		virtual void CompleteWork() override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 	};
 }

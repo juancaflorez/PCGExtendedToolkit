@@ -12,6 +12,7 @@
 #include "Data/PCGExDataForward.h"
 #include "Data/PCGTextureData.h"
 
+
 #include "PCGExSampleTexture.generated.h"
 
 
@@ -22,7 +23,7 @@ class UPCGExFilterFactoryData;
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleTextureSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleTextureSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -42,7 +43,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -78,14 +78,14 @@ public:
 	bool bQuietDuplicateSampleNamesWarning = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleTextureContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleTextureContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleTextureElement;
 	TArray<TObjectPtr<const UPCGExTexParamFactoryData>> TexParamsFactories;
 	TSharedPtr<PCGExTexture::FLookup> TextureMap;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleTextureElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleTextureElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -200,7 +200,7 @@ namespace PCGExSampleTexture
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

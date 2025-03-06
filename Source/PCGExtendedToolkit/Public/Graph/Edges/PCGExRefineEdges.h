@@ -28,7 +28,7 @@ enum class EPCGExRefineSanitization : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExRefineEdgesSettings : public UPCGExEdgesProcessorSettings
+class UPCGExRefineEdgesSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -39,6 +39,8 @@ public:
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
 		RefineEdges, "Cluster : Refine", "Refine edges according to special rules.",
 		(Refinement ? FName(Refinement.GetClass()->GetMetaData(TEXT("DisplayName"))) : FName("...")));
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Filter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorEdge); }
 #endif
 
 protected:
@@ -76,7 +78,7 @@ private:
 	friend class FPCGExRefineEdgesElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefineEdgesContext final : FPCGExEdgesProcessorContext
+struct FPCGExRefineEdgesContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExRefineEdgesElement;
 
@@ -90,7 +92,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefineEdgesContext final : FPCGExEdgesPr
 	TSharedPtr<PCGExData::FPointIOCollection> RemovedEdges;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRefineEdgesElement final : public FPCGExEdgesProcessorElement
+class FPCGExRefineEdgesElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -141,6 +143,8 @@ namespace PCGExRefineEdges
 		virtual void CompleteWork() override;
 
 		UPCGExEdgeRefineOperation* Refinement = nullptr;
+
+		virtual void Cleanup() override;
 	};
 
 	class FBatch final : public PCGExClusterMT::TBatch<FProcessor>

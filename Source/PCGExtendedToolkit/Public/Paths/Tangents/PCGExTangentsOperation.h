@@ -16,7 +16,7 @@ namespace PCGExData
  * 
  */
 UCLASS(Abstract)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTangentsOperation : public UPCGExOperation
+class PCGEXTENDEDTOOLKIT_API UPCGExTangentsOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -32,11 +32,12 @@ public:
 		}
 	}
 
-	virtual void PrepareForData()
+	virtual bool PrepareForData(FPCGExContext* InContext)
 	{
+		return true;
 	}
 
-	FORCEINLINE virtual void ProcessFirstPoint(
+	virtual void ProcessFirstPoint(
 		const TArray<FPCGPoint>& InPoints,
 		const FVector& ArriveScale, FVector& OutArrive,
 		const FVector& LeaveScale, FVector& OutLeave) const
@@ -48,7 +49,7 @@ public:
 		OutLeave = Dir * LeaveScale;
 	}
 
-	FORCEINLINE virtual void ProcessLastPoint(
+	virtual void ProcessLastPoint(
 		const TArray<FPCGPoint>& InPoints,
 		const FVector& ArriveScale, FVector& OutArrive,
 		const FVector& LeaveScale, FVector& OutLeave) const
@@ -60,7 +61,7 @@ public:
 		OutLeave = Dir * LeaveScale;
 	}
 
-	FORCEINLINE virtual void ProcessPoint(
+	virtual void ProcessPoint(
 		const TArray<FPCGPoint>& InPoints,
 		const int32 Index, const int32 NextIndex, const int32 PrevIndex,
 		const FVector& ArriveScale, FVector& OutArrive,

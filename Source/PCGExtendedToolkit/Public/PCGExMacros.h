@@ -15,6 +15,9 @@
 
 #pragma region PCGEX MACROS
 
+#define PCGEX_LOG_INVALID_SELECTOR_C(_CTX, _NAME, _SELECTOR) PCGE_LOG_C(Error, GraphAndLog, _CTX, FText::Format(FTEXT("Invalid "#_NAME" attribute: \"{0}\"."), FText::FromString(PCGEx::GetSelectorDisplayName(_SELECTOR))));
+#define PCGEX_LOG_INVALID_ATTR_C(_CTX, _NAME, _SELECTOR) PCGE_LOG_C(Error, GraphAndLog, _CTX, FText::Format(FTEXT("Invalid "#_NAME" attribute: \"{0}\"."), FText::FromName(_SELECTOR)));
+
 #define PCGEX_ON_INVALILD_INPUTS(_MSG) bool bHasInvalidInputs = false; ON_SCOPE_EXIT{ if (bHasInvalidInputs){ PCGE_LOG(Warning, GraphAndLog, _MSG); } };
 
 #define PCGEX_NOT_IMPLEMENTED(_NAME){ LowLevelFatalError(TEXT("Method not implemented: (%s)"), TEXT(#_NAME));}
@@ -129,7 +132,7 @@ bool bCleanupConsumableAttributes = false;
 // FString A = ShouldCache() ? TEXT("♻️ ") : TEXT("");
 
 #define PCGEX_NODE_INFOS(_SHORTNAME, _NAME, _TOOLTIP)\
-virtual FName GetDefaultNodeName() const override { return FName(TEXT(#_SHORTNAME)); } \
+virtual FName GetDefaultNodeName() const override { return FName(TEXT("PCGEx"#_SHORTNAME)); } \
 virtual FName AdditionalTaskName() const override{ FString A = TEXT(""); return FName(A + GetDefaultNodeTitle().ToString()); }\
 virtual FText GetDefaultNodeTitle() const override { FString A = TEXT(""); A += TEXT("PCGEx | "); A += (bCleanupConsumableAttributes ? TEXT("🗑️ ") : TEXT("")); A += TEXT(_NAME); return FTEXT(A);} \
 virtual FText GetNodeTooltipText() const override{ return FTEXT(_TOOLTIP); }
@@ -222,22 +225,22 @@ struct _ITEM##Semantics{ \
 	enum { MinInclusiveElementsPerNode = 7 }; \
 	enum { MaxNodeDepth = 12 }; \
 	using ElementAllocator = TInlineAllocator<MaxElementsPerLeaf>; \
-	FORCEINLINE static const FBoxSphereBounds& GetBoundingBox(const _ITEM* Element) _BOUNDS \
-	FORCEINLINE static const bool AreElementsEqual(const _ITEM* A, const _ITEM* B) _EQUALITY \
-	FORCEINLINE static void ApplyOffset(_ITEM& Element){ ensureMsgf(false, TEXT("Not implemented")); } \
-	FORCEINLINE static void SetElementId(const _ITEM* Element, FOctreeElementId2 OctreeElementID){ }}; \
+	static const FBoxSphereBounds& GetBoundingBox(const _ITEM* Element) _BOUNDS \
+	static const bool AreElementsEqual(const _ITEM* A, const _ITEM* B) _EQUALITY \
+	static void ApplyOffset(_ITEM& Element){ ensureMsgf(false, TEXT("Not implemented")); } \
+	static void SetElementId(const _ITEM* Element, FOctreeElementId2 OctreeElementID){ }}; \
 	using _ITEM##Octree = TOctree2<_ITEM*, _ITEM##Semantics>;
 
 #define PCGEX_OCTREE_SEMANTICS_REF(_ITEM, _BOUNDS, _EQUALITY)\
-struct _ITEM##Semantics{ \
+struct PCGEXTENDEDTOOLKIT_API _ITEM##Semantics{ \
 enum { MaxElementsPerLeaf = 16 }; \
 enum { MinInclusiveElementsPerNode = 7 }; \
 enum { MaxNodeDepth = 12 }; \
 using ElementAllocator = TInlineAllocator<MaxElementsPerLeaf>; \
-FORCEINLINE static const FBoxSphereBounds& GetBoundingBox(const _ITEM& Element) _BOUNDS \
-FORCEINLINE static const bool AreElementsEqual(const _ITEM& A, const _ITEM& B) _EQUALITY \
-FORCEINLINE static void ApplyOffset(_ITEM& Element){ ensureMsgf(false, TEXT("Not implemented")); } \
-FORCEINLINE static void SetElementId(const _ITEM& Element, FOctreeElementId2 OctreeElementID){ }}; \
+static const FBoxSphereBounds& GetBoundingBox(const _ITEM& Element) _BOUNDS \
+static const bool AreElementsEqual(const _ITEM& A, const _ITEM& B) _EQUALITY \
+static void ApplyOffset(_ITEM& Element){ ensureMsgf(false, TEXT("Not implemented")); } \
+static void SetElementId(const _ITEM& Element, FOctreeElementId2 OctreeElementID){ }}; \
 using _ITEM##Octree = TOctree2<_ITEM, _ITEM##Semantics>;
 
 #endif

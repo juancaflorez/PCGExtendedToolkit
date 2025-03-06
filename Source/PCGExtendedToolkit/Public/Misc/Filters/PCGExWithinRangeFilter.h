@@ -15,7 +15,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWithinRangeFilterConfig
+struct FPCGExWithinRangeFilterConfig
 {
 	GENERATED_BODY()
 
@@ -49,7 +49,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWithinRangeFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExWithinRangeFilterFactory : public UPCGExFilterFactoryData
+class UPCGExWithinRangeFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -60,9 +60,9 @@ public:
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWithinRangeFilter final : public PCGExPointFilter::FSimpleFilter
+	class FWithinRangeFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FWithinRangeFilter(const UPCGExWithinRangeFilterFactory* InDefinition)
@@ -79,12 +79,8 @@ namespace PCGExPointsFilter
 		bool bInclusive = false;
 		bool bInvert = false;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			if (!bInclusive) { return FMath::IsWithin(OperandA->Read(PointIndex), RealMin, RealMax) ? !bInvert : bInvert; }
-			return FMath::IsWithinInclusive(OperandA->Read(PointIndex), RealMin, RealMax) ? !bInvert : bInvert;
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FWithinRangeFilter() override
 		{
@@ -96,7 +92,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExWithinRangeFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExWithinRangeFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

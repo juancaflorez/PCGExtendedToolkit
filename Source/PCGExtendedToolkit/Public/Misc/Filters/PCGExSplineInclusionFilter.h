@@ -10,6 +10,8 @@
 #include "Data/PCGExPointFilter.h"
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGSplineData.h"
+
+
 #include "Sampling/PCGExSampleNearestSpline.h"
 
 
@@ -36,7 +38,7 @@ enum class EPCGExSplineFilterPick : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplineInclusionFilterConfig
+struct FPCGExSplineInclusionFilterConfig
 {
 	GENERATED_BODY()
 
@@ -77,7 +79,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplineInclusionFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSplineInclusionFilterFactory : public UPCGExFilterFactoryData
+class UPCGExSplineInclusionFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -87,14 +89,17 @@ public:
 
 	virtual bool SupportsDirectEvaluation() const override { return true; } // TODO Change this one we support per-point tolerance from attribute
 
-	TArray<FPCGSplineStruct> Splines;
+	TSharedPtr<TArray<FPCGSplineStruct>> Splines;
 	virtual bool Init(FPCGExContext* InContext) override;
+	virtual bool WantsPreparation(FPCGExContext* InContext) override;
+	virtual bool Prepare(FPCGExContext* InContext) override;
+
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 
 	virtual void BeginDestroy() override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
 	enum ESplineCheckFlags : uint8
 	{
@@ -111,18 +116,18 @@ namespace PCGExPointsFilter
 		Skip
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FSplineInclusionFilter final : public PCGExPointFilter::FSimpleFilter
+	class FSplineInclusionFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FSplineInclusionFilter(const TObjectPtr<const UPCGExSplineInclusionFilterFactory>& InFactory)
 			: FSimpleFilter(InFactory), TypedFilterFactory(InFactory)
 		{
-			Splines = &TypedFilterFactory->Splines;
+			Splines = TypedFilterFactory->Splines;
 		}
 
 		const TObjectPtr<const UPCGExSplineInclusionFilterFactory> TypedFilterFactory;
 
-		const TArray<FPCGSplineStruct>* Splines = nullptr;
+		TSharedPtr<TArray<FPCGSplineStruct>> Splines;
 
 		double ToleranceSquared = MAX_dbl;
 		ESplineCheckFlags GoodFlags = None;
@@ -132,7 +137,7 @@ namespace PCGExPointsFilter
 		using SplineCheckCallback = std::function<bool(const FPCGPoint&)>;
 		SplineCheckCallback SplineCheck;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
 		virtual bool Test(const FPCGPoint& Point) const override;
 		virtual bool Test(const int32 PointIndex) const override;
 
@@ -145,7 +150,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSplineInclusionFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExSplineInclusionFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

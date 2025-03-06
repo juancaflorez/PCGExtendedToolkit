@@ -13,7 +13,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorNullConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorNullConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -27,7 +27,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorNullConfig : public FPCGExTensorCo
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorNull : public UPCGExTensorPointOperation
+class UPCGExTensorNull : public UPCGExTensorPointOperation
 {
 	GENERATED_BODY()
 
@@ -37,12 +37,12 @@ public:
 
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorNullFactory : public UPCGExTensorPointFactoryData
+class UPCGExTensorNullFactory : public UPCGExTensorPointFactoryData
 {
 	GENERATED_BODY()
 
@@ -52,7 +52,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorNullSettings : public UPCGExTensorPointFactoryProviderSettings
+class UPCGExCreateTensorNullSettings : public UPCGExTensorPointFactoryProviderSettings
 {
 	GENERATED_BODY()
 

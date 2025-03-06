@@ -3,6 +3,7 @@
 
 #include "Misc/PCGExWriteGUID.h"
 
+
 #include "Helpers/PCGHelpers.h"
 #include "Misc/Guid.h"
 
@@ -58,7 +59,7 @@ bool FPCGExGUIDDetails::Init(FPCGExContext* InContext, TSharedRef<PCGExData::FFa
 		UniqueKeyReader = InFacade->GetScopedBroadcaster<int32>(UniqueKeyAttribute);
 		if (!UniqueKeyReader)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid UniqueKey attribute: \"{0}\"."), FText::FromName(UniqueKeyAttribute.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Unique Key", UniqueKeyAttribute)
 			return false;
 		}
 	}
@@ -89,8 +90,6 @@ void FPCGExGUIDDetails::GetGUID(const int32 Index, const FPCGPoint& InPoint, FGu
 		UniqueKeyReader ? HashCombine(SeededBase, static_cast<uint32>(UniqueKeyReader->Read(Index))) : SeededBase,
 		bUsePosition ? PCGEx::GH3(InPoint.Transform.GetLocation() + PositionHashOffset, AdjustedPositionHashCollision) : 0);
 }
-
-PCGExData::EIOInit UPCGExWriteGUIDSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 PCGEX_INITIALIZE_ELEMENT(WriteGUID)
 
@@ -132,13 +131,15 @@ bool FPCGExWriteGUIDElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExWriteGUID
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExWriteGUID::Process);
 
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		Config = Settings->Config;
 

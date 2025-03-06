@@ -3,6 +3,7 @@
 
 #include "Graph/Filters/Edges/PCGExIsoEdgeDirectionFilter.h"
 #include "Graph/PCGExGraph.h"
+#include "PCGPin.h"
 
 #define LOCTEXT_NAMESPACE "PCGExIsoEdgeDirectionFilter"
 #define PCGEX_NAMESPACE IsoEdgeDirectionFilter
@@ -13,9 +14,29 @@ void UPCGExIsoEdgeDirectionFilterFactory::RegisterBuffersDependencies(FPCGExCont
 	Config.DirectionSettings.RegisterBuffersDependencies(InContext, FacadePreloader, &EdgeSortingRules);
 }
 
+bool UPCGExIsoEdgeDirectionFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.Direction, Consumable)
+
+	if (Config.ComparisonQuality == EPCGExDirectionCheckMode::Dot) { Config.DotComparisonDetails.RegisterConsumableAttributesWithData(InContext, InData); }
+	else { Config.HashComparisonDetails.RegisterConsumableAttributesWithData(InContext, InData); }
+
+	return true;
+}
+
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExIsoEdgeDirectionFilterFactory::CreateFilter() const
 {
 	return MakeShared<FIsoEdgeDirectionFilter>(this);
+}
+
+FIsoEdgeDirectionFilter::FIsoEdgeDirectionFilter(const UPCGExIsoEdgeDirectionFilterFactory* InFactory)
+	: FEdgeFilter(InFactory), TypedFilterFactory(InFactory)
+{
+	DotComparison = InFactory->Config.DotComparisonDetails;
+	HashComparison = InFactory->Config.HashComparisonDetails;
 }
 
 bool FIsoEdgeDirectionFilter::Init(FPCGExContext* InContext, const TSharedRef<PCGExCluster::FCluster>& InCluster, const TSharedRef<PCGExData::FFacade>& InPointDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade)
@@ -40,7 +61,7 @@ bool FIsoEdgeDirectionFilter::Init(FPCGExContext* InContext, const TSharedRef<PC
 		OperandDirection = PointDataFacade->GetBroadcaster<FVector>(TypedFilterFactory->Config.Direction);
 		if (!OperandDirection)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Direction attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.Direction.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Direction", TypedFilterFactory->Config.Direction)
 			return false;
 		}
 	}
@@ -92,6 +113,11 @@ bool FIsoEdgeDirectionFilter::TestHash(const int32 PtIndex, const FVector& EdgeD
 	return PCGEx::I323(RefDir, CWTolerance) == PCGEx::I323(EdgeDir, CWTolerance);
 }
 
+FIsoEdgeDirectionFilter::~FIsoEdgeDirectionFilter()
+{
+	TypedFilterFactory = nullptr;
+}
+
 TArray<FPCGPinProperties> UPCGExIsoEdgeDirectionFilterProviderSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
@@ -105,13 +131,14 @@ TArray<FPCGPinProperties> UPCGExIsoEdgeDirectionFilterProviderSettings::InputPin
 UPCGExFactoryData* UPCGExIsoEdgeDirectionFilterProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
 	UPCGExIsoEdgeDirectionFilterFactory* NewFactory = InContext->ManagedObjects->New<UPCGExIsoEdgeDirectionFilterFactory>();
-	Super::CreateFactory(InContext, InFactory);
-	NewFactory->Config = Config;
 
+	NewFactory->Config = Config;
 	if (Config.DirectionSettings.DirectionMethod == EPCGExEdgeDirectionMethod::EndpointsSort)
 	{
 		NewFactory->EdgeSortingRules = PCGExSorting::GetSortingRules(InContext, PCGExGraph::SourceEdgeSortingRules);
 	}
+
+	Super::CreateFactory(InContext, NewFactory);
 
 	if (!NewFactory->Init(InContext)) { InContext->ManagedObjects->Destroy(NewFactory); }
 	return NewFactory;

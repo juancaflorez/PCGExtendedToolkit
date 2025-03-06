@@ -27,7 +27,7 @@ namespace PCGExCutEdges
 }
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCutEdgesSettings : public UPCGExEdgesProcessorSettings
+class UPCGExCutEdgesSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -57,7 +57,6 @@ public:
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExPathEdgeIntersectionDetails IntersectionDetails = FPCGExPathEdgeIntersectionDetails(false);
-
 
 	/** Keep intersections/proximity instead of removing. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -98,7 +97,7 @@ private:
 	friend class FPCGExCutEdgesElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCutEdgesContext final : FPCGExEdgesProcessorContext
+struct FPCGExCutEdgesContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExCutEdgesElement;
 
@@ -114,7 +113,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCutEdgesContext final : FPCGExEdgesProce
 	TArray<TSharedRef<PCGExPaths::FPath>> Paths;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCutEdgesElement final : public FPCGExEdgesProcessorElement
+class FPCGExCutEdgesElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -162,6 +161,8 @@ namespace PCGExCutEdges
 		void TryConsolidate();
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
+
+		virtual void Cleanup() override;
 	};
 
 	class FBatch final : public PCGExClusterMT::TBatch<FProcessor>

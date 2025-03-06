@@ -7,6 +7,7 @@
 #include "Data/PCGExData.h"
 #include "Data/PCGExPointFilter.h"
 
+
 #define PCGEX_FOREACH_STAT(MACRO, _TYPE)\
 MACRO(Identifier, FString, TEXT("None"))\
 MACRO(DefaultValue, _TYPE, _TYPE{})\
@@ -17,6 +18,8 @@ MACRO(SetMaxValue, _TYPE, _TYPE{})\
 MACRO(AverageValue, _TYPE, _TYPE{})\
 MACRO(UniqueValuesNum, int32, 0)\
 MACRO(UniqueSetValuesNum, int32, 0)\
+MACRO(DifferentValuesNum, int32, 0)\
+MACRO(DifferentSetValuesNum, int32, 0)\
 MACRO(DefaultValuesNum, int32, 0)\
 MACRO(HasOnlyDefaultValues, bool, false)\
 MACRO(HasOnlySetValues, bool, false)\
@@ -38,8 +41,6 @@ TArray<FPCGPinProperties> UPCGExAttributeStatsSettings::OutputPinProperties() co
 	}
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExAttributeStatsSettings::GetMainOutputInitMode() const { return OutputToPoints == EPCGExStatsOutputToPoints::None ? PCGExData::EIOInit::Forward : PCGExData::EIOInit::Duplicate; }
 
 PCGEX_INITIALIZE_ELEMENT(AttributeStats)
 
@@ -169,12 +170,14 @@ namespace PCGExAttributeStats
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExAttributeStats::Process);
 
 		// Must be set before process for filters
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, Settings->OutputToPoints == EPCGExStatsOutputToPoints::None ? PCGExData::EIOInit::Forward : PCGExData::EIOInit::Duplicate)
 
 		const int64 Key = Context->Rows[PointDataFacade->Source->IOIndex];
 		const int32 NumAttributes = Context->AttributesInfos->Identities.Num();

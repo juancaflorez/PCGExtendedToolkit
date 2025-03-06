@@ -31,7 +31,7 @@ UPCGExFactoryData* UPCGExCreateTensor##_TENSOR##Settings::CreateFactory(FPCGExCo
 class UPCGExTensorOperation;
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorFactoryData : public UPCGExFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
@@ -54,7 +54,7 @@ protected:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorFactoryProviderSettings : public UPCGExFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorFactoryProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -80,7 +80,7 @@ public:
 
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorPointFactoryData : public UPCGExTensorFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorPointFactoryData : public UPCGExTensorFactoryData
 {
 	GENERATED_BODY()
 
@@ -90,7 +90,7 @@ protected:
 	TSharedPtr<PCGExData::TBuffer<float>> PotencyBuffer;
 	TSharedPtr<PCGExData::TBuffer<float>> WeightBuffer;
 
-	virtual bool GetRequiresPreparation(FPCGExContext* InContext) override { return true; }
+	virtual bool WantsPreparation(FPCGExContext* InContext) override { return true; }
 	virtual bool InitInternalData(FPCGExContext* InContext) override;
 	virtual bool InitInternalFacade(FPCGExContext* InContext);
 	virtual void PrepareSinglePoint(int32 Index, FPCGPoint& InPoint) const;
@@ -100,7 +100,7 @@ protected:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorPointFactoryProviderSettings : public UPCGExTensorFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorPointFactoryProviderSettings : public UPCGExTensorFactoryProviderSettings
 {
 	GENERATED_BODY()
 

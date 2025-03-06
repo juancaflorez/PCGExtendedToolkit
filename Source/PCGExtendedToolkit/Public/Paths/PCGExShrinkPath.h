@@ -8,6 +8,7 @@
 
 #include "PCGExPointsProcessor.h"
 
+
 #include "PCGExShrinkPath.generated.h"
 
 UENUM()
@@ -42,7 +43,7 @@ enum class EPCGExShrinkConstantMode : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathEndpointDistanceDetails
+struct FPCGExShrinkPathEndpointDistanceDetails
 {
 	GENERATED_BODY()
 
@@ -70,7 +71,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathEndpointDistanceDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathEndpointCountDetails
+struct FPCGExShrinkPathEndpointCountDetails
 {
 	GENERATED_BODY()
 
@@ -97,7 +98,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathEndpointCountDetails
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExShrinkPathSettings : public UPCGExPathProcessorSettings
+class UPCGExShrinkPathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -115,7 +116,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceStopConditionLabel, "", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -158,7 +158,7 @@ public:
 	EPCGExShrinkEndpoint ShrinkFirst = EPCGExShrinkEndpoint::Both;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathContext final : FPCGExPathProcessorContext
+struct FPCGExShrinkPathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExShrinkPathElement;
 
@@ -166,7 +166,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathContext final : FPCGExPathProc
 	void GetShrinkAmounts(const TSharedRef<PCGExData::FPointIO>& PointIO, uint32& Start, uint32& End) const;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShrinkPathElement final : public FPCGExPathProcessorElement
+class FPCGExShrinkPathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -192,7 +192,7 @@ namespace PCGExShrinkPath
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 }

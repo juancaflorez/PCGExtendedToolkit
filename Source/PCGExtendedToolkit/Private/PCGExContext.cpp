@@ -15,6 +15,7 @@
 
 void FPCGExContext::StageOutput(const FName Pin, UPCGData* InData, const TSet<FString>& InTags, const bool bManaged, const bool bIsMutable)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExContext::StageOutput);
 	if (!IsInGameThread())
 	{
 		FWriteScopeLock WriteScopeLock(StagedOutputLock);
@@ -88,14 +89,12 @@ void FPCGExContext::UnpauseContext()
 
 void FPCGExContext::CommitStagedOutputs()
 {
-	TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExContext::WriteFutureOutputs);
+	TRACE_CPUPROFILER_EVENT_SCOPE(FPCGExContext::CommitStagedOutputs);
+
+	ManagedObjects->Remove(StagedOutputs);
 
 	OutputData.TaggedData.Reserve(OutputData.TaggedData.Num() + StagedOutputs.Num());
-	for (const FPCGTaggedData& FData : StagedOutputs)
-	{
-		ManagedObjects->Remove(const_cast<UPCGData*>(FData.Data.Get()));
-		OutputData.TaggedData.Add(FData);
-	}
+	OutputData.TaggedData.Append(StagedOutputs);
 
 	StagedOutputs.Empty();
 }
@@ -103,7 +102,7 @@ void FPCGExContext::CommitStagedOutputs()
 FPCGExContext::FPCGExContext()
 {
 	WorkPermit = MakeShared<PCGEx::FWorkPermit>();
-	ManagedObjects = MakeUnique<PCGEx::FManagedObjects>(this, WorkPermit);
+	ManagedObjects = MakeShared<PCGEx::FManagedObjects>(this, WorkPermit);
 	UniqueNameGenerator = MakeShared<PCGEx::FUniqueNameGenerator>();
 }
 
@@ -324,10 +323,7 @@ UPCGManagedComponent* FPCGExContext::AttachManagedComponent(AActor* InParent, UA
 	ManagedComponent->GeneratedComponent = InComponent;
 	SrcComp->AddToManagedResources(ManagedComponent);
 
-	if (InComponent->Implements<UPCGExManagedComponentInterface>())
-	{
-		if (IPCGExManagedComponentInterface* Managed = Cast<IPCGExManagedComponentInterface>(InComponent)) { Managed->SetManagedComponent(ManagedComponent); }
-	}
+	if (IPCGExManagedComponentInterface* Managed = Cast<IPCGExManagedComponentInterface>(InComponent)) { Managed->SetManagedComponent(ManagedComponent); }
 
 	InParent->Modify(!bIsPreviewMode);
 

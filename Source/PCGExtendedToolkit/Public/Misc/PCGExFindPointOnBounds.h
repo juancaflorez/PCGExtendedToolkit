@@ -9,6 +9,7 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExAttributeHelpers.h"
 
+
 #include "PCGExFindPointOnBounds.generated.h"
 
 class FPCGExComputeIOBounds;
@@ -21,7 +22,7 @@ enum class EPCGExPointOnBoundsOutputMode : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFindPointOnBoundsSettings : public UPCGExPointsProcessorSettings
+class UPCGExFindPointOnBoundsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -29,18 +30,15 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(FindPointOnBounds, "Find point on Bounds", "Find the closest point on the dataset bounds.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd); }
 #endif
 
 protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Data output mode */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExPointOnBoundsOutputMode OutputMode = EPCGExPointOnBoundsOutputMode::Merged;
@@ -65,7 +63,7 @@ private:
 	friend class FPCGExFindPointOnBoundsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsContext final : FPCGExPointsProcessorContext
+struct FPCGExFindPointOnBoundsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExFindPointOnBoundsElement;
 
@@ -76,7 +74,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsContext final : FPCGExP
 	TSharedPtr<PCGEx::FAttributesInfos> MergedAttributesInfos;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFindPointOnBoundsElement final : public FPCGExPointsProcessorElement
+class FPCGExFindPointOnBoundsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -154,7 +152,7 @@ namespace PCGExFindPointOnBounds
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};

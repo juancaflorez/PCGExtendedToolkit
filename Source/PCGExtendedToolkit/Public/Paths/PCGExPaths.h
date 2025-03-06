@@ -7,7 +7,6 @@
 #include "Collections/PCGExMeshCollection.h"
 #include "Components/SplineMeshComponent.h"
 #include "Data/PCGSplineStruct.h"
-#include "Graph/PCGExCluster.h"
 #include "Graph/PCGExEdge.h"
 
 #include "PCGExPaths.generated.h"
@@ -45,8 +44,42 @@ enum class EPCGExPathNormalDirection : uint8
 	AverageNormal = 2 UMETA(DisplayName = "Average Normal", ToolTip="..."),
 };
 
+UENUM()
+enum class EPCGExSplineMeshUpMode : uint8
+{
+	Constant  = 0 UMETA(DisplayName = "Constant", Tooltip="Constant up vector"),
+	Attribute = 1 UMETA(DisplayName = "Attribute", Tooltip="Per-point attribute value"),
+	Tangents  = 2 UMETA(DisplayName = "From Tangents (Gimbal fix)", Tooltip="Automatically computed up vector from tangents to enforce gimbal fix")
+};
+
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathClosedLoopDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathOutputDetails
+{
+	GENERATED_BODY()
+
+	FPCGExPathOutputDetails() = default;
+
+	/** Don't output paths if they have less points than a specified amount. */
+	UPROPERTY(BlueprintReadWrite, Category = Settings, EditAnywhere, meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bRemoveSmallPaths = false;
+
+	/** Minimum points threshold */
+	UPROPERTY(BlueprintReadWrite, Category = Settings, EditAnywhere, meta = (PCG_Overridable, EditCondition="bRemoveSmallPaths", ClampMin=2))
+	int32 MinPointCount = 3;
+
+	/** Don't output paths if they have more points than a specified amount. */
+	UPROPERTY(BlueprintReadWrite, Category = Settings, EditAnywhere, meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bRemoveLargePaths = false;
+
+	/** Maximum points threshold */
+	UPROPERTY(BlueprintReadWrite, Category = Settings, EditAnywhere, meta = (PCG_Overridable, EditCondition="bRemoveLargePaths", ClampMin=2))
+	int32 MaxPointCount = 500;
+
+	bool Validate(TArray<FPCGPoint>& InPathPoints) const;
+};
+
+USTRUCT(BlueprintType)
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathClosedLoopDetails
 {
 	GENERATED_BODY()
 
@@ -64,30 +97,14 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathClosedLoopDetails
 
 	TArray<FString> Tags;
 
-	void Init()
-	{
-		Tags = PCGExHelpers::GetStringArrayFromCommaSeparatedList(CommaSeparatedTags);
-	}
+	void Init();
 
-	bool IsClosedLoop(const TSharedPtr<PCGExData::FPointIO>& InPointIO) const
-	{
-		if (Scope == EPCGExInputScope::All) { return bClosedLoop; }
-		if (Tags.IsEmpty()) { return !bClosedLoop; }
-		for (const FString& Tag : Tags) { if (InPointIO->Tags->IsTagged(Tag)) { return !bClosedLoop; } }
-		return bClosedLoop;
-	}
-
-	bool IsClosedLoop(const FPCGTaggedData& InTaggedData) const
-	{
-		if (Scope == EPCGExInputScope::All) { return bClosedLoop; }
-		if (Tags.IsEmpty()) { return !bClosedLoop; }
-		for (const FString& Tag : Tags) { if (InTaggedData.Tags.Contains(Tag)) { return !bClosedLoop; } }
-		return bClosedLoop;
-	}
+	bool IsClosedLoop(const TSharedPtr<PCGExData::FPointIO>& InPointIO) const;
+	bool IsClosedLoop(const FPCGTaggedData& InTaggedData) const;
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathClosedLoopUpdateDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathClosedLoopUpdateDetails
 {
 	GENERATED_BODY()
 
@@ -103,21 +120,13 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathClosedLoopUpdateDetails
 	TArray<FString> RemoveTags;
 	TArray<FString> Tags;
 
-	void Init()
-	{
-		AddTags = PCGExHelpers::GetStringArrayFromCommaSeparatedList(CommaSeparatedAddTags);
-		RemoveTags = PCGExHelpers::GetStringArrayFromCommaSeparatedList(CommaSeparatedRemoveTags);
-	}
+	void Init();
 
-	void Update(const TSharedPtr<PCGExData::FPointIO>& InPointIO)
-	{
-		for (const FString& Add : AddTags) { InPointIO->Tags->AddRaw(Add); }
-		for (const FString& Rem : RemoveTags) { InPointIO->Tags->Remove(Rem); }
-	}
+	void Update(const TSharedPtr<PCGExData::FPointIO>& InPointIO);
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathEdgeIntersectionDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathEdgeIntersectionDetails
 {
 	GENERATED_BODY()
 
@@ -165,18 +174,13 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathEdgeIntersectionDetails
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Metadata", meta=(PCG_Overridable, EditCondition="bWriteCrossing"))
 	FName CrossingAttributeName = "bIsCrossing";
 
-	void Init()
-	{
-		MaxDot = bUseMinAngle ? PCGExMath::DegreesToDot(MinAngle) : 1;
-		MinDot = bUseMaxAngle ? PCGExMath::DegreesToDot(MaxAngle) : -1;
-		ToleranceSquared = Tolerance * Tolerance;
-	}
+	void Init();
 
 	FORCEINLINE bool CheckDot(const double InDot) const { return InDot <= MaxDot && InDot >= MinDot; }
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathFilterSettings
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathFilterSettings
 {
 	GENERATED_BODY()
 
@@ -201,70 +205,77 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathFilterSettings
 	bool Init(FPCGExContext* InContext);
 };
 
+USTRUCT(BlueprintType)
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathIntersectionDetails
+{
+	GENERATED_BODY()
+
+	FPCGExPathIntersectionDetails() = default;
+	explicit FPCGExPathIntersectionDetails(const double InTolerance, const double InMinAngle, const double InMaxAngle = 90);
+
+	/** Distance at which two edges are considered intersecting. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ClampMin=0))
+	double Tolerance = DBL_INTERSECTION_TOLERANCE;
+	double ToleranceSquared = DBL_INTERSECTION_TOLERANCE * DBL_INTERSECTION_TOLERANCE;
+
+	/** . */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bUseMinAngle = false;
+
+	/** Min angle. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, EditCondition="bUseMinAngle", Units="Degrees", ClampMin=0, ClampMax=90))
+	double MinAngle = 0;
+	double MinDot = -1;
+
+	/** . */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bUseMaxAngle = false;
+
+	/** Maximum angle. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, EditCondition="bUseMaxAngle", Units="Degrees", ClampMin=0, ClampMax=90))
+	double MaxAngle = 90;
+	double MaxDot = 1;
+
+	bool bWantsDotCheck = false;
+
+	void Init()
+	{
+		MaxDot = bUseMinAngle ? PCGExMath::DegreesToDot(MinAngle) : 1;
+		MinDot = bUseMaxAngle ? PCGExMath::DegreesToDot(MaxAngle) : -1;
+		ToleranceSquared = Tolerance * Tolerance;
+		bWantsDotCheck = bUseMinAngle || bUseMaxAngle;
+	}
+
+	FORCEINLINE bool CheckDot(const double InDot) const { return InDot <= MaxDot && InDot >= MinDot; }
+};
+
 namespace PCGExPaths
 {
 	PCGEX_CTX_STATE(State_BuildingPaths)
+
+	const FName SourcePathsLabel = TEXT("Paths");
+	const FName OutputPathsLabel = TEXT("Paths");
 
 	const FName SourceCanCutFilters = TEXT("Can Cut Conditions");
 	const FName SourceCanBeCutFilters = TEXT("Can Be Cut Conditions");
 	const FName SourceTriggerFilters = TEXT("Trigger Conditions");
 	const FName SourceShiftFilters = TEXT("Shift Conditions");
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FPathMetrics
+	struct PCGEXTENDEDTOOLKIT_API FPathMetrics
 	{
-		FPathMetrics()
-		{
-		}
-
-		explicit FPathMetrics(const FVector& InStart)
-		{
-			Add(InStart);
-		}
-
-		explicit FPathMetrics(const TArrayView<FPCGPoint>& Points)
-		{
-			for (const FPCGPoint& Pt : Points) { Add(Pt.Transform.GetLocation()); }
-		}
+		FPathMetrics() = default;
+		explicit FPathMetrics(const FVector& InStart);
+		explicit FPathMetrics(const TArrayView<FPCGPoint>& Points);
 
 		FVector Start = FVector::ZeroVector;
 		FVector Last = FVector::ZeroVector;
 		double Length = -1;
 		int32 Count = 0;
 
-		void Reset(const FVector& InStart)
-		{
-			Start = InStart;
-			Last = InStart;
-			Length = 0;
-			Count = 1;
-		}
+		void Reset(const FVector& InStart);
 
-		double Add(const FVector& Location)
-		{
-			if (Length == -1)
-			{
-				Reset(Location);
-				return 0;
-			}
-			Length += DistToLast(Location);
-			Last = Location;
-			Count++;
-			return Length;
-		}
-
-		double Add(const FVector& Location, double& OutDistToLast)
-		{
-			if (Length == -1)
-			{
-				Reset(Location);
-				return 0;
-			}
-			OutDistToLast = DistToLast(Location);
-			Length += OutDistToLast;
-			Last = Location;
-			Count++;
-			return Length;
-		}
+		double Add(const FVector& Location);
+		double Add(const FVector& Location, double& OutDistToLast);
 
 		bool IsValid() const { return Length > 0; }
 		double GetTime(const double Distance) const { return (!Distance || !Length) ? 0 : Distance / Length; }
@@ -272,7 +283,7 @@ namespace PCGExPaths
 		bool IsLastWithinRange(const FVector& Location, const double Range) const { return DistToLast(Location) < Range; }
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FMetadata
+	struct PCGEXTENDEDTOOLKIT_API FMetadata
 	{
 		double Position = 0;
 		double TotalLength = 0;
@@ -283,7 +294,7 @@ namespace PCGExPaths
 
 	constexpr FMetadata InvalidMetadata = FMetadata();
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSplineMeshSegment
+	struct PCGEXTENDEDTOOLKIT_API FSplineMeshSegment
 	{
 		FSplineMeshSegment()
 		{
@@ -300,49 +311,11 @@ namespace PCGExPaths
 		const FPCGExMeshCollectionEntry* MeshEntry = nullptr;
 		FSplineMeshParams Params;
 
-		void ApplySettings(USplineMeshComponent* Component) const
-		{
-			check(Component)
+		void ComputeUpVectorFromTangents();
 
-			Component->SetStartAndEnd(Params.StartPos, Params.StartTangent, Params.EndPos, Params.EndTangent, false);
+		void ApplySettings(USplineMeshComponent* Component) const;
 
-			Component->SetStartScale(Params.StartScale, false);
-			if (bUseDegrees) { Component->SetStartRollDegrees(Params.StartRoll, false); }
-			else { Component->SetStartRoll(Params.StartRoll, false); }
-
-			Component->SetEndScale(Params.EndScale, false);
-			if (bUseDegrees) { Component->SetEndRollDegrees(Params.EndRoll, false); }
-			else { Component->SetEndRoll(Params.EndRoll, false); }
-
-			Component->SetForwardAxis(SplineMeshAxis, false);
-			Component->SetSplineUpDir(FVector::UpVector, false);
-
-			Component->SetStartOffset(Params.StartOffset, false);
-			Component->SetEndOffset(Params.EndOffset, false);
-
-#if PCGEX_ENGINE_VERSION > 503
-			Component->SplineParams.NaniteClusterBoundsScale = Params.NaniteClusterBoundsScale;
-#endif
-
-			Component->SplineBoundaryMin = 0;
-			Component->SplineBoundaryMax = 0;
-
-			Component->bSmoothInterpRollScale = bSmoothInterpRollScale;
-
-			if (bSetMeshWithSettings) { ApplyMesh(Component); }
-		}
-
-		bool ApplyMesh(USplineMeshComponent* Component) const
-		{
-			check(Component)
-			UStaticMesh* StaticMesh = MeshEntry->Staging.TryGet<UStaticMesh>(); //LoadSynchronous<UStaticMesh>();
-
-			if (!StaticMesh) { return false; }
-
-			Component->SetStaticMesh(StaticMesh); // Will trigger a force rebuild, so put this last
-
-			return true;
-		}
+		bool ApplyMesh(USplineMeshComponent* Component) const;
 	};
 
 	struct FPathEdge
@@ -354,35 +327,13 @@ namespace PCGExPaths
 
 		int32 AltStart = -1;
 
-		FPathEdge(const int32 InStart, const int32 InEnd, const TArrayView<const FVector>& Positions, const double Expansion = 0):
-			Start(InStart), End(InEnd), AltStart(InStart)
-		{
-			Update(Positions, Expansion);
-		}
+		FPathEdge(const int32 InStart, const int32 InEnd, const TArrayView<const FVector>& Positions, const double Expansion = 0);
 
-		FORCEINLINE void Update(const TArrayView<const FVector>& Positions, const double Expansion = 0)
-		{
-			FBox Box = FBox(ForceInit);
-			Box += Positions[Start];
-			Box += Positions[End];
-			Bounds = Box.ExpandBy(Expansion);
-			Dir = (Positions[End] - Positions[Start]).GetSafeNormal();
-		}
+		void Update(const TArrayView<const FVector>& Positions, const double Expansion = 0);
 
-		FORCEINLINE bool ShareIndices(const FPathEdge& Other) const
-		{
-			return Start == Other.Start || Start == Other.End || End == Other.Start || End == Other.End;
-		}
-
-		FORCEINLINE bool Connects(const FPathEdge& Other) const
-		{
-			return Start == Other.End || End == Other.Start;
-		}
-
-		FORCEINLINE bool ShareIndices(const FPathEdge* Other) const
-		{
-			return Start == Other->Start || Start == Other->End || End == Other->Start || End == Other->End;
-		}
+		bool ShareIndices(const FPathEdge& Other) const;
+		bool Connects(const FPathEdge& Other) const;
+		bool ShareIndices(const FPathEdge* Other) const;
 	};
 
 	class FPath;
@@ -405,9 +356,7 @@ namespace PCGExPaths
 		virtual void ProcessEdge(const FPath* Path, const FPathEdge& Edge) = 0;
 		virtual void ProcessLastEdge(const FPath* Path, const FPathEdge& Edge) { ProcessEdge(Path, Edge); }
 
-		virtual void ProcessingDone(const FPath* Path)
-		{
-		}
+		virtual void ProcessingDone(const FPath* Path);
 	};
 
 	template <typename T>
@@ -451,6 +400,7 @@ namespace PCGExPaths
 		int32 NumEdges = 0;
 		int32 LastIndex = 0;
 		int32 LastEdge = 0;
+		int32 Id = -1;
 
 		int32 ConvexitySign = 0;
 		bool bIsConvex = true;
@@ -472,61 +422,107 @@ namespace PCGExPaths
 		virtual int32 NextPointIndex(const int32 Index) const { return SafePointIndex(Index + 1); }
 		virtual int32 PrevPointIndex(const int32 Index) const { return SafePointIndex(Index - 1); }
 
-		FORCEINLINE FVector GetEdgePositionAtAlpha(const FPathEdge& Edge, const double Alpha) const { return FMath::Lerp(Positions[Edge.End], Positions[Edge.Start], Alpha); }
-		FORCEINLINE FVector GetEdgePositionAtAlpha(const int32 Index, const double Alpha) const
+		FVector GetEdgePositionAtAlpha(const FPathEdge& Edge, const double Alpha) const { return FMath::Lerp(Positions[Edge.End], Positions[Edge.Start], Alpha); }
+
+		FVector GetEdgePositionAtAlpha(const int32 Index, const double Alpha) const
 		{
 			const FPathEdge& Edge = Edges[Index];
 			return FMath::Lerp(Positions[Edge.Start], Positions[Edge.End], Alpha);
 		}
 
-		FORCEINLINE virtual bool IsEdgeValid(const FPathEdge& Edge) const { return FVector::DistSquared(GetPos_Unsafe(Edge.Start), GetPos_Unsafe(Edge.End)) > 0; }
-		FORCEINLINE virtual bool IsEdgeValid(const int32 Index) const { return IsEdgeValid(Edges[Index]); }
+		virtual bool IsEdgeValid(const FPathEdge& Edge) const { return FVector::DistSquared(GetPos_Unsafe(Edge.Start), GetPos_Unsafe(Edge.End)) > 0; }
+		virtual bool IsEdgeValid(const int32 Index) const { return IsEdgeValid(Edges[Index]); }
 
-		void BuildEdgeOctree()
+		template <PCGExMath::EIntersectionTestMode Mode = PCGExMath::EIntersectionTestMode::Strict>
+		PCGExMath::FClosestPosition FindClosestIntersection(
+			const FPCGExPathIntersectionDetails& InDetails, const PCGExMath::FSegment& Segment) const
 		{
-			if (EdgeOctree) { return; }
-			EdgeOctree = MakeUnique<FPathEdgeOctree>(Bounds.GetCenter(), Bounds.GetExtent().Length() + 10);
-			for (FPathEdge& Edge : Edges)
-			{
-				if (!IsEdgeValid(Edge)) { continue; } // Skip zero-length edges
-				EdgeOctree->AddElement(&Edge);        // Might be a problem if edges gets reallocated
-			}
+			PCGExMath::FClosestPosition Closest(Segment.A);
+
+			if (!Bounds.Intersect(Segment.Bounds)) { return Closest; }
+
+			GetEdgeOctree()->FindElementsWithBoundsTest(
+				Segment.Bounds, [&](const FPathEdge* PathEdge)
+				{
+					if (InDetails.bWantsDotCheck)
+					{
+						if (!InDetails.CheckDot(FMath::Abs(Segment.Dot(PathEdge->Dir)))) { return; }
+					}
+
+					FVector OnSegment = FVector::ZeroVector;
+					FVector OnPath = FVector::ZeroVector;
+
+					if (!Segment.FindIntersection<Mode>(
+						GetPos_Unsafe(PathEdge->Start),
+						GetPos_Unsafe(PathEdge->End),
+						InDetails.ToleranceSquared,
+						OnSegment,
+						OnPath))
+					{
+						return;
+					}
+
+					Closest.Update(OnPath, PathEdge->Start);
+				});
+
+			return Closest;
 		}
 
-		void BuildPartialEdgeOctree(const TArray<int8>& Filter)
+		template <PCGExMath::EIntersectionTestMode Mode = PCGExMath::EIntersectionTestMode::Strict>
+		PCGExMath::FClosestPosition FindClosestIntersection(
+			const FPCGExPathIntersectionDetails& InDetails, const FVector& A1, const FVector& B1) const
 		{
-			if (EdgeOctree) { return; }
-			EdgeOctree = MakeUnique<FPathEdgeOctree>(Bounds.GetCenter(), Bounds.GetExtent().Length() + 10);
-			for (int i = 0; i < Edges.Num(); i++)
-			{
-				FPathEdge& Edge = Edges[i];
-				if (!Filter[i] || !IsEdgeValid(Edge)) { continue; } // Skip filtered out & zero-length edges
-				EdgeOctree->AddElement(&Edge);                      // Might be a problem if edges gets reallocated
-			}
+			return FindClosestIntersection<Mode>(InDetails, A1, B1);
 		}
+
+		template <PCGExMath::EIntersectionTestMode Mode = PCGExMath::EIntersectionTestMode::Strict>
+		PCGExMath::FClosestPosition FindClosestIntersection(
+			const FPCGExPathIntersectionDetails& InDetails, const PCGExMath::FSegment& Segment,
+			PCGExMath::FClosestPosition& OutClosestPosition) const
+		{
+			PCGExMath::FClosestPosition Closest(Segment.A);
+
+			if (!Bounds.Intersect(Segment.Bounds)) { return Closest; }
+
+			GetEdgeOctree()->FindElementsWithBoundsTest(
+				Segment.Bounds, [&](const FPathEdge* PathEdge)
+				{
+					if (InDetails.bWantsDotCheck)
+					{
+						if (!InDetails.CheckDot(FMath::Abs(Segment.Dot(PathEdge->Dir)))) { return; }
+					}
+
+					FVector OnSegment = FVector::ZeroVector;
+					FVector OnPath = FVector::ZeroVector;
+
+					if (!Segment.FindIntersection<Mode>(
+						GetPos_Unsafe(PathEdge->Start),
+						GetPos_Unsafe(PathEdge->End),
+						InDetails.ToleranceSquared,
+						OnSegment,
+						OnPath))
+					{
+						OutClosestPosition.Update(OnPath, -2);
+						return;
+					}
+
+					OutClosestPosition.Update(OnPath, -2);
+					Closest.Update(OnPath, PathEdge->Start);
+				});
+
+			return Closest;
+		}
+
+		void BuildEdgeOctree();
+		void BuildPartialEdgeOctree(const TArray<int8>& Filter);
 
 		const FPathEdgeOctree* GetEdgeOctree() const { return EdgeOctree.Get(); }
 		FORCEINLINE bool IsClosedLoop() const { return bClosedLoop; }
 
-		void UpdateConvexity(const int32 Index)
-		{
-			if (!bIsConvex) { return; }
-
-			const int32 A = SafePointIndex(Index - 1);
-			const int32 B = SafePointIndex(Index + 1);
-			if (A == B)
-			{
-				bIsConvex = false;
-				return;
-			}
-
-			PCGExMath::CheckConvex(
-				Positions[A], Positions[Index], Positions[B],
-				bIsConvex, ConvexitySign);
-		}
+		void UpdateConvexity(const int32 Index);
 
 		template <typename T, typename... Args>
-		TSharedPtr<T> AddExtra(bool bImmediateCompute = false, Args&&... InArgs)
+		TSharedPtr<T> AddExtra(const bool bImmediateCompute = false, Args&&... InArgs)
 		{
 			PCGEX_MAKE_SHARED(Extra, T, NumEdges, bClosedLoop, std::forward<Args>(InArgs)...)
 
@@ -564,59 +560,18 @@ namespace PCGExPaths
 		virtual void ExtraComputingDone();
 		virtual void ComputeAllEdgeExtra();
 
-		virtual void UpdateEdges(const TArray<FPCGPoint>& InPoints, const double Expansion)
-		{
-			Bounds = FBox(ForceInit);
-			EdgeOctree.Reset();
-
-			check(Positions.Num() == InPoints.Num())
-
-			Positions.SetNumUninitialized(NumPoints);
-			for (int i = 0; i < NumPoints; ++i) { Positions[i] = InPoints[i].Transform.GetLocation(); }
-			for (FPathEdge& Edge : Edges)
-			{
-				Edge.Update(Positions, Expansion);
-				Bounds += Edge.Bounds.GetBox();
-			}
-		}
-
-		virtual void UpdateEdges(const TArrayView<const FVector> InPositions, const double Expansion)
-		{
-			Bounds = FBox(ForceInit);
-			EdgeOctree.Reset();
-
-			check(Positions.Num() == InPositions.Num())
-			Positions.Reset(NumPoints);
-			Positions.Append(InPositions);
-
-			for (FPathEdge& Edge : Edges)
-			{
-				Edge.Update(Positions, Expansion);
-				Bounds += Edge.Bounds.GetBox();
-			}
-		}
+		virtual void UpdateEdges(const TArray<FPCGPoint>& InPoints, const double Expansion);
+		virtual void UpdateEdges(const TArrayView<const FVector> InPositions, const double Expansion);
 
 	protected:
-		void BuildPath(const double Expansion)
-		{
-			if (bClosedLoop) { NumEdges = NumPoints; }
-			else { NumEdges = LastIndex; }
-			LastEdge = NumEdges - 1;
-
-			Edges.SetNumUninitialized(NumEdges);
-			for (int i = 0; i < NumEdges; i++)
-			{
-				const FPathEdge& E = (Edges[i] = FPathEdge(i, (i + 1) % NumPoints, Positions, Expansion));
-				Bounds += E.Bounds.GetBox();
-			}
-		}
+		void BuildPath(const double Expansion);
 	};
 
 	template <bool ClosedLoop = false>
-	class TPath : public FPath
+	class TPath final : public FPath
 	{
 	public:
-		TPath(const TArray<FPCGPoint>& InPoints, const double Expansion = 0)
+		explicit TPath(const TArrayView<const FPCGPoint>& InPoints, const double Expansion = 0)
 		{
 			bClosedLoop = ClosedLoop;
 
@@ -629,7 +584,7 @@ namespace PCGExPaths
 			BuildPath(Expansion);
 		}
 
-		TPath(const TArrayView<const FVector> InPositions, const double Expansion = 0)
+		explicit TPath(const TArrayView<const FVector> InPositions, const double Expansion = 0)
 		{
 			bClosedLoop = ClosedLoop;
 
@@ -642,13 +597,13 @@ namespace PCGExPaths
 			BuildPath(Expansion);
 		}
 
-		FORCEINLINE virtual int32 SafePointIndex(const int32 Index) const override
+		virtual int32 SafePointIndex(const int32 Index) const override
 		{
 			if constexpr (ClosedLoop) { return PCGExMath::Tile(Index, 0, LastIndex); }
 			else { return Index < 0 ? 0 : Index > LastIndex ? LastIndex : Index; }
 		}
 
-		FORCEINLINE virtual FVector DirToNextPoint(const int32 Index) const override
+		virtual FVector DirToNextPoint(const int32 Index) const override
 		{
 			if constexpr (ClosedLoop) { return Edges[Index].Dir; }
 			else { return Index == LastIndex ? Edges[Index - 1].Dir : Edges[Index].Dir; }
@@ -775,114 +730,55 @@ namespace PCGExPaths
 		virtual void ProcessLastEdge(const FPath* Path, const FPathEdge& Edge) override;
 	};
 
-	static TSharedPtr<FPath> MakePath(const TArray<FPCGPoint>& InPoints, const double Expansion, const bool bClosedLoop)
+	TSharedPtr<FPath> MakePath(const TArrayView<const FPCGPoint> InPoints, const double Expansion, const bool bClosedLoop);
+	TSharedPtr<FPath> MakePath(const TArrayView<const FVector> InPositions, const double Expansion, const bool bClosedLoop);
+
+	FTransform GetClosestTransform(const FPCGSplineStruct& InSpline, const FVector& InLocation, const bool bUseScale = true);
+	FTransform GetClosestTransform(const TSharedPtr<const FPCGSplineStruct>& InSpline, const FVector& InLocation, const bool bUseScale = true);
+
+	TSharedPtr<FPCGSplineStruct> MakeSplineFromPoints(const UPCGPointData* InData, const EPCGExSplinePointTypeRedux InPointType, const bool bClosedLoop);
+
+	template <PCGExMath::EIntersectionTestMode Mode = PCGExMath::EIntersectionTestMode::Strict>
+	PCGExMath::FClosestPosition FindClosestIntersection(
+		const TArray<TSharedPtr<FPath>>& Paths,
+		const FPCGExPathIntersectionDetails& InDetails,
+		const PCGExMath::FSegment& InSegment, int32& OutPathIndex)
 	{
-		if (bClosedLoop)
+		OutPathIndex = -1;
+
+		PCGExMath::FClosestPosition Intersection(InSegment.A);
+
+		for (int i = 0; i < Paths.Num(); i++)
 		{
-			PCGEX_MAKE_SHARED(P, TPath<true>, InPoints, Expansion)
-			return StaticCastSharedPtr<FPath>(P);
+			PCGExMath::FClosestPosition LocalIntersection = Paths[i]->FindClosestIntersection<Mode>(InDetails, InSegment);
+			if (!LocalIntersection) { continue; }
+			if (Intersection.Update(LocalIntersection, LocalIntersection.Index)) { OutPathIndex = i; }
 		}
 
-		PCGEX_MAKE_SHARED(P, TPath<false>, InPoints, Expansion)
-		return StaticCastSharedPtr<FPath>(P);
+		return Intersection;
 	}
 
-	static TSharedPtr<FPath> MakePath(const TArrayView<const FVector> InPositions, const double Expansion, const bool bClosedLoop)
+	template <PCGExMath::EIntersectionTestMode Mode = PCGExMath::EIntersectionTestMode::Strict>
+	PCGExMath::FClosestPosition FindClosestIntersection(
+		const TArray<TSharedPtr<FPath>>& Paths,
+		const FPCGExPathIntersectionDetails& InDetails,
+		const PCGExMath::FSegment& InSegment, int32& OutPathIndex,
+		PCGExMath::FClosestPosition& OutClosestPosition)
 	{
-		if (bClosedLoop)
+		OutPathIndex = -1;
+
+		PCGExMath::FClosestPosition Intersection(InSegment.A);
+
+		for (int i = 0; i < Paths.Num(); i++)
 		{
-			PCGEX_MAKE_SHARED(P, TPath<true>, InPositions, Expansion)
-			return StaticCastSharedPtr<FPath>(P);
+			PCGExMath::FClosestPosition LocalIntersection = Paths[i]->FindClosestIntersection<Mode>(InDetails, InSegment, OutClosestPosition);
+
+			if (OutClosestPosition.Index == -2) { OutClosestPosition.Index = i; }
+
+			if (!LocalIntersection) { continue; }
+			if (Intersection.Update(LocalIntersection, LocalIntersection.Index)) { OutPathIndex = i; }
 		}
 
-		PCGEX_MAKE_SHARED(P, TPath<false>, InPositions, Expansion)
-		return StaticCastSharedPtr<FPath>(P);
-	}
-
-	static FTransform GetClosestTransform(const FPCGSplineStruct& InSpline, const FVector& InLocation, const bool bUseScale = true)
-	{
-		return InSpline.GetTransformAtSplineInputKey(InSpline.FindInputKeyClosestToWorldLocation(InLocation), ESplineCoordinateSpace::World, bUseScale);
-	}
-
-	static FTransform GetClosestTransform(const TSharedPtr<const FPCGSplineStruct>& InSpline, const FVector& InLocation, const bool bUseScale = true)
-	{
-		return InSpline->GetTransformAtSplineInputKey(InSpline->FindInputKeyClosestToWorldLocation(InLocation), ESplineCoordinateSpace::World, bUseScale);
-	}
-
-	static TSharedPtr<FPCGSplineStruct> MakeSplineFromPoints(const UPCGPointData* InData, const EPCGExSplinePointTypeRedux InPointType, const bool bClosedLoop)
-	{
-		const TArray<FPCGPoint>& InPoints = InData->GetPoints();
-		if (InPoints.Num() < 2) { return nullptr; }
-
-		const int32 NumPoints = InPoints.Num();
-
-		TArray<FSplinePoint> SplinePoints;
-		PCGEx::InitArray(SplinePoints, NumPoints);
-
-		ESplinePointType::Type PointType = ESplinePointType::Linear;
-
-		bool bComputeTangents = false;
-		switch (InPointType)
-		{
-		case EPCGExSplinePointTypeRedux::Linear:
-			PointType = ESplinePointType::CurveCustomTangent;
-			bComputeTangents = true;
-			break;
-		case EPCGExSplinePointTypeRedux::Curve:
-			PointType = ESplinePointType::Curve;
-			break;
-		case EPCGExSplinePointTypeRedux::Constant:
-			PointType = ESplinePointType::Constant;
-			break;
-		case EPCGExSplinePointTypeRedux::CurveClamped:
-			PointType = ESplinePointType::CurveClamped;
-			break;
-		}
-
-		TArray<FTransform> PointTransforms;
-		PCGExData::GetTransforms(InPoints, PointTransforms);
-
-		if (bComputeTangents)
-		{
-			const int32 MaxIndex = NumPoints - 1;
-
-			for (int i = 0; i < NumPoints; i++)
-			{
-				const FTransform TR = PointTransforms[i];
-				const FVector PtLoc = TR.GetLocation();
-
-				const FVector PrevDir = (PointTransforms[i == 0 ? bClosedLoop ? MaxIndex : 0 : i - 1].GetLocation() - PtLoc) * -1;
-				const FVector NextDir = PointTransforms[i == MaxIndex ? bClosedLoop ? 0 : i : i + 1].GetLocation() - PtLoc;
-				const FVector Tangent = FMath::Lerp(PrevDir, NextDir, 0.5).GetSafeNormal() * 0.01;
-
-				SplinePoints[i] = FSplinePoint(
-					static_cast<float>(i),
-					TR.GetLocation(),
-					Tangent,
-					Tangent,
-					TR.GetRotation().Rotator(),
-					TR.GetScale3D(),
-					PointType);
-			}
-		}
-		else
-		{
-			for (int i = 0; i < NumPoints; i++)
-			{
-				const FTransform TR = PointTransforms[i];
-				SplinePoints[i] = FSplinePoint(
-					static_cast<float>(i),
-					TR.GetLocation(),
-					FVector::ZeroVector,
-					FVector::ZeroVector,
-					TR.GetRotation().Rotator(),
-					TR.GetScale3D(),
-					PointType);
-			}
-		}
-
-		PCGEX_MAKE_SHARED(SplineStruct, FPCGSplineStruct)
-		SplineStruct->Initialize(SplinePoints, bClosedLoop, FTransform::Identity);
-		return SplineStruct;
+		return Intersection;
 	}
 }

@@ -16,7 +16,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSmoothSettings : public UPCGExPathProcessorSettings
+class UPCGExSmoothSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -33,7 +33,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters which points get smoothed.", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -79,14 +78,14 @@ public:
 	FPCGExBlendingDetails BlendingSettings = FPCGExBlendingDetails(EPCGExDataBlendingType::Weight);
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSmoothContext final : FPCGExPathProcessorContext
+struct FPCGExSmoothContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExSmoothElement;
 
 	UPCGExSmoothingOperation* SmoothingMethod = nullptr;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSmoothElement final : public FPCGExPathProcessorElement
+class FPCGExSmoothElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -122,7 +121,7 @@ namespace PCGExSmooth
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

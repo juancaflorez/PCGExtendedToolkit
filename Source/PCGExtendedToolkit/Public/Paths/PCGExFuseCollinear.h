@@ -14,7 +14,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFuseCollinearSettings : public UPCGExPathProcessorSettings
+class UPCGExFuseCollinearSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -30,7 +30,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceKeepConditionLabel, "List of filters that are checked to know whether a point can be removed or must be kept.", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -62,7 +61,7 @@ public:
 	bool bOmitInvalidPathsFromOutput = true;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseCollinearContext final : FPCGExPathProcessorContext
+struct FPCGExFuseCollinearContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExFuseCollinearElement;
 
@@ -72,7 +71,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseCollinearContext final : FPCGExPathP
 	//UPCGExSubPointsBlendOperation* Blending = nullptr;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseCollinearElement final : public FPCGExPathProcessorElement
+class FPCGExFuseCollinearElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -103,7 +102,7 @@ namespace PCGExFuseCollinear
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

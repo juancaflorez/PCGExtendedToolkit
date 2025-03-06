@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExNumericSelfCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FNumericSelfCompareFilter>(this);
+	return MakeShared<PCGExPointFilter::FNumericSelfCompareFilter>(this);
 }
 
 bool UPCGExNumericSelfCompareFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -23,7 +23,7 @@ bool UPCGExNumericSelfCompareFilterFactory::RegisterConsumableAttributesWithData
 	return true;
 }
 
-bool PCGExPointsFilter::FNumericSelfCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FNumericSelfCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -36,7 +36,7 @@ bool PCGExPointsFilter::FNumericSelfCompareFilter::Init(FPCGExContext* InContext
 
 	if (!OperandA->Prepare(TypedFilterFactory->Config.OperandA, PointDataFacade->Source))
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -46,12 +46,24 @@ bool PCGExPointsFilter::FNumericSelfCompareFilter::Init(FPCGExContext* InContext
 
 		if (!Index)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Index attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.IndexAttribute.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Index", TypedFilterFactory->Config.IndexAttribute)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FNumericSelfCompareFilter::Test(const int32 PointIndex) const
+{
+	const int32 IndexValue = Index ? Index->Read(PointIndex) : TypedFilterFactory->Config.IndexConstant;
+	const int32 TargetIndex = PCGExMath::SanitizeIndex(bOffset ? PointIndex + IndexValue : IndexValue, MaxIndex, TypedFilterFactory->Config.IndexSafety);
+
+	if (TargetIndex == -1) { return false; }
+
+	const double A = OperandA->SoftGet(PointIndex, PointDataFacade->Source->GetInPoint(PointIndex), 0);
+	const double B = OperandA->SoftGet(TargetIndex, PointDataFacade->Source->GetInPoint(TargetIndex), 0);
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B, TypedFilterFactory->Config.Tolerance);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(NumericSelfCompare)

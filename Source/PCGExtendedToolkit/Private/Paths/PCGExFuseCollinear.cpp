@@ -3,10 +3,9 @@
 
 #include "Paths/PCGExFuseCollinear.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExFuseCollinearElement"
 #define PCGEX_NAMESPACE FuseCollinear
-
-PCGExData::EIOInit UPCGExFuseCollinearSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 PCGEX_INITIALIZE_ELEMENT(FuseCollinear)
 
@@ -67,7 +66,7 @@ namespace PCGExFuseCollinear
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExFuseCollinear::Process);
 

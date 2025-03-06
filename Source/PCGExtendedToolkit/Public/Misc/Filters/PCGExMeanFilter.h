@@ -14,7 +14,7 @@
 #include "PCGExMeanFilter.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeanFilterConfig
+struct FPCGExMeanFilterConfig
 {
 	GENERATED_BODY()
 
@@ -63,7 +63,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeanFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMeanFilterFactory : public UPCGExFilterFactoryData
+class UPCGExMeanFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -76,9 +76,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FMeanFilter final : public PCGExPointFilter::FSimpleFilter
+	class FMeanFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FMeanFilter(const TObjectPtr<const UPCGExMeanFilterFactory>& InFactory)
@@ -97,13 +97,10 @@ namespace PCGExPointsFilter
 		double ReferenceMin = 0;
 		double ReferenceMax = 0;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
 		virtual void PostInit() override;
 
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			return FMath::IsWithin(Values[PointIndex], ReferenceMin, ReferenceMax);
-		}
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FMeanFilter() override
 		{
@@ -114,7 +111,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMeanFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExMeanFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

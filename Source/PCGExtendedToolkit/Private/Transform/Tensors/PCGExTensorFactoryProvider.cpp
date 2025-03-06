@@ -49,13 +49,11 @@ TArray<FPCGPinProperties> UPCGExTensorFactoryProviderSettings::InputPinPropertie
 
 UPCGExFactoryData* UPCGExTensorFactoryProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
-	if (InFactory)
-	{
-		TArray<FPCGTaggedData> Collection = InContext->InputData.GetInputsByPin(PCGExTensor::SourceTensorConfigSourceLabel);
-		const UPCGExTensorFactoryData* InTensorReference = Collection.IsEmpty() ? nullptr : Cast<UPCGExTensorFactoryData>(Collection[0].Data);
-		if (InTensorReference) { Cast<UPCGExTensorFactoryData>(InFactory)->InheritFromOtherTensor(InTensorReference); }
-	}
-	return InFactory;
+	TArray<FPCGTaggedData> Collection = InContext->InputData.GetInputsByPin(PCGExTensor::SourceTensorConfigSourceLabel);
+	const UPCGExTensorFactoryData* InTensorReference = Collection.IsEmpty() ? nullptr : Cast<UPCGExTensorFactoryData>(Collection[0].Data);
+	if (InTensorReference) { Cast<UPCGExTensorFactoryData>(InFactory)->InheritFromOtherTensor(InTensorReference); }
+
+	return Super::CreateFactory(InContext, InFactory);
 }
 
 bool UPCGExTensorPointFactoryData::InitInternalData(FPCGExContext* InContext)
@@ -119,7 +117,7 @@ bool UPCGExTensorPointFactoryData::InitInternalFacade(FPCGExContext* InContext)
 		PotencyBuffer = InputDataFacade->GetBroadcaster<float>(BaseConfig.PotencyAttribute, true);
 		if (!PotencyBuffer)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Potency attribute: \"{0}\"."), FText::FromName(BaseConfig.PotencyAttribute.GetName())));
+			if (!bQuietMissingInputError) { PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Potency", BaseConfig.PotencyAttribute) }
 			return false;
 		}
 	}
@@ -129,7 +127,7 @@ bool UPCGExTensorPointFactoryData::InitInternalFacade(FPCGExContext* InContext)
 		WeightBuffer = InputDataFacade->GetBroadcaster<float>(BaseConfig.WeightAttribute, true);
 		if (!WeightBuffer)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Weight attribute: \"{0}\"."), FText::FromName(BaseConfig.WeightAttribute.GetName())));
+			if (!bQuietMissingInputError) { PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Weight", BaseConfig.WeightAttribute) }
 			return false;
 		}
 	}

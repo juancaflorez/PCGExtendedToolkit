@@ -10,7 +10,7 @@
 #include "PCGExBitmaskMerge.generated.h"
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBitmaskMergeSettings : public UPCGSettings
+class UPCGExBitmaskMergeSettings : public UPCGSettings
 {
 	GENERATED_BODY()
 
@@ -21,8 +21,8 @@ public:
 #if WITH_EDITOR
 	PCGEX_DUMMY_SETTINGS_MEMBERS
 	PCGEX_NODE_INFOS(BitmaskMerge, "Bitmask Merge", "A Simple bitmask merge node.");
-	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Param; }
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Metadata; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
@@ -36,7 +36,7 @@ protected:
 	EPCGExBitOp Operation = EPCGExBitOp::OR;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBitmaskMergeElement final : public IPCGElement
+class FPCGExBitmaskMergeElement final : public IPCGElement
 {
 public:
 	virtual FPCGContext* Initialize(const FPCGDataCollection& InputData, TWeakObjectPtr<UPCGComponent> SourceComponent, const UPCGNode* Node) override;

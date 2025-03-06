@@ -15,7 +15,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBuildConvexHull2DSettings : public UPCGExPointsProcessorSettings
+class UPCGExBuildConvexHull2DSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -34,7 +34,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Projection settings. */
@@ -49,7 +48,7 @@ private:
 	friend class FPCGExBuildConvexHull2DElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildConvexHull2DContext final : FPCGExPointsProcessorContext
+struct FPCGExBuildConvexHull2DContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBuildConvexHull2DElement;
 
@@ -58,8 +57,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildConvexHull2DContext final : FPCGExP
 	void BuildPath(const PCGExGraph::FGraphBuilder* GraphBuilder) const;
 };
 
-
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildConvexHull2DElement final : public FPCGExPointsProcessorElement
+class FPCGExBuildConvexHull2DElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -91,7 +89,7 @@ namespace PCGExConvexHull2D
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;

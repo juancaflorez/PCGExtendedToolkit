@@ -18,7 +18,7 @@
 #include "PCGExPointsToBounds.generated.h"
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPointsToBoundsSettings : public UPCGExPointsProcessorSettings
+class UPCGExPointsToBoundsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -26,18 +26,15 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(PointsToBounds, "Points to Bounds", "Merge points group to a single point representing their bounds.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spatial; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd); }
 #endif
 
 protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Output Object Oriented Bounds. Note that this only accounts for positions and will ignore point bounds. **/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bOutputOrientedBoundingBox = false;
@@ -66,12 +63,12 @@ private:
 	friend class FPCGExPointsToBoundsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsToBoundsContext final : FPCGExPointsProcessorContext
+struct FPCGExPointsToBoundsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExPointsToBoundsElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointsToBoundsElement final : public FPCGExPointsProcessorElement
+class FPCGExPointsToBoundsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -101,7 +98,7 @@ namespace PCGExPointsToBounds
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 }

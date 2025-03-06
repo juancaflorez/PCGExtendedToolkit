@@ -13,33 +13,19 @@
 
 namespace PCGExPointIOMerger
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FIdentityRef : PCGEx::FAttributeIdentity
+	struct PCGEXTENDEDTOOLKIT_API FIdentityRef : PCGEx::FAttributeIdentity
 	{
 		const FPCGMetadataAttributeBase* Attribute = nullptr;
 		bool bInitDefault = false;
 
-		FIdentityRef() : FAttributeIdentity()
-		{
-		};
-
-		FIdentityRef(const FIdentityRef& Other)
-			: FAttributeIdentity(Other)
-		{
-		}
-
-		FIdentityRef(const FAttributeIdentity& Other)
-			: FAttributeIdentity(Other)
-		{
-		}
-
-		FIdentityRef(const FName InName, const EPCGMetadataTypes InUnderlyingType, const bool InAllowsInterpolation)
-			: FAttributeIdentity(InName, InUnderlyingType, InAllowsInterpolation)
-		{
-		}
+		FIdentityRef();
+		FIdentityRef(const FIdentityRef& Other);
+		FIdentityRef(const FAttributeIdentity& Other);
+		FIdentityRef(const FName InName, const EPCGMetadataTypes InUnderlyingType, const bool InAllowsInterpolation);
 	};
 }
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPointIOMerger final : public TSharedFromThis<FPCGExPointIOMerger>
+class PCGEXTENDEDTOOLKIT_API FPCGExPointIOMerger final : public TSharedFromThis<FPCGExPointIOMerger>
 {
 	friend class FPCGExAttributeMergeTask;
 
@@ -79,23 +65,17 @@ namespace PCGExPointIOMerger
 		InAccessor->GetRange(InRange, 0, *SourceIO->GetInKeys());
 	}
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FCopyAttributeTask final : public PCGExMT::FPCGExIndexedTask
+	class PCGEXTENDEDTOOLKIT_API FCopyAttributeTask final : public PCGExMT::FPCGExIndexedTask
 	{
 	public:
-		FCopyAttributeTask(
-			const int32 InTaskIndex,
-			const TSharedPtr<FPCGExPointIOMerger>& InMerger)
-			: FPCGExIndexedTask(InTaskIndex),
-			  Merger(InMerger)
-		{
-		}
+		FCopyAttributeTask(const int32 InTaskIndex, const TSharedPtr<FPCGExPointIOMerger>& InMerger);
 
 		TSharedPtr<FPCGExPointIOMerger> Merger;
 		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 
 	template <typename T>
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteAttributeScopeTask final : public PCGExMT::FTask
+	class PCGEXTENDEDTOOLKIT_API FWriteAttributeScopeTask final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FWriteAttributeScopeTask)

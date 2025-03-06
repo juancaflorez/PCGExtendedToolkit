@@ -8,9 +8,17 @@
 #include "PCGExData.h"
 #include "PCGExFactoryProvider.h"
 
+
 #include "Graph/PCGExCluster.h"
 
 #include "PCGExPointFilter.generated.h"
+
+UENUM()
+enum class EPCGExFilterFallback : uint8
+{
+	Pass = 0 UMETA(DisplayName = "Pass", ToolTip="This item will be considered to successfully pass the filter"),
+	Fail = 1 UMETA(DisplayName = "Fail", ToolTip="This item will be considered to failing to pass the filter"),
+};
 
 namespace PCGExGraph
 {
@@ -31,6 +39,7 @@ namespace PCGExFilters
 		Group,
 		Node,
 		Edge,
+		Collection,
 	};
 }
 
@@ -38,12 +47,13 @@ namespace PCGExFilters
  * 
  */
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFilterFactoryData : public UPCGExFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExFilterFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
 public:
 	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::FilterPoint; }
+	virtual bool SupportsCollectionEvaluation() const { return false; }
 	virtual bool SupportsDirectEvaluation() const { return false; }
 
 	virtual bool Init(FPCGExContext* InContext);
@@ -55,6 +65,7 @@ public:
 namespace PCGExPointFilter
 {
 	const FName OutputFilterLabel = FName("Filter");
+	const FName OutputColFilterLabel = FName("C-Filter");
 	const FName OutputFilterLabelNode = FName("Node Filter");
 	const FName OutputFilterLabelEdge = FName("Edge Filter");
 	const FName SourceFiltersLabel = FName("Filters");
@@ -70,7 +81,7 @@ namespace PCGExPointFilter
 	const FName OutputInsideFiltersLabel = FName("Inside");
 	const FName OutputOutsideFiltersLabel = FName("Outside");
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FFilter
+	class PCGEXTENDEDTOOLKIT_API FFilter : public TSharedFromThis<FFilter>
 	{
 	public:
 		explicit FFilter(const TObjectPtr<const UPCGExFilterFactoryData>& InFactory):
@@ -78,6 +89,7 @@ namespace PCGExPointFilter
 		{
 		}
 
+		bool bCollectionTestResult = true;
 		bool bUseEdgeAsPrimary = false; // This shouldn't be there but...
 
 		bool DefaultResult = true;
@@ -91,7 +103,7 @@ namespace PCGExPointFilter
 
 		virtual PCGExFilters::EType GetFilterType() const { return PCGExFilters::EType::Point; }
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade);
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade);
 
 		virtual void PostInit();
 
@@ -100,10 +112,13 @@ namespace PCGExPointFilter
 		virtual bool Test(const PCGExCluster::FNode& Node) const;
 		virtual bool Test(const PCGExGraph::FEdge& Edge) const;
 
+		virtual bool Test(const TSharedPtr<PCGExData::FPointIO>& IO, const TSharedPtr<PCGExData::FPointIOCollection>& ParentCollection) const; // destined for collection only, is expected to test internal PointDataFacade directly.
+
+
 		virtual ~FFilter() = default;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FSimpleFilter : public FFilter
+	class PCGEXTENDEDTOOLKIT_API FSimpleFilter : public FFilter
 	{
 	public:
 		explicit FSimpleFilter(const TObjectPtr<const UPCGExFilterFactoryData>& InFactory):
@@ -115,9 +130,29 @@ namespace PCGExPointFilter
 		virtual bool Test(const FPCGPoint& Point) const override;
 		virtual bool Test(const PCGExCluster::FNode& Node) const override final;
 		virtual bool Test(const PCGExGraph::FEdge& Edge) const override final;
+		virtual bool Test(const TSharedPtr<PCGExData::FPointIO>& IO, const TSharedPtr<PCGExData::FPointIOCollection>& ParentCollection) const override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FManager : public TSharedFromThis<FManager>
+	class PCGEXTENDEDTOOLKIT_API FCollectionFilter : public FFilter
+	{
+	public:
+		explicit FCollectionFilter(const TObjectPtr<const UPCGExFilterFactoryData>& InFactory):
+			FFilter(InFactory)
+		{
+		}
+
+		virtual PCGExFilters::EType GetFilterType() const override { return PCGExFilters::EType::Collection; }
+
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+
+		virtual bool Test(const int32 Index) const override;
+		virtual bool Test(const FPCGPoint& Point) const override;
+		virtual bool Test(const PCGExCluster::FNode& Node) const override final;
+		virtual bool Test(const PCGExGraph::FEdge& Edge) const override final;
+		virtual bool Test(const TSharedPtr<PCGExData::FPointIO>& IO, const TSharedPtr<PCGExData::FPointIOCollection>& ParentCollection) const override;
+	};
+
+	class PCGEXTENDEDTOOLKIT_API FManager : public TSharedFromThis<FManager>
 	{
 	public:
 		explicit FManager(const TSharedRef<PCGExData::FFacade>& InPointDataFacade);
@@ -138,6 +173,7 @@ namespace PCGExPointFilter
 		virtual bool Test(const FPCGPoint& Point);
 		virtual bool Test(const PCGExCluster::FNode& Node);
 		virtual bool Test(const PCGExGraph::FEdge& Edge);
+		virtual bool Test(const TSharedPtr<PCGExData::FPointIO>& IO, const TSharedPtr<PCGExData::FPointIOCollection>& ParentCollection);
 
 		virtual ~FManager()
 		{
@@ -187,3 +223,17 @@ namespace PCGExPointFilter
 		}
 	}
 }
+
+/**
+ * 
+ */
+UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
+class PCGEXTENDEDTOOLKIT_API UPCGExFilterCollectionFactoryData : public UPCGExFilterFactoryData
+{
+	GENERATED_BODY()
+
+public:
+	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::FilterCollection; }
+	virtual bool SupportsCollectionEvaluation() const override { return true; }
+	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override { return nullptr; }
+};

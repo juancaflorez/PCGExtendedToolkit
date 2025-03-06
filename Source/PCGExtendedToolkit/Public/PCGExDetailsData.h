@@ -8,11 +8,12 @@
 #include "CoreMinimal.h"
 #include "PCGExMacros.h"
 #include "Data/PCGExData.h"
+#include "Data/PCGExDataTag.h"
 
 #include "PCGExDetailsData.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExInfluenceDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExInfluenceDetails
 {
 	GENERATED_BODY()
 
@@ -38,28 +39,12 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExInfluenceDetails
 
 	TSharedPtr<PCGExData::TBuffer<double>> InfluenceBuffer;
 
-	bool Init(const FPCGContext* InContext, const TSharedRef<PCGExData::FFacade>& InPointDataFacade)
-	{
-		if (InfluenceInput == EPCGExInputValueType::Attribute)
-		{
-			InfluenceBuffer = InPointDataFacade->GetBroadcaster<double>(LocalInfluence);
-			if (!InfluenceBuffer)
-			{
-				PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Influence attribute: \"{0}\"."), FText::FromName(LocalInfluence.GetName())));
-				return false;
-			}
-		}
-		return true;
-	}
-
-	FORCEINLINE double GetInfluence(const int32 PointIndex) const
-	{
-		return InfluenceBuffer ? InfluenceBuffer->Read(PointIndex) : Influence;
-	}
+	bool Init(const FPCGContext* InContext, const TSharedRef<PCGExData::FFacade>& InPointDataFacade);
+	double GetInfluence(const int32 PointIndex) const;
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExComponentTaggingDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExComponentTaggingDetails
 {
 	GENERATED_BODY()
 

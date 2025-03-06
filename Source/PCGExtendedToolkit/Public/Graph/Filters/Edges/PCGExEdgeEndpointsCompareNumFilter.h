@@ -24,7 +24,7 @@ enum class EPCGExEdgeEndpointCompareAgainstMode : uint8
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgeEndpointsCompareNumFilterConfig
+struct FPCGExEdgeEndpointsCompareNumFilterConfig
 {
 	GENERATED_BODY()
 
@@ -53,7 +53,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExEdgeEndpointsCompareNumFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExEdgeEndpointsCompareNumFilterFactory : public UPCGExEdgeFilterFactoryData
+class UPCGExEdgeEndpointsCompareNumFilterFactory : public UPCGExEdgeFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -62,17 +62,18 @@ public:
 	FPCGExEdgeEndpointsCompareNumFilterConfig Config;
 
 	virtual void RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const override;
-
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
+	
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 };
 
 namespace PCGExEdgeEndpointsCompareNum
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FNeighborsCountFilter final : public PCGExClusterFilter::TEdgeFilter
+	class FNeighborsCountFilter final : public PCGExClusterFilter::FEdgeFilter
 	{
 	public:
 		explicit FNeighborsCountFilter(const UPCGExEdgeEndpointsCompareNumFilterFactory* InFactory)
-			: TEdgeFilter(InFactory), TypedFilterFactory(InFactory)
+			: FEdgeFilter(InFactory), TypedFilterFactory(InFactory)
 		{
 		}
 
@@ -83,17 +84,14 @@ namespace PCGExEdgeEndpointsCompareNum
 		virtual bool Init(FPCGExContext* InContext, const TSharedRef<PCGExCluster::FCluster>& InCluster, const TSharedRef<PCGExData::FFacade>& InPointDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade) override;
 		virtual bool Test(const PCGExGraph::FEdge& Edge) const override;
 
-		virtual ~FNeighborsCountFilter() override
-		{
-			TypedFilterFactory = nullptr;
-		}
+		virtual ~FNeighborsCountFilter() override;
 	};
 }
 
 
 /** Outputs a single GraphParam to be consumed by other nodes */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExEdgeEndpointsCompareNumFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExEdgeEndpointsCompareNumFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 
@@ -101,9 +99,9 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
-		EdgeEndpointsCompareNumFilterFactory, "Cluster Filter : Endpoints Compare (Numeric)", "Compare the value of an attribute on each of the edge endpoint.",
+		EdgeEndpointsCompareNumFilterFactory, "Edge Filter : Endpoints Compare (Numeric)", "Compare the value of an attribute on each of the edge endpoint.",
 		PCGEX_FACTORY_NAME_PRIORITY)
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorClusterFilter); }
 #endif
 	//~End UPCGSettings
 

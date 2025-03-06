@@ -12,6 +12,8 @@
 #include "PCGExPointsProcessor.h"
 #include "PCGExSplineInclusionFilter.h"
 #include "Data/PCGSplineData.h"
+
+
 #include "Sampling/PCGExSampleNearestSpline.h"
 
 
@@ -26,7 +28,7 @@ enum class EPCGExSplineTimeConsolidation : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplineAlphaFilterConfig
+struct FPCGExSplineAlphaFilterConfig
 {
 	GENERATED_BODY()
 
@@ -71,7 +73,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplineAlphaFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSplineAlphaFilterFactory : public UPCGExFilterFactoryData
+class UPCGExSplineAlphaFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -79,12 +81,15 @@ public:
 	UPROPERTY()
 	FPCGExSplineAlphaFilterConfig Config;
 
-	TArray<const FPCGSplineStruct*> Splines;
-	TArray<double> SegmentsNum;
+	TSharedPtr<TArray<const FPCGSplineStruct*>> Splines;
+	TSharedPtr<TArray<double>> SegmentsNum;
 
 	virtual bool SupportsDirectEvaluation() const override;
 
 	virtual bool Init(FPCGExContext* InContext) override;
+	virtual bool WantsPreparation(FPCGExContext* InContext) override;
+	virtual bool Prepare(FPCGExContext* InContext) override;
+
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 
 	virtual void BeginDestroy() override;
@@ -92,9 +97,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FSplineAlphaFilter final : public PCGExPointFilter::FSimpleFilter
+	class FSplineAlphaFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FSplineAlphaFilter(const TObjectPtr<const UPCGExSplineAlphaFilterFactory>& InFactory)
@@ -106,12 +111,12 @@ namespace PCGExPointsFilter
 
 		const TObjectPtr<const UPCGExSplineAlphaFilterFactory> TypedFilterFactory;
 
-		TArray<const FPCGSplineStruct*> Splines;
-		TArray<double> SegmentsNum;
+		TSharedPtr<TArray<const FPCGSplineStruct*>> Splines;
+		TSharedPtr<TArray<double>> SegmentsNum;
 
 		TSharedPtr<PCGExData::TBuffer<double>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
 		virtual bool Test(const FPCGPoint& Point) const override;
 		virtual bool Test(const int32 PointIndex) const override;
 
@@ -124,7 +129,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSplineAlphaFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExSplineAlphaFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

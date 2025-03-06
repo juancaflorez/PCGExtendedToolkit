@@ -13,8 +13,8 @@
 
 ///
 
-UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|FilterGroup")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFilterGroupProviderSettings : public UPCGExFactoryProviderSettings
+UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|FilterGroup")
+class PCGEXTENDEDTOOLKIT_API UPCGExFilterGroupProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -24,7 +24,8 @@ public:
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
 		FilterGroup, "Filter Group", "Creates an Filter Group.",
 		PCGEX_FACTORY_NAME_PRIORITY)
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Filter; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub); }
 	virtual TArray<FPCGPreConfiguredSettingsInfo> GetPreconfiguredInfo() const override;
 #endif
 	//~End UPCGSettings

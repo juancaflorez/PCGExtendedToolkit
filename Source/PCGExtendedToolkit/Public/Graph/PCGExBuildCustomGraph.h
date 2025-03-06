@@ -24,7 +24,7 @@ enum class EPCGExCustomGraphActorSourceMode : uint8
  * 
  */
 UCLASS(Blueprintable, BlueprintType, Abstract, DisplayName = "[PCGEx] Custom Graph Settings")
-class PCGEXTENDEDTOOLKIT_API UPCGExCustomGraphSettings : public UObject
+class UPCGExCustomGraphSettings : public UObject
 {
 	GENERATED_BODY()
 
@@ -40,13 +40,7 @@ public:
 
 	TSet<uint64> UniqueEdges;
 
-	FORCEINLINE int32 GetOrCreateNode(int64 InIdx)
-	{
-		if (int32* IndexPtr = IdxMap.Find(InIdx)) { return *IndexPtr; }
-		const int32 Index = Idx.Add(InIdx);
-		IdxMap.Add(InIdx, Index);
-		return Index;
-	}
+	int32 GetOrCreateNode(int64 InIdx);
 
 	/**
 	 * Creates an edge between two nodes in an indexed graph.
@@ -402,8 +396,8 @@ struct FNewGraphSettingsResult
 /**
  * 
  */
-UCLASS(Blueprintable, BlueprintType, Abstract, MinimalAPI, DisplayName = "[PCGEx] Custom Graph Builder")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCustomGraphBuilder : public UPCGExOperation
+UCLASS(Blueprintable, BlueprintType, Abstract, DisplayName = "[PCGEx] Custom Graph Builder")
+class PCGEXTENDEDTOOLKIT_API UPCGExCustomGraphBuilder : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -458,7 +452,7 @@ public:
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBuildCustomGraphSettings : public UPCGExPointsProcessorSettings
+class UPCGExBuildCustomGraphSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -479,7 +473,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
 	virtual bool IsInputless() const override { return Mode == EPCGExCustomGraphActorSourceMode::Owner; }
 	//~End UPCGExPointsProcessorSettings
@@ -509,13 +502,13 @@ public:
 	bool bQuietFailedBuildGraphWarning = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildCustomGraphContext final : FPCGExPointsProcessorContext
+struct FPCGExBuildCustomGraphContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBuildCustomGraphElement;
 	UPCGExCustomGraphBuilder* Builder = nullptr;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildCustomGraphElement final : public FPCGExPointsProcessorElement
+class FPCGExBuildCustomGraphElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -532,7 +525,7 @@ namespace PCGExBuildCustomGraph
 {
 	const FName SourceOverridesBuilder = TEXT("Overrides : Graph Builder");
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildGraph final : public PCGExMT::FTask
+	class FBuildGraph final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FBuildGraph)

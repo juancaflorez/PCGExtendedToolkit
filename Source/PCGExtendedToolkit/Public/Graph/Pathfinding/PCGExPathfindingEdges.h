@@ -9,6 +9,7 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExDataForward.h"
 #include "Graph/PCGExEdgesProcessor.h"
+#include "Paths/PCGExPaths.h"
 
 #include "PCGExPathfindingEdges.generated.h"
 
@@ -17,8 +18,8 @@ class UPCGExSearchOperation;
  * Use PCGExTransform to manipulate the outgoing attributes instead of handling everything here.
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
-UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathfindingEdgesSettings : public UPCGExEdgesProcessorSettings
+UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
+class UPCGExPathfindingEdgesSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -94,13 +95,16 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Advanced")
 	FPCGExPathStatistics Statistics;
 
+	/** ... */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(DisplayName="Paths Output Settings"))
+	FPCGExPathOutputDetails PathOutputDetails;
+
 	/** Whether or not to search for closest node using an octree. Depending on your dataset, enabling this may be either much faster, or slightly slower. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Performance, meta=(PCG_NotOverridable, AdvancedDisplay))
 	bool bUseOctreeSearch = false;
 };
 
-
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingEdgesContext final : FPCGExEdgesProcessorContext
+struct FPCGExPathfindingEdgesContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExPathfindingEdgesElement;
 
@@ -124,7 +128,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingEdgesContext final : FPCGExEd
 		const TSharedPtr<PCGExPathfinding::FPathQuery>& Query);
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathfindingEdgesElement final : public FPCGExEdgesProcessorElement
+class FPCGExPathfindingEdgesElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

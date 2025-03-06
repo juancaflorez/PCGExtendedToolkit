@@ -7,6 +7,8 @@
 #include "PCGExPathProcessor.h"
 #include "Data/Blending/PCGExDataBlending.h"
 #include "Data/Blending/PCGExMetadataBlender.h"
+
+
 #include "Shapes/PCGExShapes.h"
 
 #include "PCGExResamplePath.generated.h"
@@ -22,7 +24,7 @@ enum class EPCGExResampleMode : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExResamplePathSettings : public UPCGExPathProcessorSettings
+class UPCGExResamplePathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -36,11 +38,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExResampleMode Mode = EPCGExResampleMode::Sweep;
@@ -66,12 +64,12 @@ public:
 	FPCGExBlendingDetails BlendingSettings = FPCGExBlendingDetails(EPCGExDataBlendingType::Weight, EPCGExDataBlendingType::None);
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExResamplePathContext final : FPCGExPathProcessorContext
+struct FPCGExResamplePathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExResamplePathElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExResamplePathElement final : public FPCGExPathProcessorElement
+class FPCGExResamplePathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -111,7 +109,7 @@ namespace PCGExResamplePath
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

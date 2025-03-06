@@ -14,7 +14,7 @@
 #include "PCGExHeuristicFeedback.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigFeedback : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigFeedback : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -44,7 +44,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigFeedback : public FPCGExH
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Feedback")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicFeedback : public UPCGExHeuristicOperation
+class UPCGExHeuristicFeedback : public UPCGExHeuristicOperation
 {
 	GENERATED_BODY()
 
@@ -57,74 +57,22 @@ public:
 	double EdgeScale = 1;
 	bool bBleed = true;
 
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		FReadScopeLock ReadScopeLock(FeedbackLock);
+		const PCGExCluster::FNode& Goal) const override;
 
-		const uint32* N = NodeFeedbackNum.Find(From.Index);
-		return N ? GetScoreInternal(NodeScale) * *N : GetScoreInternal(0);
-	}
-
-	FORCEINLINE virtual double GetEdgeScore(
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
-	{
-		FReadScopeLock ReadScopeLock(FeedbackLock);
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override;
 
-		const uint32* N = NodeFeedbackNum.Find(To.Index);
-		const uint32* E = EdgeFeedbackNum.Find(Edge.Index);
+	void FeedbackPointScore(const PCGExCluster::FNode& Node);
 
-		const double NW = N ? GetScoreInternal(NodeScale) * *N : GetScoreInternal(0);
-		const double EW = E ? GetScoreInternal(EdgeScale) * *E : GetScoreInternal(0);
-
-		return (NW + EW);
-	}
-
-	FORCEINLINE void FeedbackPointScore(const PCGExCluster::FNode& Node)
-	{
-		FWriteScopeLock WriteScopeLock(FeedbackLock);
-
-		uint32& N = NodeFeedbackNum.FindOrAdd(Node.Index, 0);
-		N++;
-
-		if (bBleed)
-		{
-			for (const PCGExGraph::FLink Lk : Node.Links)
-			{
-				uint32& E = EdgeFeedbackNum.FindOrAdd(Lk.Edge, 0);
-				E++;
-			}
-		}
-	}
-
-	FORCEINLINE void FeedbackScore(const PCGExCluster::FNode& Node, const PCGExGraph::FEdge& Edge)
-	{
-		FWriteScopeLock WriteScopeLock(FeedbackLock);
-
-		uint32& N = NodeFeedbackNum.FindOrAdd(Node.Index, 0);
-		N++;
-
-		if (bBleed)
-		{
-			for (const PCGExGraph::FLink Lk : Node.Links)
-			{
-				uint32& E = EdgeFeedbackNum.FindOrAdd(Lk.Edge, 0);
-				E++;
-			}
-		}
-		else
-		{
-			uint32& E = EdgeFeedbackNum.FindOrAdd(Edge.Index, 0);
-			E++;
-		}
-	}
+	void FeedbackScore(const PCGExCluster::FNode& Node, const PCGExGraph::FEdge& Edge);
 
 	virtual void Cleanup() override;
 };
@@ -132,7 +80,7 @@ public:
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryFeedback : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactoryFeedback : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
@@ -147,7 +95,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicFeedbackProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicFeedbackProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

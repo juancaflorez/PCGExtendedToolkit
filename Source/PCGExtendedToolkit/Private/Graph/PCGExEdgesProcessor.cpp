@@ -10,7 +10,6 @@
 
 
 PCGExData::EIOInit UPCGExEdgesProcessorSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Forward; }
-
 PCGExData::EIOInit UPCGExEdgesProcessorSettings::GetEdgeOutputInitMode() const { return PCGExData::EIOInit::Forward; }
 
 bool UPCGExEdgesProcessorSettings::GetMainAcceptMultipleData() const { return true; }
@@ -227,6 +226,22 @@ bool FPCGExEdgesProcessorContext::CompileGraphBuilders(const bool bOutputToConte
 	}
 
 	return true;
+}
+
+void FPCGExEdgesProcessorContext::ClusterProcessing_InitialProcessingDone()
+{
+}
+
+void FPCGExEdgesProcessorContext::ClusterProcessing_WorkComplete()
+{
+}
+
+void FPCGExEdgesProcessorContext::ClusterProcessing_WritingDone()
+{
+}
+
+void FPCGExEdgesProcessorContext::ClusterProcessing_GraphCompilationDone()
+{
 }
 
 void FPCGExEdgesProcessorContext::AdvanceBatch(const PCGEx::ContextState NextStateId, const bool bIsNextStateAsync)

@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "PCGExChain.h"
+#include "Filters/PCGExClusterFilter.h"
 
 
 #include "Graph/PCGExEdgesProcessor.h"
@@ -27,7 +28,7 @@ enum class EPCGExBreakClusterLeavesHandling : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBreakClustersToPathsSettings : public UPCGExEdgesProcessorSettings
+class UPCGExBreakClustersToPathsSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -48,7 +49,7 @@ public:
 	virtual bool SupportsEdgeSorting() const override { return DirectionSettings.RequiresSortingRules(); }
 	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	virtual PCGExData::EIOInit GetEdgeOutputInitMode() const override;
-	PCGEX_NODE_POINT_FILTER(FName("Break Conditions"), "Filters used to know which points are 'break' points.", PCGExFactories::PointFilters, false)
+	PCGEX_NODE_POINT_FILTER(FName("Break Conditions"), "Filters used to know which points are 'break' points.", PCGExFactories::ClusterNodeFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
 	/** How to handle leaves */
@@ -65,7 +66,7 @@ public:
 
 	/** Enforce a winding order for paths. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
-	EPCGExWindingMutation Winding = EPCGExWindingMutation::Unchanged;
+	EPCGExWindingMutation Winding = EPCGExWindingMutation::CounterClockwise;
 
 	/** Whether to apply winding on closed loops only or all paths. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -107,7 +108,7 @@ private:
 	friend class FPCGExBreakClustersToPathsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBreakClustersToPathsContext final : FPCGExEdgesProcessorContext
+struct FPCGExBreakClustersToPathsContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExBreakClustersToPathsElement;
 
@@ -115,7 +116,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBreakClustersToPathsContext final : FPCG
 	TArray<TSharedPtr<PCGExCluster::FNodeChain>> Chains;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBreakClustersToPathsElement final : public FPCGExEdgesProcessorElement
+class FPCGExBreakClustersToPathsElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -139,6 +140,8 @@ namespace PCGExBreakClustersToPaths
 		TSharedPtr<TArray<FVector2D>> ProjectedPositions;
 		TSharedPtr<PCGExCluster::FNodeChainBuilder> ChainBuilder;
 
+		TSharedPtr<PCGExClusterFilter::FManager> BreakpointFilterManager;
+
 		FPCGExEdgeDirectionSettings DirectionSettings;
 
 	public:
@@ -148,9 +151,12 @@ namespace PCGExBreakClustersToPaths
 		}
 
 		virtual bool Process(TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		bool BuildChains();
 		virtual void CompleteWork() override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSingleEdge(const int32 EdgeIndex, PCGExGraph::FEdge& Edge, const PCGExMT::FScope& Scope) override;
+
+		virtual void Cleanup() override;
 	};
 
 	class FBatch final : public PCGExClusterMT::TBatch<FProcessor>
@@ -159,7 +165,6 @@ namespace PCGExBreakClustersToPaths
 
 	protected:
 		FPCGExEdgeDirectionSettings DirectionSettings;
-		TSharedPtr<PCGExPointFilter::FManager> BreakpointFilterManager;
 		TSharedPtr<TArray<int8>> Breakpoints;
 
 		FPCGExGeo2DProjectionDetails ProjectionDetails;

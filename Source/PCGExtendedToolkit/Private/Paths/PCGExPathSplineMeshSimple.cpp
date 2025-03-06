@@ -4,6 +4,8 @@
 #include "Paths/PCGExPathSplineMeshSimple.h"
 
 #include "PCGExHelpers.h"
+
+
 #include "Paths/PCGExPaths.h"
 
 #define LOCTEXT_NAMESPACE "PCGExPathSplineMeshSimpleElement"
@@ -11,7 +13,12 @@
 
 PCGEX_INITIALIZE_ELEMENT(PathSplineMeshSimple)
 
-PCGExData::EIOInit UPCGExPathSplineMeshSimpleSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
+UPCGExPathSplineMeshSimpleSettings::UPCGExPathSplineMeshSimpleSettings(
+	const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	if (SplineMeshUpVectorAttribute.GetName() == FName("@Last")) { SplineMeshUpVectorAttribute.Update(TEXT("$Rotation.Up")); }
+}
 
 bool FPCGExPathSplineMeshSimpleElement::Boot(FPCGExContext* InContext) const
 {
@@ -98,12 +105,14 @@ bool FPCGExPathSplineMeshSimpleElement::ExecuteInternal(FPCGContext* InContext) 
 
 namespace PCGExPathSplineMeshSimple
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		// Must be set before process for filters
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		if (Settings->StartOffsetInput == EPCGExInputValueType::Attribute)
 		{
@@ -111,7 +120,7 @@ namespace PCGExPathSplineMeshSimple
 
 			if (!StartOffsetGetter)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("StartOffset attribute is missing on some inputs.."));
+				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("StartOffset attribute is missing on some inputs."));
 				return false;
 			}
 		}
@@ -122,7 +131,18 @@ namespace PCGExPathSplineMeshSimple
 
 			if (!EndOffsetGetter)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("EndOffset attribute is missing on some inputs.."));
+				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("EndOffset attribute is missing on some inputs."));
+				return false;
+			}
+		}
+
+		if (Settings->SplineMeshUpMode == EPCGExSplineMeshUpMode::Attribute)
+		{
+			UpGetter = PointDataFacade->GetScopedBroadcaster<FVector>(Settings->SplineMeshUpVectorAttribute);
+
+			if (!UpGetter)
+			{
+				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FTEXT("Mesh Up Vector attribute is missing on some inputs."));
 				return false;
 			}
 		}
@@ -256,6 +276,10 @@ namespace PCGExPathSplineMeshSimple
 			Segment.Params.StartTangent = LeaveReader->Read(Index);
 			Segment.Params.EndTangent = ArriveReader->Read(NextIndex);
 		}
+
+		if (UpGetter) { Segment.UpVector = UpGetter->Read(Index); }
+		else if (Settings->SplineMeshUpMode == EPCGExSplineMeshUpMode::Constant) { Segment.UpVector = Settings->SplineMeshUpVector; }
+		else { Segment.ComputeUpVectorFromTangents(); }
 	}
 
 	void FProcessor::CompleteWork()

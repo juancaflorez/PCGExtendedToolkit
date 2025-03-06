@@ -13,8 +13,8 @@
 #include "PCGExMergePoints.generated.h"
 
 // Hidden for now because buggy, concurrent writing occurs and I don't know why; need to look into it
-UCLASS(Hidden, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMergePointsSettings : public UPCGExPointsProcessorSettings
+UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
+class UPCGExMergePointsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -33,8 +33,6 @@ protected:
 	virtual TArray<FPCGPinProperties> OutputPinProperties() const override;
 
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-
 	//~End UPCGExPointsProcessorSettings
 
 	/** Meta filter settings. */
@@ -50,7 +48,7 @@ public:
 	FPCGExNameFiltersDetails TagsToAttributes = FPCGExNameFiltersDetails(false);
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMergePointsContext final : FPCGExPointsProcessorContext
+struct FPCGExMergePointsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExMergePointsElement;
 	FPCGExCarryOverDetails CarryOverDetails;
@@ -58,7 +56,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMergePointsContext final : FPCGExPointsP
 	TSharedPtr<PCGExData::FFacade> CompositeDataFacade;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMergePointsElement final : public FPCGExPointsProcessorElement
+class FPCGExMergePointsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -92,7 +90,7 @@ namespace PCGExMergePoints
 		}
 
 		virtual bool IsTrivial() const override { return false; }
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 	};
 

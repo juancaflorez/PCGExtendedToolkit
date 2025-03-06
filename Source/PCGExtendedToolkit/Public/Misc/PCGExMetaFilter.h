@@ -10,6 +10,7 @@
 #include "Data/PCGExDataFilter.h"
 #include "PCGExMetaFilter.generated.h"
 
+
 UENUM()
 enum class EPCGExMetaFilterMode : uint8
 {
@@ -17,8 +18,14 @@ enum class EPCGExMetaFilterMode : uint8
 	Duplicates = 1 UMETA(DisplayName = "Duplicates", Tooltip="Filter out duplicates based on tags that pass the filter"),
 };
 
-UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMetaFilterSettings : public UPCGExPointsProcessorSettings
+//
+//
+// THIS NODE HAS BEEN DEPRECATED IN FAVOR OF COLLECTION FILTERS FOR THE UBER-FILTER(COLLECTION) NODE
+//
+//
+
+UCLASS(Hidden, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
+class UPCGExMetaFilterSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -26,7 +33,7 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(MetaFilter, "Meta Filter", "Filter point collections based on tags & attributes using string queries");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub); }
 #endif
 
 protected:
@@ -34,20 +41,16 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ShowOnlyInnerProperties))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExMetaFilterMode Mode = EPCGExMetaFilterMode::Default;
 
 	/** Attribute name filters. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="Mode!=EPCGExMetaFilterMode::Duplicates", EditConditionHides, ShowOnlyInnerProperties))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, EditCondition="Mode!=EPCGExMetaFilterMode::Duplicates", EditConditionHides))
 	FPCGExNameFiltersDetails Attributes = FPCGExNameFiltersDetails(false);
 
 	/** Tags filters. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, ShowOnlyInnerProperties))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	FPCGExNameFiltersDetails Tags = FPCGExNameFiltersDetails(false);
 
 	/** If enabled, will test full tag value on value tags ('Tag:Value'), otherwise only test the left part. */
@@ -59,7 +62,7 @@ public:
 	bool bSwap = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMetaFilterContext final : FPCGExPointsProcessorContext
+struct FPCGExMetaFilterContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExMetaFilterElement;
 
@@ -69,7 +72,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMetaFilterContext final : FPCGExPointsPr
 	TSharedPtr<PCGExData::FPointIOCollection> Outside;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMetaFilterElement final : public FPCGExPointsProcessorElement
+class FPCGExMetaFilterElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

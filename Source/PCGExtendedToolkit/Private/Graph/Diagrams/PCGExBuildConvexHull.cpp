@@ -3,14 +3,13 @@
 
 #include "Graph/Diagrams/PCGExBuildConvexHull.h"
 
+
 #include "Elements/Metadata/PCGMetadataElementCommon.h"
 #include "Geometry/PCGExGeoDelaunay.h"
 #include "Graph/PCGExCluster.h"
 
 #define LOCTEXT_NAMESPACE "PCGExGraph"
 #define PCGEX_NAMESPACE BuildConvexHull
-
-PCGExData::EIOInit UPCGExBuildConvexHullSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 TArray<FPCGPinProperties> UPCGExBuildConvexHullSettings::OutputPinProperties() const
 {
@@ -69,7 +68,7 @@ bool FPCGExBuildConvexHullElement::ExecuteInternal(
 
 namespace PCGExConvexHull
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExConvexHull::Process);
 

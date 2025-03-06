@@ -18,7 +18,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSubdivideSettings : public UPCGExPathProcessorSettings
+class UPCGExSubdivideSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -35,7 +35,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filter which segments will be subdivided.", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -77,14 +76,14 @@ public:
 	double DefaultAlpha = 1;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSubdivideContext final : FPCGExPathProcessorContext
+struct FPCGExSubdivideContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExSubdivideElement;
 
 	UPCGExSubPointsBlendOperation* Blending = nullptr;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSubdivideElement final : public FPCGExPathProcessorElement
+class FPCGExSubdivideElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -140,7 +139,7 @@ namespace PCGExSubdivide
 
 		virtual bool IsTrivial() const override { return false; } // Force non-trivial
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;

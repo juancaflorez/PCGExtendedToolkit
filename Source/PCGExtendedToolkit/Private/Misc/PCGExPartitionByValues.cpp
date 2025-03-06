@@ -61,6 +61,12 @@ namespace PCGExPartition
 		}
 	}
 
+	void FKPartition::Add(const int64 Index)
+	{
+		FWriteScopeLock WriteLock(PointLock);
+		Points.Add(Index);
+	}
+
 	void FKPartition::Register(TArray<TSharedPtr<FKPartition>>& Partitions)
 	{
 		if (!SubLayers.IsEmpty())
@@ -106,9 +112,6 @@ void UPCGExPartitionByValuesSettings::PostEditChangeProperty(FPropertyChangedEve
 #endif
 
 bool UPCGExPartitionByValuesBaseSettings::GetMainAcceptMultipleData() const { return false; }
-
-
-PCGExData::EIOInit UPCGExPartitionByValuesBaseSettings::GetMainOutputInitMode() const { return bSplitOutput ? PCGExData::EIOInit::None : PCGExData::EIOInit::Duplicate; }
 
 bool UPCGExPartitionByValuesBaseSettings::GetPartitionRules(FPCGExContext* InContext, TArray<FPCGExPartitonRuleConfig>& OutRules) const
 {
@@ -194,10 +197,11 @@ bool FPCGExPartitionByValuesBaseElement::ExecuteInternal(FPCGContext* InContext)
 
 namespace PCGExPartitionByValues
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
+		PCGEX_INIT_IO(PointDataFacade->Source, Settings->bSplitOutput ? PCGExData::EIOInit::None : PCGExData::EIOInit::Duplicate)
 
 		RootPartition = MakeShared<PCGExPartition::FKPartition>(nullptr, 0, nullptr, -1);
 

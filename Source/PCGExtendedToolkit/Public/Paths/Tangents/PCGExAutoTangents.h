@@ -12,12 +12,12 @@
  * 
  */
 UCLASS(MinimalAPI, DisplayName="Auto")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAutoTangents : public UPCGExTangentsOperation
+class UPCGExAutoTangents : public UPCGExTangentsOperation
 {
 	GENERATED_BODY()
 
 public:
-	FORCEINLINE virtual void ProcessPoint(
+	virtual void ProcessPoint(
 		const TArray<FPCGPoint>& InPoints,
 		const int32 Index, const int32 NextIndex, const int32 PrevIndex,
 		const FVector& ArriveScale, FVector& OutArrive,

@@ -3,10 +3,9 @@
 
 #include "AssetStaging/PCGExAssetStaging.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExAssetStagingElement"
 #define PCGEX_NAMESPACE AssetStaging
-
-PCGExData::EIOInit UPCGExAssetStagingSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 PCGEX_INITIALIZE_ELEMENT(AssetStaging)
 
@@ -156,7 +155,7 @@ bool FPCGExAssetStagingElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExAssetStaging
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExAssetStaging::Process);
 
@@ -164,6 +163,8 @@ namespace PCGExAssetStaging
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		FittingHandler.ScaleToFit = Settings->ScaleToFit;
 		FittingHandler.Justification = Settings->Justification;
@@ -292,16 +293,22 @@ namespace PCGExAssetStaging
 			HashWriter->GetMutable(Index) = Context->CollectionPickDatasetPacker->GetPickIdx(EntryHost, Entry->Staging.InternalIndex);
 		}
 
-		if (Variations.bEnabledBefore) { Variations.Apply(Point, Entry->Variations, EPCGExVariationMode::Before); }
-
-		FTransform OutTransform = Point.Transform;
 		FBox OutBounds = Entry->Staging.Bounds;
 
-		FittingHandler.ComputeTransform(Index, OutTransform, OutBounds);
+		if (Variations.bEnabledBefore)
+		{
+			FPCGPoint ProxyPoint = Point;
+			Variations.Apply(ProxyPoint, Entry->Variations, EPCGExVariationMode::Before);
+			FittingHandler.ComputeTransform(Index, ProxyPoint, Point.Transform, OutBounds);
+		}
+		else
+		{
+			FittingHandler.ComputeTransform(Index, Point.Transform, OutBounds);
+		}
+
 
 		Point.BoundsMin = OutBounds.Min;
 		Point.BoundsMax = OutBounds.Max;
-		Point.Transform = OutTransform;
 
 		if (Variations.bEnabledAfter) { Variations.Apply(Point, Entry->Variations, EPCGExVariationMode::After); }
 	}

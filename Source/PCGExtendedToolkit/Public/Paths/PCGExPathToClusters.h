@@ -22,7 +22,7 @@ namespace PCGExPathToClusters
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathToClustersSettings : public UPCGExPathProcessorSettings
+class UPCGExPathToClustersSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -40,7 +40,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
 	//~End UPCGExPointsProcessorSettings
 
@@ -98,10 +97,10 @@ public:
 
 	/** Graph & Edges output properties */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Cluster Output Settings"))
-	FPCGExGraphBuilderDetails GraphBuilderDetails;
+	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails(EPCGExMinimalAxis::X);
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathToClustersContext final : FPCGExPathProcessorContext
+struct FPCGExPathToClustersContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathToClustersElement;
 	friend class PCGExPathToClusters::FFusingProcessor;
@@ -116,7 +115,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathToClustersContext final : FPCGExPath
 	TSharedPtr<PCGExGraph::FUnionProcessor> UnionProcessor;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathToClustersElement final : public FPCGExPathProcessorElement
+class FPCGExPathToClustersElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -147,7 +146,7 @@ namespace PCGExPathToClusters
 
 		virtual ~FNonFusingProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 
@@ -175,7 +174,7 @@ namespace PCGExPathToClusters
 
 		virtual ~FFusingProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		void InsertEdges(const PCGExMT::FScope& Scope, bool bUnsafe);
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 	};

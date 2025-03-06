@@ -3,20 +3,26 @@
 
 #include "Graph/Pathfinding/Heuristics/PCGExHeuristicAzimuth.h"
 
-
-void UPCGExHeuristicAzimuth::PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster)
+double UPCGExHeuristicAzimuth::GetGlobalScore(
+	const PCGExCluster::FNode& From,
+	const PCGExCluster::FNode& Seed,
+	const PCGExCluster::FNode& Goal) const
 {
-	if (bInvert)
-	{
-		OutMin = 1;
-		OutMax = 0;
-	}
-	else
-	{
-		OutMin = 0;
-		OutMax = 1;
-	}
-	Super::PrepareForCluster(InCluster);
+	const FVector Dir = Cluster->GetDir(Seed, Goal);
+	const double Dot = FVector::DotProduct(Dir, Cluster->GetDir(From, Goal)) * -1;
+	return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, 0, 1));
+}
+
+double UPCGExHeuristicAzimuth::GetEdgeScore(
+	const PCGExCluster::FNode& From,
+	const PCGExCluster::FNode& To,
+	const PCGExGraph::FEdge& Edge,
+	const PCGExCluster::FNode& Seed,
+	const PCGExCluster::FNode& Goal,
+	const TSharedPtr<PCGEx::FHashLookup> TravelStack) const
+{
+	const double Dot = (FVector::DotProduct(Cluster->GetDir(From, To), Cluster->GetDir(From, Goal)) * -1);
+	return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, 1, 0));
 }
 
 UPCGExHeuristicOperation* UPCGExHeuristicsFactoryAzimuth::CreateOperation(FPCGExContext* InContext) const

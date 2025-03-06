@@ -32,7 +32,7 @@ enum class EPCGExStringMatchMode : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExNameFiltersDetails
 {
 	GENERATED_BODY()
 
@@ -178,7 +178,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNameFiltersDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCarryOverDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExCarryOverDetails
 {
 	GENERATED_BODY()
 
@@ -261,7 +261,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCarryOverDetails
 
 	bool Test(const PCGExData::FPointIO* PointIO) const
 	{
-		if (!Test(PointIO->GetOut()->Metadata)) { return false; }
+		if (!Test(PointIO->GetOutIn()->Metadata)) { return false; }
 		if (!Test(PointIO->Tags.Get())) { return false; }
 		return true;
 	}
@@ -296,12 +296,17 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCarryOverDetails
 
 	bool Test(const UPCGMetadata* Metadata) const
 	{
-		if (Tags.FilterMode == EPCGExAttributeFilter::All) { return true; }
+		if (Attributes.FilterMode == EPCGExAttributeFilter::All) { return true; }
 
 		TArray<FName> Names;
 		TArray<EPCGMetadataTypes> Types;
 		Metadata->GetAttributes(Names, Types);
-		for (FName Name : Names) { if (!Attributes.Test(Name.ToString())) { return false; } }
-		return true;
+		if (Attributes.FilterMode == EPCGExAttributeFilter::Exclude)
+		{
+			for (FName Name : Names) { if (!Attributes.Test(Name.ToString())) { return false; } }
+			return true;
+		}
+		for (FName Name : Names) { if (Attributes.Test(Name.ToString())) { return true; } }
+		return false;
 	}
 };

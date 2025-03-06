@@ -7,8 +7,8 @@
 #include "PCGExGlobalSettings.h"
 
 #include "PCGExPointsProcessor.h"
-#include "PCGExSampling.h"
 #include "Data/PCGExDataForward.h"
+
 
 #include "PCGExWaitForPCGData.generated.h"
 
@@ -17,8 +17,8 @@ enum class EPCGExGenerationTriggerAction : uint8
 {
 	Ignore        = 0 UMETA(DisplayName = "Ignore", ToolTip="Ignore component if not actively generating already"),
 	AsIs          = 1 UMETA(DisplayName = "As-is", ToolTip="Grab the data as-is and doesnt'try to generate if it wasn't."),
-	Generate      = 2 UMETA(DisplayName = "Generate", ToolTip="Generate and wait for completion"),
-	ForceGenerate = 3 UMETA(DisplayName = "Generate (force)", ToolTip="Generate (force) and wait for completion"),
+	Generate      = 2 UMETA(DisplayName = "Generate", ToolTip="Generate and wait for completion. If the component was already generated, this should not trigger a regeneration."),
+	ForceGenerate = 3 UMETA(DisplayName = "Generate (force)", ToolTip="Generate (force) and wait for completion. Already generated component will be re-regenerated."),
 };
 
 UENUM()
@@ -30,7 +30,7 @@ enum class EPCGExRuntimeGenerationTriggerAction : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExWaitForPCGDataSettings : public UPCGExPointsProcessorSettings
+class UPCGExWaitForPCGDataSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -62,7 +62,6 @@ protected:
 public:
 	void GetTargetGraphPins(TArray<FPCGPinProperties>& OutPins) const;
 	virtual FName GetMainInputPin() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Actor reference that we will be waiting for PCG Components with the target graph. */
@@ -115,7 +114,7 @@ public:
 
 	/** How to deal with found components that have the trigger condition 'GenerateOnDemand'*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Gen & Wait Settings", meta = (PCG_Overridable, DisplayName="Grab GenerateOnDemand"))
-	EPCGExGenerationTriggerAction GenerateOnDemandAction = EPCGExGenerationTriggerAction::ForceGenerate;
+	EPCGExGenerationTriggerAction GenerateOnDemandAction = EPCGExGenerationTriggerAction::Generate;
 
 	/** How to deal with found components that have the trigger condition 'GenerateAtRuntime'*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Gen & Wait Settings", meta = (PCG_Overridable, DisplayName="Grab GenerateAtRuntime"))
@@ -166,7 +165,7 @@ public:
 	TArray<FPCGPinProperties> CachedPins;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWaitForPCGDataContext final : FPCGExPointsProcessorContext
+struct FPCGExWaitForPCGDataContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExWaitForPCGDataElement;
 	TArray<FPCGPinProperties> RequiredPinProperties;
@@ -174,7 +173,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWaitForPCGDataContext final : FPCGExPoin
 	TSet<FName> RequiredLabels;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExWaitForPCGDataElement final : public FPCGExPointsProcessorElement
+class FPCGExWaitForPCGDataElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -220,7 +219,7 @@ namespace PCGExWaitForPCGData
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 
 		void GatherActors();
 

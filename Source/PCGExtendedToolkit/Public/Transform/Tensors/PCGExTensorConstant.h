@@ -12,7 +12,7 @@
 #include "PCGExTensorConstant.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorConstantConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorConstantConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -30,7 +30,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorConstantConfig : public FPCGExTens
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorConstant : public UPCGExTensorOperation
+class UPCGExTensorConstant : public UPCGExTensorOperation
 {
 	GENERATED_BODY()
 
@@ -38,12 +38,12 @@ public:
 	FPCGExTensorConstantConfig Config;
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorConstantFactory : public UPCGExTensorFactoryData
+class UPCGExTensorConstantFactory : public UPCGExTensorFactoryData
 {
 	GENERATED_BODY()
 
@@ -61,7 +61,7 @@ protected:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorConstantSettings : public UPCGExTensorFactoryProviderSettings
+class UPCGExCreateTensorConstantSettings : public UPCGExTensorFactoryProviderSettings
 {
 	GENERATED_BODY()
 
@@ -84,6 +84,10 @@ public:
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	double Potency = 1;
+
+	/** Tensor mutations settings. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Sampling Mutations"))
+	FPCGExTensorSamplingMutationsDetails Mutations;
 
 	/** Tensor properties */
 	UPROPERTY(meta=(PCG_NotOverridable, HideInDetailPanel))

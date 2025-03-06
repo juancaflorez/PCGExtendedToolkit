@@ -8,6 +8,7 @@
 
 #include "PCGExPointsProcessor.h"
 
+
 #include "PCGExSplitPath.generated.h"
 
 namespace PCGExSplitPath
@@ -38,7 +39,7 @@ enum class EPCGExPathSplitInitialValue : uint8
  * 
  */
 UCLASS()
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSplitPathSettings : public UPCGExPathProcessorSettings
+class UPCGExSplitPathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -61,7 +62,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExSplitPath::SourceSplitFilters, "Filters used to know if a point should be split", PCGExFactories::PointFilters, true)
 	//~End UPCGExPointsProcessorSettings
 
@@ -106,14 +106,14 @@ public:
 	FString IsOddTag = TEXT("OddSplit");
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplitPathContext final : FPCGExPathProcessorContext
+struct FPCGExSplitPathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExSplitPathElement;
 
 	FPCGExPathClosedLoopUpdateDetails UpdateTags;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSplitPathElement final : public FPCGExPathProcessorElement
+class FPCGExSplitPathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -128,7 +128,7 @@ protected:
 
 namespace PCGExSplitPath
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FPath
+	struct PCGEXTENDEDTOOLKIT_API FPath
 	{
 		bool bEven = false;
 		int32 Start = -1;
@@ -161,163 +161,13 @@ namespace PCGExSplitPath
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 
-		FORCEINLINE void DoActionSplit(const int32 Index)
-		{
-			if (!PointFilterCache[Index])
-			{
-				if (CurrentPath == -1)
-				{
-					CurrentPath = Paths.Emplace();
-					FPath& NewPath = Paths[CurrentPath];
-					NewPath.Start = Index;
-				}
-
-				FPath& Path = Paths[CurrentPath];
-				Path.Count++;
-				return;
-			}
-
-			if (CurrentPath != -1)
-			{
-				FPath& ClosedPath = Paths[CurrentPath];
-				ClosedPath.End = Index;
-				ClosedPath.Count++;
-			}
-
-			CurrentPath = Paths.Emplace();
-			FPath& NewPath = Paths[CurrentPath];
-			NewPath.Start = Index;
-			NewPath.Count++;
-		}
-
-		FORCEINLINE void DoActionRemove(const int32 Index)
-		{
-			if (!PointFilterCache[Index])
-			{
-				if (CurrentPath == -1)
-				{
-					CurrentPath = Paths.Emplace();
-					FPath& NewPath = Paths[CurrentPath];
-					NewPath.Start = Index;
-				}
-
-				FPath& Path = Paths[CurrentPath];
-				Path.Count++;
-				return;
-			}
-
-			if (CurrentPath != -1)
-			{
-				FPath& Path = Paths[CurrentPath];
-				Path.End = Index - 1;
-			}
-
-			CurrentPath = -1;
-		}
-
-		FORCEINLINE void DoActionDisconnect(const int32 Index)
-		{
-			if (!PointFilterCache[Index])
-			{
-				if (CurrentPath == -1)
-				{
-					CurrentPath = Paths.Emplace();
-					FPath& NewPath = Paths[CurrentPath];
-					NewPath.Start = Index;
-				}
-
-				FPath& Path = Paths[CurrentPath];
-				Path.Count++;
-				return;
-			}
-
-			if (CurrentPath != -1)
-			{
-				FPath& ClosedPath = Paths[CurrentPath];
-				ClosedPath.End = Index;
-				ClosedPath.Count++;
-			}
-
-			CurrentPath = -1;
-		}
-
-		FORCEINLINE void DoActionPartition(const int32 Index)
-		{
-			if (PointFilterCache[Index] != bLastResult)
-			{
-				bLastResult = !bLastResult;
-
-				if (CurrentPath != -1)
-				{
-					FPath& ClosedPath = Paths[CurrentPath];
-					if (Settings->bInclusive)
-					{
-						ClosedPath.End = Index;
-						ClosedPath.Count++;
-					}
-					else
-					{
-						ClosedPath.End = Index - 1;
-					}
-
-					CurrentPath = -1;
-				}
-			}
-
-			if (CurrentPath == -1)
-			{
-				CurrentPath = Paths.Emplace();
-				FPath& NewPath = Paths[CurrentPath];
-				NewPath.bEven = bEven;
-				bEven = !bEven;
-				NewPath.Start = Index;
-			}
-
-			FPath& Path = Paths[CurrentPath];
-			Path.Count++;
-		}
-
-		FORCEINLINE void DoActionSwitch(const int32 Index)
-		{
-			auto ClosePath = [&]()
-			{
-				if (CurrentPath != -1)
-				{
-					FPath& ClosedPath = Paths[CurrentPath];
-					if (Settings->bInclusive)
-					{
-						ClosedPath.End = Index;
-						ClosedPath.Count++;
-					}
-					else
-					{
-						ClosedPath.End = Index - 1;
-					}
-				}
-
-				CurrentPath = -1;
-			};
-
-			if (PointFilterCache[Index]) { bLastResult = !bLastResult; }
-
-			if (bLastResult)
-			{
-				if (CurrentPath == -1)
-				{
-					CurrentPath = Paths.Emplace();
-					FPath& NewPath = Paths[CurrentPath];
-					NewPath.Start = Index;
-				}
-
-				FPath& Path = Paths[CurrentPath];
-				Path.Count++;
-				return;
-			}
-
-			ClosePath();
-		}
+		void DoActionSplit(const int32 Index);
+		void DoActionRemove(const int32 Index);
+		void DoActionDisconnect(const int32 Index);
+		void DoActionPartition(const int32 Index);
+		void DoActionSwitch(const int32 Index);
 
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

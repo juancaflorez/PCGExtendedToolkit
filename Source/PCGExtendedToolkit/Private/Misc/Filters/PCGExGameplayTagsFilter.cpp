@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExGameplayTagsFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FGameplayTagsFilter>(this);
+	return MakeShared<PCGExPointFilter::FGameplayTagsFilter>(this);
 }
 
 bool UPCGExGameplayTagsFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -21,7 +21,7 @@ bool UPCGExGameplayTagsFilterFactory::RegisterConsumableAttributesWithData(FPCGE
 	return true;
 }
 
-bool PCGExPointsFilter::FGameplayTagsFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FGameplayTagsFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -44,11 +44,31 @@ bool PCGExPointsFilter::FGameplayTagsFilter::Init(FPCGExContext* InContext, cons
 
 	if (!ActorReferences)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid ActorReferences attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.ActorReference)));
+		PCGEX_LOG_INVALID_ATTR_C(InContext, "Actor Reference", TypedFilterFactory->Config.ActorReference)
 		return false;
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FGameplayTagsFilter::Test(const int32 PointIndex) const
+{
+	AActor* TargetActor = TSoftObjectPtr<AActor>(ActorReferences->Read(PointIndex)).Get();
+	if (!TargetActor) { return TypedFilterFactory->Config.bFallbackMissingActor; }
+
+	const FCachedPropertyPath Path = FCachedPropertyPath(PathSegments);
+	FGameplayTagContainer TagContainer;
+	FProperty* Property = nullptr;
+
+	if (!PropertyPathHelpers::GetPropertyValue(TargetActor, Path, TagContainer, Property))
+	{
+		if (!TypedFilterFactory->Config.bQuietMissingPropertyWarning)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("GameplayTags filter could not resolve target property : \"%s\"."), *TypedFilterFactory->Config.PropertyPath);
+		}
+		return TypedFilterFactory->Config.bFallbackPropertyPath;
+	}
+	return TypedFilterFactory->Config.TagQuery.Matches(TagContainer);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(GameplayTags)

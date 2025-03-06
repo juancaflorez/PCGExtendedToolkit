@@ -13,7 +13,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorInertiaConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorInertiaConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -25,13 +25,17 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorInertiaConfig : public FPCGExTenso
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExAxis Axis = EPCGExAxis::Forward;
+
+	/** If enabled, will set a constant per-point inertia based on the original point transform */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	bool bSetInertiaOnce = false;
 };
 
 /**
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorInertia : public UPCGExTensorPointOperation
+class UPCGExTensorInertia : public UPCGExTensorPointOperation
 {
 	GENERATED_BODY()
 
@@ -41,12 +45,12 @@ public:
 
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorInertiaFactory : public UPCGExTensorPointFactoryData
+class UPCGExTensorInertiaFactory : public UPCGExTensorPointFactoryData
 {
 	GENERATED_BODY()
 
@@ -56,7 +60,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorInertiaSettings : public UPCGExTensorPointFactoryProviderSettings
+class UPCGExCreateTensorInertiaSettings : public UPCGExTensorPointFactoryProviderSettings
 {
 	GENERATED_BODY()
 

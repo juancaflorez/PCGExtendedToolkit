@@ -8,6 +8,7 @@
 #include "PCGEx.h"
 #include "PCGExGlobalSettings.h"
 #include "PCGExPointsProcessor.h"
+#include "PCGExScopedContainers.h"
 #include "Data/PCGExAttributeHelpers.h"
 
 
@@ -15,7 +16,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExClampDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExClampDetails
 {
 	GENERATED_BODY()
 
@@ -61,7 +62,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExClampDetails
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExRemapDetails
 {
 	GENERATED_BODY()
 
@@ -143,7 +144,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRemapDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExComponentRemapRule
+struct PCGEXTENDEDTOOLKIT_API FPCGExComponentRemapRule
 {
 	GENERATED_BODY()
 
@@ -172,7 +173,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExComponentRemapRule
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeRemapSettings : public UPCGExPointsProcessorSettings
+class UPCGExAttributeRemapSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -180,7 +181,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(AttributeRemap, "Attribute Remap", "Remap a single property or attribute.", FName(GetDisplayName()));
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Metadata; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
@@ -190,8 +192,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual void PostLoad() override;
-
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 #if WITH_EDITORONLY_DATA
@@ -207,41 +207,43 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, ShowOnlyInnerProperties))
 	FPCGExAttributeSourceToTargetDetails Attributes;
 
-	/** The default remap rule, used for single component values, or first component. */
+	/** The default remap rule, used for single component values, or first component (X), or all components if no individual override is specified. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Remap (Default)"))
 	FPCGExComponentRemapRule BaseRemap;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent2;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent2", DisplayName="Remap (2nd Component)"))
+	/** Remap rule used for second (Y) value component. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent2", DisplayName="Remap (2nd Component)"))
 	FPCGExComponentRemapRule Component2RemapOverride;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent3;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent3", DisplayName="Remap (3rd Component)"))
+	/** Remap rule used for third (Z) value component. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent3", DisplayName="Remap (3rd Component)"))
 	FPCGExComponentRemapRule Component3RemapOverride;
 
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, InlineEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, InlineEditConditionToggle))
 	bool bOverrideComponent4;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent4", DisplayName="Remap (4th Component)"))
+	/** Remap rule used for fourth (W) value component. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Individual Components", meta = (PCG_NoteOverridable, EditCondition="bOverrideComponent4", DisplayName="Remap (4th Component)"))
 	FPCGExComponentRemapRule Component4RemapOverride;
 
 #if WITH_EDITOR
 	FString GetDisplayName() const;
 #endif
 
-	
 private:
 	friend class FPCGExAttributeRemapElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRemapContext final : FPCGExPointsProcessorContext
+struct FPCGExAttributeRemapContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExAttributeRemapElement;
 
@@ -251,7 +253,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRemapContext final : FPCGExPoin
 	virtual void RegisterAssetDependencies() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRemapElement final : public FPCGExPointsProcessorElement
+class FPCGExAttributeRemapElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -285,7 +287,7 @@ namespace PCGExAttributeRemap
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 
 		template <typename T>
 		void RemapRange(const PCGExMT::FScope& Scope, T DummyValue)

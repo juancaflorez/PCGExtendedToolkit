@@ -8,8 +8,22 @@
 
 void FPCGExHeuristicConfigBase::Init()
 {
-	if (!bUseLocalCurve) { LocalScoreCurve.ExternalCurve = ScoreCurve.Get(); }
+	if (!bUseLocalCurve)
+	{
+		PCGExHelpers::LoadBlocking_AnyThread(ScoreCurve);
+		LocalScoreCurve.ExternalCurve = ScoreCurve.Get();
+	}
 	ScoreCurveObj = LocalScoreCurve.GetRichCurveConst();
+}
+
+bool UPCGExHeuristicsFactoryData::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(ConfigBase.bUseLocalWeightMultiplier, ConfigBase.WeightMultiplierAttribute, Consumable)
+
+	return true;
 }
 
 UPCGExHeuristicOperation* UPCGExHeuristicsFactoryData::CreateOperation(FPCGExContext* InContext) const

@@ -8,6 +8,7 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
+#include "PCGExScopedContainers.h"
 #include "PCGExTexParamFactoryProvider.h"
 #include "Data/PCGExDataForward.h"
 
@@ -59,7 +60,7 @@ class UPCGExFilterFactoryData;
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleSurfaceGuidedSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleSurfaceGuidedSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -79,7 +80,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -212,7 +212,7 @@ public:
 	FName RenderMatAttributeName = FName("RenderMat");
 
 	/** The index of the render material when it is queried from the hit. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Output (Actor Data)", meta = (PCG_Overridable, DisplayName=" └─ Material Index", EditCondition = "bWriteRenderMat", EditConditionHides, HideEditConditionToggle))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Output (Actor Data)", meta = (PCG_Overridable, DisplayName=" ├─ Material Index", EditCondition = "bWriteRenderMat", EditConditionHides, HideEditConditionToggle))
 	int32 RenderMaterialIndex = 0;
 
 	/** Whether to extract texture parameters */
@@ -255,7 +255,7 @@ public:
 	bool bQuietUVSettingsWarning = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleSurfaceGuidedContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleSurfaceGuidedContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleSurfaceGuidedElement;
 
@@ -274,7 +274,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleSurfaceGuidedContext final : FPCGE
 	PCGEX_FOREACH_FIELD_SURFACEGUIDED(PCGEX_OUTPUT_DECL_TOGGLE)
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleSurfaceGuidedElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleSurfaceGuidedElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -316,7 +316,7 @@ namespace PCGExSampleSurfaceGuided
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;

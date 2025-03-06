@@ -16,7 +16,7 @@ class FPCGExComputeIOBounds;
 
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateShapesSettings : public UPCGExShapeProcessorSettings
+class UPCGExCreateShapesSettings : public UPCGExShapeProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -62,12 +62,12 @@ public:
 	int32 MaxPointCount = 500;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCreateShapesContext final : FPCGExShapeProcessorContext
+struct FPCGExCreateShapesContext final : FPCGExShapeProcessorContext
 {
 	friend class FPCGExCreateShapesElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCreateShapesElement final : public FPCGExShapeProcessorElement
+class FPCGExCreateShapesElement final : public FPCGExShapeProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -94,14 +94,14 @@ namespace PCGExCreateShapes
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void OnPointsProcessingComplete() override;
 		virtual void Output() override;
 		virtual void CompleteWork() override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBuildShape final : public PCGExMT::FTask
+	class FBuildShape final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FBuildShape)

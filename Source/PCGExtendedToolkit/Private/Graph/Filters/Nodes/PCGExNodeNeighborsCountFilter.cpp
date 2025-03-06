@@ -15,6 +15,16 @@ void UPCGExNodeNeighborsCountFilterFactory::RegisterBuffersDependencies(FPCGExCo
 	if (Config.CompareAgainst == EPCGExInputValueType::Attribute) { FacadePreloader.Register<double>(InContext, Config.LocalCount); }
 }
 
+bool UPCGExNodeNeighborsCountFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_CONDITIONAL(Config.CompareAgainst == EPCGExInputValueType::Attribute, Config.LocalCount, Consumable)
+
+	return true;
+}
+
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExNodeNeighborsCountFilterFactory::CreateFilter() const
 {
 	return MakeShared<PCGExNodeNeighborsCount::FNeighborsCountFilter>(this);
@@ -32,7 +42,7 @@ namespace PCGExNodeNeighborsCount
 
 			if (!LocalCount)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid LocalCount attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.LocalCount.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Local Count", TypedFilterFactory->Config.LocalCount)
 				return false;
 			}
 		}
@@ -45,6 +55,11 @@ namespace PCGExNodeNeighborsCount
 		const double A = Node.Num();
 		const double B = LocalCount ? LocalCount->Read(Node.PointIndex) : TypedFilterFactory->Config.Count;
 		return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B, TypedFilterFactory->Config.Tolerance);
+	}
+
+	FNeighborsCountFilter::~FNeighborsCountFilter()
+	{
+		TypedFilterFactory = nullptr;
 	}
 }
 

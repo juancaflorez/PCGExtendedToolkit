@@ -19,7 +19,7 @@ enum class EPCGExClusterClosestPickMode : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPickClosestClustersSettings : public UPCGExEdgesProcessorSettings
+class UPCGExPickClosestClustersSettings : public UPCGExEdgesProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -44,7 +44,7 @@ public:
 
 	/** What type of proximity to look for */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
-	EPCGExClusterClosestSearchMode SearchMode = EPCGExClusterClosestSearchMode::Node;
+	EPCGExClusterClosestSearchMode SearchMode = EPCGExClusterClosestSearchMode::Vtx;
 
 	/** Whether to allow the same pick for multiple targets or not. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
@@ -82,7 +82,7 @@ private:
 	friend class FPCGExPickClosestClustersElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPickClosestClustersContext final : FPCGExEdgesProcessorContext
+struct FPCGExPickClosestClustersContext final : FPCGExEdgesProcessorContext
 {
 	friend class FPCGExPickClosestClustersElement;
 
@@ -97,7 +97,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPickClosestClustersContext final : FPCGE
 	virtual void ClusterProcessing_InitialProcessingDone() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPickClosestClustersElement final : public FPCGExEdgesProcessorElement
+class FPCGExPickClosestClustersElement final : public FPCGExEdgesProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

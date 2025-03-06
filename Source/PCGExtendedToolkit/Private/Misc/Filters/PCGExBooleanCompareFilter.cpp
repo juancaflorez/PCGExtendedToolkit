@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExBooleanCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FBooleanCompareFilter>(this);
+	return MakeShared<PCGExPointFilter::FBooleanCompareFilter>(this);
 }
 
 bool UPCGExBooleanCompareFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -23,7 +23,7 @@ bool UPCGExBooleanCompareFilterFactory::RegisterConsumableAttributesWithData(FPC
 	return true;
 }
 
-bool PCGExPointsFilter::FBooleanCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FBooleanCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -31,7 +31,7 @@ bool PCGExPointsFilter::FBooleanCompareFilter::Init(FPCGExContext* InContext, co
 
 	if (!OperandA)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -41,12 +41,19 @@ bool PCGExPointsFilter::FBooleanCompareFilter::Init(FPCGExContext* InContext, co
 
 		if (!OperandB)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand B attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandB.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand B", TypedFilterFactory->Config.OperandB)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FBooleanCompareFilter::Test(const int32 PointIndex) const
+{
+	const double A = OperandA->Read(PointIndex);
+	const double B = OperandB ? OperandB->Read(PointIndex) : TypedFilterFactory->Config.OperandBConstant;
+	return TypedFilterFactory->Config.Comparison == EPCGExEquality::Equal ? A == B : A != B;
 }
 
 PCGEX_CREATE_FILTER_FACTORY(BooleanCompare)

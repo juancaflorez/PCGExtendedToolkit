@@ -3,6 +3,7 @@
 
 #include "Misc/Filters/PCGExTensorDotFilter.h"
 
+
 #include "Transform/Tensors/PCGExTensorFactoryProvider.h"
 #include "Transform/Tensors/PCGExTensorHandler.h"
 
@@ -17,7 +18,7 @@ bool UPCGExTensorDotFilterFactory::Init(FPCGExContext* InContext)
 	if (!PCGExFactories::GetInputFactories(InContext, PCGExTensor::SourceTensorsLabel, TensorFactories, {PCGExFactories::EType::Tensor}, true)) { return false; }
 	if (TensorFactories.IsEmpty())
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("Missing tensors."));
+		if (!bQuietMissingInputError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("Missing tensors.")); }
 		return false;
 	}
 
@@ -26,7 +27,7 @@ bool UPCGExTensorDotFilterFactory::Init(FPCGExContext* InContext)
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExTensorDotFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FTensorDotFilter>(this);
+	return MakeShared<PCGExPointFilter::FTensorDotFilter>(this);
 }
 
 bool UPCGExTensorDotFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -40,7 +41,7 @@ bool UPCGExTensorDotFilterFactory::RegisterConsumableAttributesWithData(FPCGExCo
 	return true;
 }
 
-bool PCGExPointsFilter::FTensorDotFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FTensorDotFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -50,13 +51,29 @@ bool PCGExPointsFilter::FTensorDotFilter::Init(FPCGExContext* InContext, const T
 	OperandA = PointDataFacade->GetScopedBroadcaster<FVector>(TypedFilterFactory->Config.OperandA);
 	if (!OperandA)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
 	// TODO : Validate tensor factories
 
 	return true;
+}
+
+bool PCGExPointFilter::FTensorDotFilter::Test(const int32 PointIndex) const
+{
+	const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
+
+	bool bSuccess = false;
+	const PCGExTensor::FTensorSample Sample = TensorsHandler->Sample(PointIndex, Point.Transform, bSuccess);
+
+	if (!bSuccess) { return false; }
+
+	return DotComparison.Test(
+		FVector::DotProduct(
+			TypedFilterFactory->Config.bTransformOperandA ? OperandA->Read(PointIndex) : Point.Transform.TransformVectorNoScale(OperandA->Read(PointIndex)),
+			Sample.DirectionAndSize.GetSafeNormal()),
+		DotComparison.GetComparisonThreshold(PointIndex));
 }
 
 PCGEX_CREATE_FILTER_FACTORY(TensorDot)

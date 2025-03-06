@@ -17,8 +17,6 @@ TArray<FPCGPinProperties> UPCGExTensorsTransformSettings::InputPinProperties() c
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExTensorsTransformSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(TensorsTransform)
 
 bool FPCGExTensorsTransformElement::Boot(FPCGExContext* InContext) const
@@ -74,11 +72,13 @@ namespace PCGExTensorsTransform
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExTensorsTransform::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		if (!Context->StopFilterFactories.IsEmpty())
 		{
@@ -118,7 +118,7 @@ namespace PCGExTensorsTransform
 		const FVector SamplePosition = Probe.GetLocation();
 
 		bool bSuccess = false;
-		const PCGExTensor::FTensorSample Sample = TensorsHandler->Sample(Probe, bSuccess);
+		const PCGExTensor::FTensorSample Sample = TensorsHandler->Sample(Index, Probe, bSuccess);
 		PointFilterCache[Index] = bSuccess;
 
 		if (!bSuccess)

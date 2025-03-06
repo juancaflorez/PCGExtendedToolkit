@@ -26,7 +26,7 @@ bool UPCGExTensorSplineFactoryData::InitInternalData(FPCGExContext* InContext)
 	{
 		if (!InitInternalFacade(InContext)) { return false; }
 
-		TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(PCGExGraph::SourcePathsLabel);
+		TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(PCGExPaths::SourcePathsLabel);
 		ClosedLoop.Init();
 
 		if (!Targets.IsEmpty())
@@ -49,7 +49,7 @@ bool UPCGExTensorSplineFactoryData::InitInternalData(FPCGExContext* InContext)
 
 		if (ManagedSplines.IsEmpty())
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)"));
+			if (!bQuietMissingInputError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)")); }
 			return false;
 		}
 	}
@@ -61,7 +61,7 @@ bool UPCGExTensorSplineFactoryData::InitInternalData(FPCGExContext* InContext)
 			for (const FPCGTaggedData& TaggedData : Targets)
 			{
 				const UPCGSplineData* SplineData = Cast<UPCGSplineData>(TaggedData.Data);
-				if (!SplineData) { continue; }
+				if (!SplineData || SplineData->SplineStruct.GetNumberOfSplineSegments() <= 0) { continue; }
 
 				const bool bIsClosedLoop = SplineData->SplineStruct.bClosedLoop;
 				if (SampleInputs == EPCGExSplineSamplingIncludeMode::ClosedLoopOnly && !bIsClosedLoop) { continue; }
@@ -73,7 +73,7 @@ bool UPCGExTensorSplineFactoryData::InitInternalData(FPCGExContext* InContext)
 
 		if (Splines.IsEmpty())
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)"));
+			if (!bQuietMissingInputError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)")); }
 			return false;
 		}
 	}

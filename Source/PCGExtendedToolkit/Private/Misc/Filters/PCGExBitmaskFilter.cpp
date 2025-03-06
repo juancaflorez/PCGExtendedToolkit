@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExBitmaskFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FBitmaskFilter>(this);
+	return MakeShared<PCGExPointFilter::FBitmaskFilter>(this);
 }
 
 bool UPCGExBitmaskFilterFactory::RegisterConsumableAttributes(FPCGExContext* InContext) const
@@ -22,7 +22,7 @@ bool UPCGExBitmaskFilterFactory::RegisterConsumableAttributes(FPCGExContext* InC
 	return true;
 }
 
-bool PCGExPointsFilter::FBitmaskFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FBitmaskFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -30,7 +30,7 @@ bool PCGExPointsFilter::FBitmaskFilter::Init(FPCGExContext* InContext, const TSh
 
 	if (!FlagsReader)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Value attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.FlagsAttribute)));
+		PCGEX_LOG_INVALID_ATTR_C(InContext, "Flags", TypedFilterFactory->Config.FlagsAttribute)
 		return false;
 	}
 
@@ -39,12 +39,22 @@ bool PCGExPointsFilter::FBitmaskFilter::Init(FPCGExContext* InContext, const TSh
 		MaskReader = PointDataFacade->GetScopedReadable<int64>(TypedFilterFactory->Config.BitmaskAttribute);
 		if (!MaskReader)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Mask attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.BitmaskAttribute)));
+			PCGEX_LOG_INVALID_ATTR_C(InContext, "Mask", TypedFilterFactory->Config.BitmaskAttribute)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FBitmaskFilter::Test(const int32 PointIndex) const
+{
+	const bool Result = PCGExCompare::Compare(
+		TypedFilterFactory->Config.Comparison,
+		FlagsReader->Read(PointIndex),
+		MaskReader ? MaskReader->Read(PointIndex) : Bitmask);
+
+	return TypedFilterFactory->Config.bInvertResult ? !Result : Result;
 }
 
 PCGEX_CREATE_FILTER_FACTORY(Bitmask)

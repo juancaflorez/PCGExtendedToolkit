@@ -11,7 +11,7 @@
  * 
  */
 UCLASS(MinimalAPI, meta=(DisplayName="Force Directed"))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExForceDirectedRelax : public UPCGExRelaxClusterOperation
+class UPCGExForceDirectedRelax : public UPCGExRelaxClusterOperation
 {
 	GENERATED_BODY()
 
@@ -48,7 +48,7 @@ public:
 	double ElectrostaticConstant = 1000;
 
 protected:
-	FORCEINLINE void CalculateAttractiveForce(FVector& Force, const FVector& A, const FVector& B) const
+	void CalculateAttractiveForce(FVector& Force, const FVector& A, const FVector& B) const
 	{
 		// Calculate the displacement vector between the nodes
 		FVector Displacement = B - A;
@@ -61,7 +61,7 @@ protected:
 		Force += Displacement * ForceMagnitude;
 	}
 
-	FORCEINLINE void CalculateRepulsiveForce(FVector& Force, const FVector& A, const FVector& B) const
+	void CalculateRepulsiveForce(FVector& Force, const FVector& A, const FVector& B) const
 	{
 		// Calculate the displacement vector between the nodes
 		FVector Displacement = B - A;

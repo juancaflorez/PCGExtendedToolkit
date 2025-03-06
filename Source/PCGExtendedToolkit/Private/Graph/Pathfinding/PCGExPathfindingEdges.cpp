@@ -7,6 +7,7 @@
 #include "Graph/PCGExGraph.h"
 #include "Graph/Pathfinding/GoalPickers/PCGExGoalPickerRandom.h"
 #include "Graph/Pathfinding/Search/PCGExSearchOperation.h"
+#include "Paths/PCGExPaths.h"
 
 #define LOCTEXT_NAMESPACE "PCGExPathfindingEdgesElement"
 #define PCGEX_NAMESPACE PathfindingEdges
@@ -63,6 +64,8 @@ void FPCGExPathfindingEdgesContext::BuildPath(const TSharedPtr<PCGExPathfinding:
 		// TODO : Implement
 	}
 
+	if (!Settings->PathOutputDetails.Validate(MutablePoints)) { return; }
+
 	const TSharedPtr<PCGExData::FPointIO> PathIO = OutputPaths->Emplace_GetRef<UPCGPointData>(ReferenceIO, PCGExData::EIOInit::New);
 	if (!PathIO) { return; }
 
@@ -99,7 +102,7 @@ TArray<FPCGPinProperties> UPCGExPathfindingEdgesSettings::InputPinProperties() c
 TArray<FPCGPinProperties> UPCGExPathfindingEdgesSettings::OutputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties;
-	PCGEX_PIN_POINTS(PCGExGraph::OutputPathsLabel, "Paths output.", Required, {})
+	PCGEX_PIN_POINTS(PCGExPaths::OutputPathsLabel, "Paths output.", Required, {})
 	return PinProperties;
 }
 
@@ -131,7 +134,7 @@ bool FPCGExPathfindingEdgesElement::Boot(FPCGExContext* InContext) const
 	Context->GoalForwardHandler = Settings->GoalForwarding.GetHandler(Context->GoalsDataFacade);
 
 	Context->OutputPaths = MakeShared<PCGExData::FPointIOCollection>(Context);
-	Context->OutputPaths->OutputPin = PCGExGraph::OutputPathsLabel;
+	Context->OutputPaths->OutputPin = PCGExPaths::OutputPathsLabel;
 
 	// Prepare path seed/goal pairs
 
@@ -193,10 +196,10 @@ namespace PCGExPathfindingEdge
 
 		if (Settings->bUseOctreeSearch)
 		{
-			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Node ||
-				Settings->GoalPicking.PickingMethod == EPCGExClusterClosestSearchMode::Node)
+			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Vtx ||
+				Settings->GoalPicking.PickingMethod == EPCGExClusterClosestSearchMode::Vtx)
 			{
-				Cluster->RebuildOctree(EPCGExClusterClosestSearchMode::Node);
+				Cluster->RebuildOctree(EPCGExClusterClosestSearchMode::Vtx);
 			}
 
 			if (Settings->SeedPicking.PickingMethod == EPCGExClusterClosestSearchMode::Edge ||

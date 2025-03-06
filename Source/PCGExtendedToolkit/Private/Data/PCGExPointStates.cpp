@@ -20,7 +20,7 @@ namespace PCGExPointStates
 	{
 	}
 
-	bool FState::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+	bool FState::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 	{
 		if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -72,5 +72,5 @@ namespace PCGExPointStates
 
 UPCGExFactoryData* UPCGExPointStateFactoryProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const
 {
-	return nullptr;
+	return Super::CreateFactory(InContext, InFactory);
 }

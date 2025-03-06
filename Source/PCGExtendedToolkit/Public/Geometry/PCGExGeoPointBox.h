@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "PCGEx.h"
 #include "PCGExMath.h"
+#include "Data/Blending/PCGExBlendModes.h"
 #include "PCGExHelpers.h"
 #include "Data/PCGPointData.h"
 
@@ -22,7 +23,7 @@ enum class EPCGExBoxCheckMode : uint8
 
 namespace PCGExGeo
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FCut
+	struct PCGEXTENDEDTOOLKIT_API FCut
 	{
 		FVector Position = FVector::ZeroVector;
 		FVector Normal = FVector::ZeroVector;
@@ -35,7 +36,7 @@ namespace PCGExGeo
 		}
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FSample
+	struct PCGEXTENDEDTOOLKIT_API FSample
 	{
 		FVector Distances = FVector::ZeroVector;
 		FVector UVW = FVector::ZeroVector;
@@ -53,7 +54,7 @@ namespace PCGExGeo
 		}
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FIntersections
+	struct PCGEXTENDEDTOOLKIT_API FIntersections
 	{
 		TArray<FCut> Cuts;
 		FVector StartPosition = FVector::ZeroVector;
@@ -116,7 +117,7 @@ namespace PCGExGeo
 		}
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FSegmentation
+	class PCGEXTENDEDTOOLKIT_API FSegmentation
 	{
 		mutable FRWLock IntersectionsLock;
 
@@ -147,7 +148,7 @@ namespace PCGExGeo
 			IntersectionsMap.Empty();
 		}
 
-		FORCEINLINE TSharedPtr<FIntersections> Find(const uint64 Key)
+		TSharedPtr<FIntersections> Find(const uint64 Key)
 		{
 			{
 				FReadScopeLock ReadScopeLock(IntersectionsLock);
@@ -175,7 +176,7 @@ namespace PCGExGeo
 		}
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FPointBox
+	struct PCGEXTENDEDTOOLKIT_API FPointBox
 	{
 		FMatrix Matrix;
 		FMatrix InvMatrix;
@@ -207,7 +208,7 @@ namespace PCGExGeo
 #pragma region Position checks
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInside(const FVector& Position) const
+		bool IsInside(const FVector& Position) const
 		{
 			if constexpr (Mode == EPCGExBoxCheckMode::Box) { return BoxExpanded.IsInside(Matrix.InverseTransformPosition(Position)); }
 			else if constexpr (Mode == EPCGExBoxCheckMode::ExpandedBox) { return Box.IsInside(Matrix.InverseTransformPosition(Position)); }
@@ -223,7 +224,7 @@ namespace PCGExGeo
 #define PCGEX_TRANSFORM_LOCALBOUNDS_T const FBox LocalBox = PCGExMath::GetLocalBounds<S>(Point).TransformBy(Point.Transform.ToMatrixNoScale() * InvMatrix);
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool Intersect(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool Intersect(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS
 			if constexpr (Mode == EPCGExBoxCheckMode::Box) { return Box.Intersect(LocalBox); }
@@ -233,7 +234,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInside(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInside(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS
 			if constexpr (Mode == EPCGExBoxCheckMode::Box) { return Box.IsInside(LocalBox); }
@@ -261,7 +262,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrOn(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInsideOrOn(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS
 #if PCGEX_ENGINE_VERSION <= 503
@@ -294,7 +295,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrIntersects(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInsideOrIntersects(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS
 #if PCGEX_ENGINE_VERSION <= 503
@@ -325,7 +326,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool Intersect(const FPCGPoint& Point) const
+		bool Intersect(const FPCGPoint& Point) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS_T
 			if constexpr (Mode == EPCGExBoxCheckMode::Box) { return Box.Intersect(LocalBox); }
@@ -335,7 +336,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInside(const FPCGPoint& Point) const
+		bool IsInside(const FPCGPoint& Point) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS_T
 			if constexpr (Mode == EPCGExBoxCheckMode::Box) { return Box.IsInside(LocalBox); }
@@ -363,7 +364,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrOn(const FPCGPoint& Point) const
+		bool IsInsideOrOn(const FPCGPoint& Point) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS_T
 #if PCGEX_ENGINE_VERSION <= 503
@@ -396,7 +397,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrIntersects(const FPCGPoint& Point) const
+		bool IsInsideOrIntersects(const FPCGPoint& Point) const
 		{
 			PCGEX_TRANSFORM_LOCALBOUNDS_T
 #if PCGEX_ENGINE_VERSION <= 503
@@ -431,7 +432,7 @@ namespace PCGExGeo
 
 #pragma endregion
 
-		FORCEINLINE void Sample(const FVector& Position, FSample& OutSample) const
+		void Sample(const FVector& Position, FSample& OutSample) const
 		{
 			const FVector LocalPosition = Matrix.InverseTransformPosition(Position);
 			OutSample.bIsInside = Box.IsInside(LocalPosition);
@@ -447,7 +448,7 @@ namespace PCGExGeo
 				(FMath::Clamp(FMath::Abs(OutSample.UVW.Z), 0, Extents.Z) / Extents.Z)) / 3);
 		}
 
-		FORCEINLINE void Sample(const FPCGPoint& Point, FSample& OutSample) const
+		void Sample(const FPCGPoint& Point, FSample& OutSample) const
 		{
 			Sample(Point.Transform.GetLocation(), OutSample);
 		}
@@ -560,7 +561,7 @@ namespace PCGExGeo
 
 	PCGEX_OCTREE_SEMANTICS(FPointBox, { return Element->SearchableBounds;}, { return A->Index == B->Index; })
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FPointBoxCloud : public TSharedFromThis<FPointBoxCloud>
+	class PCGEXTENDEDTOOLKIT_API FPointBoxCloud : public TSharedFromThis<FPointBoxCloud>
 	{
 		TUniquePtr<FPointBoxOctree> Octree;
 		TArray<TSharedPtr<FPointBox>> Boxes;
@@ -644,49 +645,49 @@ namespace PCGExGeo
 				if (NearbyBox->_NAME<S, Mode>(Point)){ bResult = true; return false;} return true; }); return bResult;
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool Intersect(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool Intersect(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK(Intersect)
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInside(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInside(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK(IsInside)
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrOn(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInsideOrOn(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK(IsInsideOrOn)
 		}
 
 		template <EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrIntersects(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
+		bool IsInsideOrIntersects(const FPCGPoint& Point, const EPCGExPointBoundsSource BoundsSource) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK(IsInsideOrIntersects)
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool Intersect(const FPCGPoint& Point) const
+		bool Intersect(const FPCGPoint& Point) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK_T(Intersect)
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInside(const FPCGPoint& Point) const
+		bool IsInside(const FPCGPoint& Point) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK_T(IsInside)
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrOn(const FPCGPoint& Point) const
+		bool IsInsideOrOn(const FPCGPoint& Point) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK_T(IsInsideOrOn)
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrIntersects(const FPCGPoint& Point) const
+		bool IsInsideOrIntersects(const FPCGPoint& Point) const
 		{
 			PCGEX_POINT_BOUNDS_CHECK_T(IsInsideOrIntersects)
 		}
@@ -694,21 +695,21 @@ namespace PCGExGeo
 		//
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IntersectCloud(const FPCGPoint& Point) const
+		bool IntersectCloud(const FPCGPoint& Point) const
 		{
 			const FBox PtBox = PCGExMath::GetLocalBounds<S>(Point).TransformBy(Point.Transform.ToMatrixNoScale());
 			return PtBox.Intersect(CloudBounds);
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideCloud(const FPCGPoint& Point) const
+		bool IsInsideCloud(const FPCGPoint& Point) const
 		{
 			const FBox PtBox = PCGExMath::GetLocalBounds<S>(Point).TransformBy(Point.Transform.ToMatrixNoScale());
 			return PtBox.IsInside(CloudBounds);
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrOnCloud(const FPCGPoint& Point) const
+		bool IsInsideOrOnCloud(const FPCGPoint& Point) const
 		{
 			const FBox PtBox = PCGExMath::GetLocalBounds<S>(Point).TransformBy(Point.Transform.ToMatrixNoScale());
 #if PCGEX_ENGINE_VERSION <= 503
@@ -719,7 +720,7 @@ namespace PCGExGeo
 		}
 
 		template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds, EPCGExBoxCheckMode Mode = EPCGExBoxCheckMode::Box>
-		FORCEINLINE bool IsInsideOrIntersectsCloud(const FPCGPoint& Point) const
+		bool IsInsideOrIntersectsCloud(const FPCGPoint& Point) const
 		{
 			const FBox PtBox = PCGExMath::GetLocalBounds<S>(Point).TransformBy(Point.Transform.ToMatrixNoScale());
 #if PCGEX_ENGINE_VERSION <= 503

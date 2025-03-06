@@ -10,6 +10,7 @@
 #include "PCGExSampling.h"
 #include "Data/PCGExBufferHelper.h"
 
+
 #include "PCGExPackActorData.generated.h"
 
 namespace PCGExPackActorData
@@ -20,7 +21,7 @@ namespace PCGExPackActorData
  * 
  */
 UCLASS(Blueprintable, BlueprintType, Abstract, MinimalAPI, DisplayName = "[PCGEx] Custom Actor Data Packer")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCustomActorDataPacker : public UPCGExOperation
+class UPCGExCustomActorDataPacker : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -102,6 +103,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "PCGEx|Inputs")
 	TArray<TObjectPtr<AActor>> InputActors;
+
 	TSet<FSoftObjectPath> RequiredAssetsPaths;
 
 	TSharedPtr<PCGExData::TBufferHelper<PCGExData::EBufferHelperMode::Write>> WriteBuffers;
@@ -547,7 +549,7 @@ public:
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPackActorDataSettings : public UPCGExPointsProcessorSettings
+class UPCGExPackActorDataSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -572,7 +574,6 @@ protected:
 
 public:
 	virtual FName GetMainInputPin() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Actor reference */
@@ -595,14 +596,14 @@ protected:
 	virtual bool IsCacheable() const override { return false; }
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPackActorDataContext final : FPCGExPointsProcessorContext
+struct FPCGExPackActorDataContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExPackActorDataElement;
 	UPCGExCustomActorDataPacker* Packer = nullptr;
 	//TArray<UPCGParamData*> OutputParams;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPackActorDataElement final : public FPCGExPointsProcessorElement
+class FPCGExPackActorDataElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -636,7 +637,7 @@ namespace PCGExPackActorDatas
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		void StartProcessing();
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

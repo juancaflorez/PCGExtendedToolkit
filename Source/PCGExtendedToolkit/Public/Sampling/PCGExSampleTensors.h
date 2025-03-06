@@ -9,6 +9,8 @@
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
 #include "Data/PCGSplineData.h"
+
+
 #include "Misc/PCGExSortPoints.h"
 
 
@@ -19,7 +21,7 @@ MACRO(Success, bool, false)\
 MACRO(Transform, FTransform, FTransform::Identity)
 
 UCLASS(Hidden, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleTensorsSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleTensorsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -39,7 +41,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -84,7 +85,7 @@ public:
 	bool bPruneFailedSamples = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleTensorsContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleTensorsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleTensorsElement;
 
@@ -93,7 +94,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleTensorsContext final : FPCGExPoint
 	virtual void RegisterAssetDependencies() override;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleTensorsElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleTensorsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -126,7 +127,7 @@ namespace PCGExSampleTensors
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 
 		void SamplingFailed(const int32 Index, const FPCGPoint& Point, double InDepth = 0);

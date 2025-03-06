@@ -13,7 +13,7 @@
 #include "PCGExFlatProjection.generated.h"
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFlatProjectionSettings : public UPCGExPointsProcessorSettings
+class UPCGExFlatProjectionSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -28,11 +28,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Whether this is a new projection or an old one*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bRestorePreviousProjection = false;
@@ -54,14 +50,14 @@ public:
 	FPCGExGeo2DProjectionDetails ProjectionDetails;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFlatProjectionContext final : FPCGExPointsProcessorContext
+struct FPCGExFlatProjectionContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExFlatProjectionElement;
 
 	FName CachedTransformAttributeName = NAME_None;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFlatProjectionElement final : public FPCGExPointsProcessorElement
+class FPCGExFlatProjectionElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -96,7 +92,7 @@ namespace PCGExFlatProjection
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

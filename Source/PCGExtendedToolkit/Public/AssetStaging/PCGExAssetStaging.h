@@ -11,6 +11,7 @@
 #include "PCGExFitting.h"
 #include "PCGExStaging.h"
 
+
 #include "PCGExAssetStaging.generated.h"
 
 UENUM()
@@ -21,7 +22,7 @@ enum class EPCGExStagingOutputMode : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAssetStagingSettings : public UPCGExPointsProcessorSettings
+class UPCGExAssetStagingSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -31,7 +32,8 @@ public:
 	PCGEX_NODE_INFOS_CUSTOM_SUBTITLE(
 		AssetStaging, "Asset Staging", "Data staging from PCGEx Asset Collections.",
 		FName(TEXT("[ ") + ( CollectionSource == EPCGExCollectionSource::Asset ? AssetCollection.GetAssetName() : TEXT("Attribute Set to Collection")) + TEXT(" ]")));
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Metadata; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscAdd); }
 #endif
 
 protected:
@@ -41,11 +43,7 @@ protected:
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters which points get staged.", PCGExFactories::PointFilters, false)
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExCollectionSource CollectionSource = EPCGExCollectionSource::Asset;
 
@@ -92,7 +90,7 @@ public:
 	FName WeightAttributeName = "AssetWeight";
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingContext final : FPCGExPointsProcessorContext
+struct FPCGExAssetStagingContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExAssetStagingElement;
 
@@ -103,7 +101,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingContext final : FPCGExPoints
 	TSharedPtr<PCGExStaging::FPickPacker> CollectionPickDatasetPacker;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingElement final : public FPCGExPointsProcessorElement
+class FPCGExAssetStagingElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -157,7 +155,7 @@ namespace PCGExAssetStaging
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

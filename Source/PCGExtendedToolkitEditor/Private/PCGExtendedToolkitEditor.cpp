@@ -5,6 +5,7 @@
 #include "Styling/SlateStyle.h"
 #include "Styling/SlateStyleRegistry.h"
 #include "Interfaces/IPluginManager.h"
+#include "AssetRegistry/AssetData.h"
 #include "EditorStyleSet.h"
 
 #define LOCTEXT_NAMESPACE "FPCGExtendedToolkitEditorModule"
@@ -82,6 +83,7 @@ void FPCGExtendedToolkitEditorModule::StartupModule()
 	PCGEX_ADD_ICON(PCGExCustomActorDataPacker)
 
 	PCGEX_ADD_PIN_EXTRA_ICON(OUT_Filter)
+	PCGEX_ADD_PIN_EXTRA_ICON(OUT_CFilter)
 	PCGEX_ADD_PIN_EXTRA_ICON(IN_Filters)
 
 	PCGEX_ADD_PIN_EXTRA_ICON(OUT_Heuristic)
@@ -114,6 +116,8 @@ void FPCGExtendedToolkitEditorModule::StartupModule()
 
 	PCGEX_ADD_PIN_EXTRA_ICON(OUT_Shape)
 	PCGEX_ADD_PIN_EXTRA_ICON(OUT_Tensor)
+
+	PCGEX_ADD_PIN_EXTRA_ICON(OUT_Picker)
 
 	FSlateStyleRegistry::RegisterSlateStyle(*Style.Get());
 }

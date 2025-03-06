@@ -14,7 +14,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorSplineFlowConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorSplineFlowConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -40,7 +40,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorSplineFlowConfig : public FPCGExTe
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSplineFlow : public UPCGExTensorOperation
+class UPCGExTensorSplineFlow : public UPCGExTensorOperation
 {
 	GENERATED_BODY()
 
@@ -50,12 +50,12 @@ public:
 
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSplineFlowFactory : public UPCGExTensorSplineFactoryData
+class UPCGExTensorSplineFlowFactory : public UPCGExTensorSplineFactoryData
 {
 	GENERATED_BODY()
 
@@ -66,7 +66,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorSplineFlowSettings : public UPCGExTensorSplineFactoryProviderSettings
+class UPCGExCreateTensorSplineFlowSettings : public UPCGExTensorSplineFactoryProviderSettings
 {
 	GENERATED_BODY()
 

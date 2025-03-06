@@ -14,7 +14,7 @@
 #include "PCGExSortPoints.generated.h"
 
 UCLASS(Abstract, MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSortPointsBaseSettings : public UPCGExPointsProcessorSettings
+class UPCGExSortPointsBaseSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -23,11 +23,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Controls the order in which points will be ordered. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	EPCGExSortDirection SortDirection = EPCGExSortDirection::Ascending;
@@ -39,7 +35,7 @@ private:
 };
 
 UCLASS(MinimalAPI, BlueprintType, Hidden, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSortPointsSettings : public UPCGExSortPointsBaseSettings
+class UPCGExSortPointsSettings : public UPCGExSortPointsBaseSettings
 {
 	GENERATED_BODY()
 
@@ -47,7 +43,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(SortPointsStatic, "Sort Points (Static)", "Sort the source points according to specific rules.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Generic; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 	//~Begin UObject interface
@@ -67,7 +64,7 @@ private:
 	friend class FPCGExSortPointsBaseElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSortPointsBaseElement final : public FPCGExPointsProcessorElement
+class FPCGExSortPointsBaseElement final : public FPCGExPointsProcessorElement
 {
 protected:
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
@@ -90,7 +87,7 @@ namespace PCGExSortPoints
 		}
 
 		virtual void RegisterBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader) override;
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 }

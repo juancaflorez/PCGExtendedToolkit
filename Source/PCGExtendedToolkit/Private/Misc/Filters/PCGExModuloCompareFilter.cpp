@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExModuloCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FModuloComparisonFilter>(this);
+	return MakeShared<PCGExPointFilter::FModuloComparisonFilter>(this);
 }
 
 bool UPCGExModuloCompareFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -24,7 +24,7 @@ bool UPCGExModuloCompareFilterFactory::RegisterConsumableAttributesWithData(FPCG
 	return true;
 }
 
-bool PCGExPointsFilter::FModuloComparisonFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FModuloComparisonFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -32,7 +32,7 @@ bool PCGExPointsFilter::FModuloComparisonFilter::Init(FPCGExContext* InContext, 
 
 	if (!OperandA)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -42,7 +42,7 @@ bool PCGExPointsFilter::FModuloComparisonFilter::Init(FPCGExContext* InContext, 
 
 		if (!OperandB)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand B attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandB.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand B", TypedFilterFactory->Config.OperandB)
 			return false;
 		}
 	}
@@ -53,12 +53,21 @@ bool PCGExPointsFilter::FModuloComparisonFilter::Init(FPCGExContext* InContext, 
 
 		if (!OperandC)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand C attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandC.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand C", TypedFilterFactory->Config.OperandC)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FModuloComparisonFilter::Test(const int32 PointIndex) const
+{
+	const double A = OperandA->Read(PointIndex);
+	const double B = OperandB ? OperandB->Read(PointIndex) : TypedFilterFactory->Config.OperandBConstant;
+	const double C = OperandC ? OperandC->Read(PointIndex) : TypedFilterFactory->Config.OperandCConstant;
+	if (A == 0 || B == 0) { return TypedFilterFactory->Config.ZeroResult; }
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, FMath::Fmod(A, B), C, TypedFilterFactory->Config.Tolerance);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(ModuloCompare)

@@ -40,6 +40,33 @@ void FPCGExScaleToFitDetails::Process(const FPCGPoint& InPoint, const FBox& InBo
 	}
 }
 
+void FPCGExScaleToFitDetails::ScaleToFitAxis(const EPCGExScaleToFit Fit, const int32 Axis, const FVector& InScale, const FVector& InPtSize, const FVector& InStSize, const FVector& MinMaxFit, FVector& OutScale)
+{
+	const double Scale = InScale[Axis];
+	double FinalScale = Scale;
+
+	switch (Fit)
+	{
+	default:
+	case EPCGExScaleToFit::None:
+		break;
+	case EPCGExScaleToFit::Fill:
+		FinalScale = ((InPtSize[Axis] * Scale) / InStSize[Axis]);
+		break;
+	case EPCGExScaleToFit::Min:
+		FinalScale = MinMaxFit[0];
+		break;
+	case EPCGExScaleToFit::Max:
+		FinalScale = MinMaxFit[1];
+		break;
+	case EPCGExScaleToFit::Avg:
+		FinalScale = MinMaxFit[2];
+		break;
+	}
+
+	OutScale[Axis] = FinalScale;
+}
+
 bool FPCGExSingleJustifyDetails::Init(FPCGExContext* InContext, const TSharedRef<PCGExData::FFacade>& InDataFacade)
 {
 	if (From == EPCGExJustifyFrom::Custom && FromInput == EPCGExInputValueType::Attribute)
@@ -240,63 +267,60 @@ bool FPCGExJustificationDetails::Init(FPCGExContext* InContext, const TSharedRef
 void FPCGExFittingVariationsDetails::Init(const int InSeed)
 {
 	Seed = InSeed;
-	bEnabledBefore = (Offset == EPCGExVariationMode::Before || Rotation != EPCGExVariationMode::Before || Scale != EPCGExVariationMode::Before);
-	bEnabledAfter = (Offset == EPCGExVariationMode::After || Rotation != EPCGExVariationMode::After || Scale != EPCGExVariationMode::After);
+	bEnabledBefore = (Offset == EPCGExVariationMode::Before || Rotation == EPCGExVariationMode::Before || Scale == EPCGExVariationMode::Before);
+	bEnabledAfter = (Offset == EPCGExVariationMode::After || Rotation == EPCGExVariationMode::After || Scale == EPCGExVariationMode::After);
 }
 
 void FPCGExFittingVariationsDetails::Apply(FPCGPoint& InPoint, const FPCGExFittingVariations& Variations, const EPCGExVariationMode& Step) const
 {
 	FRandomStream RandomSource(PCGExRandom::ComputeSeed(Seed, InPoint.Seed));
 
-	FVector RandomScale = FVector::OneVector;
-	FVector RandomOffset = FVector::ZeroVector;
-	FQuat RandomRotation = FQuat::Identity;
 	const FTransform SourceTransform = InPoint.Transform;
+	FTransform FinalTransform = SourceTransform;
 
 	if (Offset == Step)
 	{
-		const float OffsetX = RandomSource.FRandRange(Variations.OffsetMin.X, Variations.OffsetMax.X);
-		const float OffsetY = RandomSource.FRandRange(Variations.OffsetMin.Y, Variations.OffsetMax.Y);
-		const float OffsetZ = RandomSource.FRandRange(Variations.OffsetMin.Z, Variations.OffsetMax.Z);
-		RandomOffset = FVector(OffsetX, OffsetY, OffsetZ);
+		const FVector RandomOffset = FVector(
+			RandomSource.FRandRange(Variations.OffsetMin.X, Variations.OffsetMax.X),
+			RandomSource.FRandRange(Variations.OffsetMin.Y, Variations.OffsetMax.Y),
+			RandomSource.FRandRange(Variations.OffsetMin.Z, Variations.OffsetMax.Z));
+
+		if (Variations.bAbsoluteOffset)
+		{
+			FinalTransform.SetLocation(SourceTransform.GetLocation() + RandomOffset);
+		}
+		else
+		{
+			const FTransform RotatedTransform(SourceTransform.GetRotation());
+			FinalTransform.SetLocation(SourceTransform.GetLocation() + RotatedTransform.TransformPosition(RandomOffset));
+		}
 	}
 
 	if (Rotation == Step)
 	{
-		const float RotationX = RandomSource.FRandRange(Variations.RotationMin.Pitch, Variations.RotationMax.Pitch);
-		const float RotationY = RandomSource.FRandRange(Variations.RotationMin.Yaw, Variations.RotationMax.Yaw);
-		const float RotationZ = RandomSource.FRandRange(Variations.RotationMin.Roll, Variations.RotationMax.Roll);
-		RandomRotation = FQuat(FRotator(RotationX, RotationY, RotationZ).Quaternion());
+		FinalTransform.SetRotation(
+			SourceTransform.GetRotation() *
+			FRotator(
+				RandomSource.FRandRange(Variations.RotationMin.Pitch, Variations.RotationMax.Pitch),
+				RandomSource.FRandRange(Variations.RotationMin.Yaw, Variations.RotationMax.Yaw),
+				RandomSource.FRandRange(Variations.RotationMin.Roll, Variations.RotationMax.Roll)).Quaternion());
 	}
 
 	if (Scale == Step)
 	{
 		if (Variations.bUniformScale)
 		{
-			RandomScale = FVector(RandomSource.FRandRange(Variations.ScaleMin.X, Variations.ScaleMax.X));
+			FinalTransform.SetScale3D(SourceTransform.GetScale3D() * FVector(RandomSource.FRandRange(Variations.ScaleMin.X, Variations.ScaleMax.X)));
 		}
 		else
 		{
-			RandomScale.X = RandomSource.FRandRange(Variations.ScaleMin.X, Variations.ScaleMax.X);
-			RandomScale.Y = RandomSource.FRandRange(Variations.ScaleMin.Y, Variations.ScaleMax.Y);
-			RandomScale.Z = RandomSource.FRandRange(Variations.ScaleMin.Z, Variations.ScaleMax.Z);
+			FinalTransform.SetScale3D(
+				SourceTransform.GetScale3D() * FVector(
+					RandomSource.FRandRange(Variations.ScaleMin.X, Variations.ScaleMax.X),
+					RandomSource.FRandRange(Variations.ScaleMin.Y, Variations.ScaleMax.Y),
+					RandomSource.FRandRange(Variations.ScaleMin.Z, Variations.ScaleMax.Z)));
 		}
 	}
-
-	FTransform FinalTransform = SourceTransform;
-
-	if (Variations.bAbsoluteOffset)
-	{
-		FinalTransform.SetLocation(SourceTransform.GetLocation() + RandomOffset);
-	}
-	else
-	{
-		const FTransform RotatedTransform(SourceTransform.GetRotation());
-		FinalTransform.SetLocation(SourceTransform.GetLocation() + RotatedTransform.TransformPosition(RandomOffset));
-	}
-
-	FinalTransform.SetRotation(SourceTransform.GetRotation() * RandomRotation);
-	FinalTransform.SetScale3D(SourceTransform.GetScale3D() * RandomScale);
 
 	InPoint.Transform = FinalTransform;
 }

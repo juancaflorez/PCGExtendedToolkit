@@ -20,7 +20,7 @@ enum class EPCGExPointReverseMethod : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSwapAttributePairDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExSwapAttributePairDetails
 {
 	GENERATED_BODY()
 
@@ -53,7 +53,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSwapAttributePairDetails
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExReversePointOrderSettings : public UPCGExPointsProcessorSettings
+class UPCGExReversePointOrderSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -61,7 +61,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(ReversePointOrder, "Reverse Point Order", "Simply reverse the order of points. Very useful with paths.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Generic; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
@@ -69,11 +70,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	EPCGExPointReverseMethod Method = EPCGExPointReverseMethod::None;
@@ -111,12 +108,12 @@ public:
 	FString IsNotReversedTag = TEXT("NotReversed");
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExReversePointOrderContext final : FPCGExPointsProcessorContext
+struct FPCGExReversePointOrderContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExReversePointOrderElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExReversePointOrderElement final : public FPCGExPointsProcessorElement
+class FPCGExReversePointOrderElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -152,7 +149,7 @@ namespace PCGExReversePointOrder
 
 		virtual void RegisterBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader) override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};

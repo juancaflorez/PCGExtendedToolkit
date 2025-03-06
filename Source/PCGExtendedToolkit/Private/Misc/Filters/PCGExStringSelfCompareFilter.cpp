@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExStringSelfCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FStringSelfCompareFilter>(this);
+	return MakeShared<PCGExPointFilter::FStringSelfCompareFilter>(this);
 }
 
 void UPCGExStringSelfCompareFilterFactory::RegisterBuffersDependencies(FPCGExContext* InContext, PCGExData::FFacadePreloader& FacadePreloader) const
@@ -28,7 +28,7 @@ bool UPCGExStringSelfCompareFilterFactory::RegisterConsumableAttributesWithData(
 	return true;
 }
 
-bool PCGExPointsFilter::FStringSelfCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FStringSelfCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -40,7 +40,7 @@ bool PCGExPointsFilter::FStringSelfCompareFilter::Init(FPCGExContext* InContext,
 	OperandA = MakeShared<PCGEx::TAttributeBroadcaster<FString>>();
 	if (!OperandA->Prepare(TypedFilterFactory->Config.OperandA, PointDataFacade->Source))
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA)));
+		PCGEX_LOG_INVALID_ATTR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -50,12 +50,24 @@ bool PCGExPointsFilter::FStringSelfCompareFilter::Init(FPCGExContext* InContext,
 
 		if (!Index)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Index attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.IndexAttribute.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Index", TypedFilterFactory->Config.IndexAttribute)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FStringSelfCompareFilter::Test(const int32 PointIndex) const
+{
+	const int32 IndexValue = Index ? Index->Read(PointIndex) : TypedFilterFactory->Config.IndexConstant;
+	const int32 TargetIndex = PCGExMath::SanitizeIndex(bOffset ? PointIndex + IndexValue : IndexValue, MaxIndex, TypedFilterFactory->Config.IndexSafety);
+
+	if (TargetIndex == -1) { return false; }
+
+	const FString A = OperandA->SoftGet(PointIndex, PointDataFacade->Source->GetInPoint(PointIndex), TEXT(""));
+	const FString B = OperandA->SoftGet(TargetIndex, PointDataFacade->Source->GetInPoint(TargetIndex), TEXT(""));
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(StringSelfCompare)

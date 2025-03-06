@@ -23,7 +23,7 @@ namespace PCGExCluster
  * 
  */
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathProcessorSettings : public UPCGExPointsProcessorSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExPathProcessorSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -37,9 +37,8 @@ public:
 	//~End UPCGSettings
 
 	//~Begin UPCGExPointsProcessorSettings
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	virtual FName GetMainInputPin() const override { return PCGExGraph::SourcePathsLabel; }
-	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputPathsLabel; }
+	virtual FName GetMainInputPin() const override { return PCGExPaths::SourcePathsLabel; }
+	virtual FName GetMainOutputPin() const override { return PCGExPaths::OutputPathsLabel; }
 	virtual FString GetPointFilterTooltip() const override { return TEXT("Path points processing filters"); }
 
 	//~End UPCGExPointsProcessorSettings
@@ -56,7 +55,7 @@ public:
 	bool bOmitInvalidPathsOutputs = true;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathProcessorContext : FPCGExPointsProcessorContext
+struct PCGEXTENDEDTOOLKIT_API FPCGExPathProcessorContext : FPCGExPointsProcessorContext
 {
 	friend class FPCGExPathProcessorElement;
 
@@ -64,7 +63,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathProcessorContext : FPCGExPointsProce
 	TSharedPtr<PCGExData::FPointIOCollection> MainPaths;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathProcessorElement : public FPCGExPointsProcessorElement
+class PCGEXTENDEDTOOLKIT_API FPCGExPathProcessorElement : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(

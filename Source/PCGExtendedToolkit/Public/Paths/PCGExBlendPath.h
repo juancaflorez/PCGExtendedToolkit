@@ -24,12 +24,11 @@ enum class EPCGExPathBlendMode : uint8
 	Switch = 1 UMETA(DisplayName = "Switch", ToolTip="Switch between pruning/non-pruning based on filters"),
 };
 
-
 /**
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBlendPathSettings : public UPCGExPathProcessorSettings
+class UPCGExBlendPathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -45,11 +44,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExBlendOver BlendOver = EPCGExBlendOver::Distance;
 
@@ -77,12 +72,12 @@ public:
 	bool bBlendLastPoint = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBlendPathContext final : FPCGExPathProcessorContext
+struct FPCGExBlendPathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExBlendPathElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBlendPathElement final : public FPCGExPathProcessorElement
+class FPCGExBlendPathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -119,7 +114,7 @@ namespace PCGExBlendPath
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

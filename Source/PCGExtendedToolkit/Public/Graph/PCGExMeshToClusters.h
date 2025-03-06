@@ -23,7 +23,7 @@ enum class EPCGExMeshAttributeHandling : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMeshToClustersSettings : public UPCGExPointsProcessorSettings
+class UPCGExMeshToClustersSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -44,7 +44,6 @@ public:
 	virtual FName GetMainInputPin() const override { return PCGEx::SourceTargetsLabel; }
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
 	virtual bool GetMainAcceptMultipleData() const override { return false; }
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Triangulation type */
@@ -87,7 +86,7 @@ private:
 	friend class FPCGExMeshToClustersElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshToClustersContext final : FPCGExPointsProcessorContext
+struct FPCGExMeshToClustersContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExMeshToClustersElement;
 
@@ -106,7 +105,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshToClustersContext final : FPCGExPoin
 };
 
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshToClustersElement final : public FPCGExPointsProcessorElement
+class FPCGExMeshToClustersElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -123,7 +122,7 @@ protected:
 
 namespace PCGExMeshToCluster
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FExtractMeshAndBuildGraph final : public PCGExMT::FPCGExIndexedTask
+	class FExtractMeshAndBuildGraph final : public PCGExMT::FPCGExIndexedTask
 	{
 	public:
 		FExtractMeshAndBuildGraph(

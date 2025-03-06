@@ -16,7 +16,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBuildVoronoiGraph2DSettings : public UPCGExPointsProcessorSettings
+class UPCGExBuildVoronoiGraph2DSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -35,7 +35,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Method used to find Voronoi cell location */
@@ -68,7 +67,7 @@ public:
 
 	/** Graph & Edges output properties. Only available if bPruneOutsideBounds as it otherwise generates a complete graph. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Cluster Output Settings"))
-	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails();
+	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails(EPCGExMinimalAxis::X);
 
 	/** Whether to output updated sites */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Additional Outputs", meta = (PCG_Overridable))
@@ -86,15 +85,14 @@ private:
 	friend class FPCGExBuildVoronoiGraph2DElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildVoronoiGraph2DContext final : FPCGExPointsProcessorContext
+struct FPCGExBuildVoronoiGraph2DContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBuildVoronoiGraph2DElement;
 
 	TSharedPtr<PCGExData::FPointIOCollection> SitesOutput;
 };
 
-
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildVoronoiGraph2DElement final : public FPCGExPointsProcessorElement
+class FPCGExBuildVoronoiGraph2DElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -137,7 +135,7 @@ namespace PCGExBuildVoronoi2D
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;

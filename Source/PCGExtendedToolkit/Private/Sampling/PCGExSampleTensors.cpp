@@ -2,6 +2,8 @@
 // Released under the MIT license https://opensource.org/license/MIT/
 
 #include "Sampling/PCGExSampleTensors.h"
+
+
 #include "Transform/Tensors/PCGExTensor.h"
 
 #define PCGEX_FOREACH_FIELD_TENSOR(MACRO)\
@@ -23,8 +25,6 @@ TArray<FPCGPinProperties> UPCGExSampleTensorsSettings::InputPinProperties() cons
 	PCGEX_PIN_FACTORIES(PCGExTensor::SourceTensorsLabel, "Tensors to sample", Required, {})
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExSampleTensorsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 void FPCGExSampleTensorsContext::RegisterAssetDependencies()
 {
@@ -86,13 +86,15 @@ namespace PCGExSampleTensors
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSampleTensors::Process);
 
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		SampleState.SetNumUninitialized(PointDataFacade->GetNum());
 

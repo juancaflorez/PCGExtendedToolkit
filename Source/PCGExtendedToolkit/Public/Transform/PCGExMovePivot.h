@@ -17,7 +17,7 @@ class FPCGExComputeIOBounds;
 
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMovePivotSettings : public UPCGExPointsProcessorSettings
+class UPCGExMovePivotSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -32,11 +32,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/**  */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	FPCGExUVW UVW;
@@ -45,12 +41,12 @@ private:
 	friend class FPCGExMovePivotElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMovePivotContext final : FPCGExPointsProcessorContext
+struct FPCGExMovePivotContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExMovePivotElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMovePivotElement final : public FPCGExPointsProcessorElement
+class FPCGExMovePivotElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -76,7 +72,7 @@ namespace PCGExMovePivot
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 	};
 }

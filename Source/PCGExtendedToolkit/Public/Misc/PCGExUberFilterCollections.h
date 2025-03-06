@@ -22,7 +22,7 @@ enum class EPCGExUberFilterCollectionsMode : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExUberFilterCollectionsSettings : public UPCGExPointsProcessorSettings
+class UPCGExUberFilterCollectionsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -36,7 +36,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(UberFilterCollections, "Uber Filter (Collection)", "Filter entire collections based on multiple rules & conditions.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorFilterHub); }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Filter; }
 #endif
 
 protected:
@@ -47,7 +48,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual FName GetMainOutputPin() const override;
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceFiltersLabel, "Filters", PCGExFactories::PointFilters, true)
 	//~End UPCGExPointsProcessorSettings
 
@@ -83,9 +83,11 @@ private:
 	friend class FPCGExUberFilterCollectionsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterCollectionsContext final : FPCGExPointsProcessorContext
+struct FPCGExUberFilterCollectionsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExUberFilterCollectionsElement;
+
+	bool bHasOnlyCollectionFilters = false;
 
 	TSharedPtr<PCGExData::FPointIOCollection> Inside;
 	TSharedPtr<PCGExData::FPointIOCollection> Outside;
@@ -95,7 +97,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterCollectionsContext final : FPC
 	int32 NumPairs = 0;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExUberFilterCollectionsElement final : public FPCGExPointsProcessorElement
+class FPCGExUberFilterCollectionsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -126,7 +128,7 @@ namespace PCGExUberFilterCollections
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void Output() override;

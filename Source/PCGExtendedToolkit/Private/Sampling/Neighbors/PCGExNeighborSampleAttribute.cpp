@@ -55,9 +55,32 @@ void UPCGExNeighborSampleAttribute::PrepareForCluster(FPCGExContext* InContext, 
 	Blender->bBlendProperties = false;
 	Blender->PrepareForData(InVtxDataFacade, GetSourceDataFacade(), PCGExData::ESource::In);
 
-	SourceAttributes.SetOutputTargetNames(GetSourceDataFacade());
-	
+	SourceAttributes.SetOutputTargetNames(InVtxDataFacade);
+
 	bIsValidOperation = true;
+}
+
+void UPCGExNeighborSampleAttribute::PrepareNode(const PCGExCluster::FNode& TargetNode) const
+{
+	Blender->PrepareForBlending(TargetNode.PointIndex);
+}
+
+void UPCGExNeighborSampleAttribute::SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight)
+{
+	const int32 PrimaryIndex = TargetNode.PointIndex;
+	Blender->Blend(PrimaryIndex, Cluster->GetNode(Lk)->PointIndex, PrimaryIndex, Weight);
+}
+
+void UPCGExNeighborSampleAttribute::SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight)
+{
+	const int32 PrimaryIndex = TargetNode.PointIndex;
+	Blender->Blend(PrimaryIndex, Cluster->GetEdge(Lk)->PointIndex, PrimaryIndex, Weight);
+}
+
+void UPCGExNeighborSampleAttribute::FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight)
+{
+	const int32 PrimaryIndex = TargetNode.PointIndex;
+	Blender->CompleteBlending(PrimaryIndex, Count, TotalWeight);
 }
 
 void UPCGExNeighborSampleAttribute::CompleteOperation()
@@ -124,7 +147,7 @@ void UPCGExNeighborSamplerFactoryAttribute::RegisterVtxBuffersDependencies(FPCGE
 			const PCGEx::FAttributeIdentity* Identity = Infos->Find(AttrName);
 			if (!Identity)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Missing attribute: \"{0}\"."), FText::FromName(AttrName)));
+				PCGEX_LOG_INVALID_ATTR_C(InContext, "", AttrName)
 				return;
 			}
 			FacadePreloader.Register(InContext, *Identity);

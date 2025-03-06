@@ -8,6 +8,8 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExAttributeHasher.h"
 #include "Data/PCGExFilterGroup.h"
+
+
 #include "PCGExDiscardSame.generated.h"
 
 UENUM()
@@ -24,7 +26,7 @@ namespace PCGExDiscardSame
 }
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExDiscardSameSettings : public UPCGExPointsProcessorSettings
+class UPCGExDiscardSameSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -92,12 +94,12 @@ private:
 	friend class FPCGExDiscardSameElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDiscardSameContext final : FPCGExPointsProcessorContext
+struct FPCGExDiscardSameContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExDiscardSameElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDiscardSameElement final : public FPCGExPointsProcessorElement
+class FPCGExDiscardSameElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -127,7 +129,7 @@ namespace PCGExDiscardSame
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 }

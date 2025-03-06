@@ -7,6 +7,7 @@
 
 #include "PCGEx.h"
 #include "PCGExCompare.h"
+#include "PCGSettings.h"
 
 #include "PCGExIterations.generated.h"
 
@@ -21,7 +22,7 @@ enum class EPCGExIterationDataType : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExIterationsSettings : public UPCGSettings
+class UPCGExIterationsSettings : public UPCGSettings
 {
 	GENERATED_BODY()
 
@@ -55,7 +56,7 @@ protected:
 	bool bOutputUtils = false;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExIterationsElement final : public IPCGElement
+class FPCGExIterationsElement final : public IPCGElement
 {
 public:
 	virtual FPCGContext* Initialize(const FPCGDataCollection& InputData, TWeakObjectPtr<UPCGComponent> SourceComponent, const UPCGNode* Node) override;

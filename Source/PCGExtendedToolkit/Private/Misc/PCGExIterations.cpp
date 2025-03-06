@@ -3,6 +3,7 @@
 
 #include "Misc/PCGExIterations.h"
 
+#include "PCGComponent.h"
 #include "PCGGraph.h"
 #include "PCGPin.h"
 #include "Data/PCGSplineData.h"
@@ -85,7 +86,7 @@ bool FPCGExIterationsElement::ExecuteInternal(FPCGContext* InContext) const
 
 			Metadata->FindOrCreateAttribute<int32>(FName("Iteration"), i);
 			Metadata->FindOrCreateAttribute<int32>(FName("NumIterations"), NumIterations);
-			const double Progress = static_cast<double>(i) / static_cast<double>(NumIterations);
+			const double Progress = static_cast<double>(i) / static_cast<double>(NumIterations - 1);
 			Metadata->FindOrCreateAttribute<double>(FName("OneMinusProgress"), 1 - Progress);
 			Metadata->FindOrCreateAttribute<double>(FName("Progress"), Progress);
 

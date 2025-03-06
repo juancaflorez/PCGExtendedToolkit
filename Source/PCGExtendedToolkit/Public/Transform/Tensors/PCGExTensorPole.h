@@ -13,7 +13,7 @@
 #include "PCGExTensorPole.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorPoleConfig : public FPCGExTensorConfigBase
+struct FPCGExTensorPoleConfig : public FPCGExTensorConfigBase
 {
 	GENERATED_BODY()
 
@@ -27,7 +27,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorPoleConfig : public FPCGExTensorCo
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorPole : public UPCGExTensorPointOperation
+class UPCGExTensorPole : public UPCGExTensorPointOperation
 {
 	GENERATED_BODY()
 
@@ -35,12 +35,12 @@ public:
 	FPCGExTensorPoleConfig Config;
 	virtual bool Init(FPCGExContext* InContext, const UPCGExTensorFactoryData* InFactory) override;
 
-	virtual PCGExTensor::FTensorSample Sample(const FTransform& InProbe) const override;
+	virtual PCGExTensor::FTensorSample Sample(int32 InSeedIndex, const FTransform& InProbe) const override;
 };
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorPoleFactory : public UPCGExTensorPointFactoryData
+class UPCGExTensorPoleFactory : public UPCGExTensorPointFactoryData
 {
 	GENERATED_BODY()
 
@@ -55,7 +55,7 @@ protected:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Tensors|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExCreateTensorPoleSettings : public UPCGExTensorPointFactoryProviderSettings
+class UPCGExCreateTensorPoleSettings : public UPCGExTensorPointFactoryProviderSettings
 {
 	GENERATED_BODY()
 

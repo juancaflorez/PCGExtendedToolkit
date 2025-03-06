@@ -9,6 +9,7 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/Blending/PCGExDataBlending.h"
 
+
 #include "PCGExShiftPath.generated.h"
 
 UENUM()
@@ -32,7 +33,7 @@ enum class EPCGExShiftPathMode : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExShiftPathSettings : public UPCGExPathProcessorSettings
+class UPCGExShiftPathSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -57,7 +58,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(InputMode == EPCGExShiftPathMode::Filter ? PCGExPaths::SourceShiftFilters : NAME_None, "Filters used to find the shift starting point.", PCGExFactories::PointFilters, InputMode == EPCGExShiftPathMode::Filter)
 	//~End UPCGExPointsProcessorSettings
 
@@ -90,13 +90,13 @@ public:
 	bool bReverseShift = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShiftPathContext final : FPCGExPathProcessorContext
+struct FPCGExShiftPathContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExShiftPathElement;
 	FPCGExBlendingDetails BlendingSettings;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExShiftPathElement final : public FPCGExPathProcessorElement
+class FPCGExShiftPathElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -124,7 +124,7 @@ namespace PCGExShiftPath
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};

@@ -15,6 +15,16 @@ void UPCGExEdgeEndpointsCompareStrFilterFactory::RegisterBuffersDependencies(FPC
 	FacadePreloader.Register<FString>(InContext, Config.Attribute);
 }
 
+bool UPCGExEdgeEndpointsCompareStrFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
+{
+	if (!Super::RegisterConsumableAttributesWithData(InContext, InData)) { return false; }
+
+	FName Consumable = NAME_None;
+	PCGEX_CONSUMABLE_SELECTOR(Config.Attribute, Consumable)
+
+	return true;
+}
+
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExEdgeEndpointsCompareStrFilterFactory::CreateFilter() const
 {
 	return MakeShared<PCGExEdgeEndpointsCompareStr::FNeighborsCountFilter>(this);
@@ -40,6 +50,11 @@ namespace PCGExEdgeEndpointsCompareStr
 	{
 		const bool bResult = PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, StringBuffer->Read(Edge.Start), StringBuffer->Read(Edge.End));
 		return TypedFilterFactory->Config.bInvert ? !bResult : bResult;
+	}
+
+	FNeighborsCountFilter::~FNeighborsCountFilter()
+	{
+		TypedFilterFactory = nullptr;
 	}
 }
 

@@ -10,6 +10,8 @@
 #include "Helpers/PCGHelpers.h"
 #include "TextureResource.h"
 #include "PCGExSubSystem.h"
+
+
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 
@@ -34,8 +36,6 @@ TArray<FPCGPinProperties> UPCGExGetTextureDataSettings::OutputPinProperties() co
 	if (SourceType == EPCGExGetTexturePathType::TexturePath || bBuildTextureData) { PCGEX_PIN_TEXTURES(PCGExTexture::OutputTextureDataLabel, "Texture data.", Required, {}) }
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExGetTextureDataSettings::GetMainOutputInitMode() const { return bCleanupConsumableAttributes ? PCGExData::EIOInit::Duplicate : PCGExData::EIOInit::Forward; }
 
 PCGEX_INITIALIZE_ELEMENT(GetTextureData)
 
@@ -274,7 +274,7 @@ namespace PCGExGetTextureData
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExGetTextureData::Process);
 
@@ -282,6 +282,8 @@ namespace PCGExGetTextureData
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, Settings->bCleanupConsumableAttributes ? PCGExData::EIOInit::Duplicate : PCGExData::EIOInit::Forward)
 
 		if (Settings->SourceType == EPCGExGetTexturePathType::MaterialPath)
 		{
@@ -309,7 +311,7 @@ namespace PCGExGetTextureData
 
 		if (!PathGetter)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("Asset Path attribute : \"{0}\" does not exists."), FText::FromName(Settings->SourceAttributeName)));
+			PCGEX_LOG_INVALID_ATTR_C(Context, "Asset Path", Settings->SourceAttributeName)
 			return false;
 		}
 

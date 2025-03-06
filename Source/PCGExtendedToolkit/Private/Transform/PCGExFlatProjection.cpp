@@ -7,8 +7,6 @@
 #define LOCTEXT_NAMESPACE "PCGExFlatProjectionElement"
 #define PCGEX_NAMESPACE FlatProjection
 
-PCGExData::EIOInit UPCGExFlatProjectionSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(FlatProjection)
 
 bool FPCGExFlatProjectionElement::Boot(FPCGExContext* InContext) const
@@ -71,13 +69,15 @@ bool FPCGExFlatProjectionElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExFlatProjection
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExFlatProjection::Process);
 
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		bWriteAttribute = Settings->bSaveAttributeForRestore;
 		bInverseExistingProjection = Settings->bRestorePreviousProjection;

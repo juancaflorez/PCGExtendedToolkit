@@ -25,7 +25,7 @@ enum class EPCGExProbeTargetMode : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExProbeConfigIndex : public FPCGExProbeConfigBase
+struct FPCGExProbeConfigIndex : public FPCGExProbeConfigBase
 {
 	GENERATED_BODY()
 
@@ -42,7 +42,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExProbeConfigIndex : public FPCGExProbeCon
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExIndexSafety IndexSafety = EPCGExIndexSafety::Ignore;
 
-	
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExInputValueType IndexInput = EPCGExInputValueType::Constant;
 
@@ -57,14 +57,15 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExProbeConfigIndex : public FPCGExProbeCon
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Index")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExProbeIndex : public UPCGExProbeOperation
+class UPCGExProbeIndex : public UPCGExProbeOperation
 {
 	GENERATED_BODY()
 
 public:
 	virtual bool RequiresOctree() override;
 	virtual bool PrepareForPoints(const TSharedPtr<PCGExData::FPointIO>& InPointIO) override;
-	FORCEINLINE virtual void ProcessNode(const int32 Index, const FPCGPoint& Point, TSet<FInt32Vector>* Coincidence, const FVector& ST, TSet<uint64>* OutEdges, const TArray<int8>& AcceptConnections) override
+
+	virtual void ProcessNode(const int32 Index, const FPCGPoint& Point, TSet<FInt32Vector>* Coincidence, const FVector& ST, TSet<uint64>* OutEdges, const TArray<int8>& AcceptConnections) override
 	{
 		TryCreateEdge(Index, OutEdges, AcceptConnections);
 	}
@@ -88,7 +89,7 @@ protected:
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExProbeFactoryIndex : public UPCGExProbeFactoryData
+class UPCGExProbeFactoryIndex : public UPCGExProbeFactoryData
 {
 	GENERATED_BODY()
 
@@ -100,7 +101,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExProbeIndexProviderSettings : public UPCGExProbeFactoryProviderSettings
+class UPCGExProbeIndexProviderSettings : public UPCGExProbeFactoryProviderSettings
 {
 	GENERATED_BODY()
 

@@ -4,13 +4,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Modules/ModuleInterface.h"
+#include "Styling/SlateStyle.h"
 
 class FPCGExtendedToolkitEditorModule : public IModuleInterface
 {
 public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
-	
+
 protected:
 	TSharedPtr<FSlateStyleSet> Style;
 };

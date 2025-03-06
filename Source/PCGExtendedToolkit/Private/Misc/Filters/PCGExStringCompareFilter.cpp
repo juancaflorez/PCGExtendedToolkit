@@ -9,7 +9,7 @@
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExStringCompareFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FStringCompareFilter>(this);
+	return MakeShared<PCGExPointFilter::FStringCompareFilter>(this);
 }
 
 bool UPCGExStringCompareFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -22,7 +22,7 @@ bool UPCGExStringCompareFilterFactory::RegisterConsumableAttributesWithData(FPCG
 	return true;
 }
 
-bool PCGExPointsFilter::FStringCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FStringCompareFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -44,6 +44,14 @@ bool PCGExPointsFilter::FStringCompareFilter::Init(FPCGExContext* InContext, con
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FStringCompareFilter::Test(const int32 PointIndex) const
+{
+	const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
+	const FString A = OperandA->SoftGet(PointIndex, Point, TEXT(""));
+	const FString B = TypedFilterFactory->Config.CompareAgainst == EPCGExInputValueType::Attribute ? OperandB->SoftGet(PointIndex, Point, TEXT("")) : TypedFilterFactory->Config.OperandBConstant;
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, A, B);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(StringCompare)

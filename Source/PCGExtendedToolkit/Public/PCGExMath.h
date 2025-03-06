@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "PCGEx.h"
+#include "PCGExH.h"
 
 #include "PCGExMath.generated.h"
 
@@ -39,8 +40,117 @@ enum class EPCGExPointBoundsSource : uint8
 
 namespace PCGExMath
 {
+	enum class EIntersectionTestMode : uint8
+	{
+		Loose = 0,
+		Strict,
+		StrictOnSelfA,
+		StrictOnSelfB,
+		StrictOnOtherA,
+		StrictOnOtherB,
+		LooseOnSelf,
+		LooseOnSelfA,
+		LooseOnSelfB,
+		LooseOnOther,
+		LooseOnOtherA,
+		LooseOnOtherB,
+	};
+
+	struct PCGEXTENDEDTOOLKIT_API FClosestPosition
+	{
+		bool bValid = false;
+		int32 Index = -1;
+		FVector Origin = FVector::ZeroVector;
+		FVector Location = FVector::ZeroVector;
+		double DistSquared = MAX_dbl;
+
+		FClosestPosition() = default;
+		explicit FClosestPosition(const FVector& InOrigin);
+		FClosestPosition(const FVector& InOrigin, const FVector& InLocation);
+		FClosestPosition(const FVector& InOrigin, const FVector& InLocation, const int32 InIndex);
+
+		bool Update(const FVector& InLocation);
+		bool Update(const FVector& InLocation, const int32 InIndex);
+
+		FVector Direction() const { return (Origin - Location).GetSafeNormal(); }
+
+		friend bool operator<(const FClosestPosition& A, const FClosestPosition& B) { return A.DistSquared < B.DistSquared; }
+		friend bool operator>(const FClosestPosition& A, const FClosestPosition& B) { return A.DistSquared > B.DistSquared; }
+
+		operator FVector() const { return Location; }
+		operator double() const { return DistSquared; }
+		operator bool() const { return bValid; }
+	};
+
+	struct PCGEXTENDEDTOOLKIT_API FSegment
+	{
+		FVector A = FVector::ZeroVector;
+		FVector B = FVector::ZeroVector;
+		FVector Direction = FVector::ZeroVector;
+		FBox Bounds = FBox(ForceInit);
+
+		FSegment(const FVector& InA, const FVector& InB, const double Expansion = 0);
+
+		double Dot(const FVector& InDirection) const { return FVector::DotProduct(Direction, InDirection); }
+		FVector Lerp(const double InLerp) const { return FMath::Lerp(A, B, InLerp); }
+
+		template <EIntersectionTestMode Mode = EIntersectionTestMode::Strict>
+		bool FindIntersection(const FVector& A2, const FVector& B2, double SquaredTolerance, FVector& OutSelf, FVector& OutOther) const
+		{
+			FMath::SegmentDistToSegment(A, B, A2, B2, OutSelf, OutOther);
+
+			if constexpr (Mode == EIntersectionTestMode::Strict)
+			{
+				if (A == OutSelf || B == OutSelf || A2 == OutOther || B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::StrictOnSelfA)
+			{
+				if (A == OutSelf) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::StrictOnSelfB)
+			{
+				if (B == OutSelf) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::StrictOnOtherA)
+			{
+				if (A2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::StrictOnOtherB)
+			{
+				if (B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnSelf)
+			{
+				if (A2 == OutOther || B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnOther)
+			{
+				if (A == OutSelf || B == OutSelf) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnSelfA)
+			{
+				if (B == OutSelf || A2 == OutOther || B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnSelfB)
+			{
+				if (A == OutSelf || A2 == OutOther || B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnOtherA)
+			{
+				if (A == OutSelf || B == OutSelf || B2 == OutOther) { return false; }
+			}
+			else if constexpr (Mode == EIntersectionTestMode::LooseOnOtherB)
+			{
+				if (A == OutSelf || B == OutSelf || A2 == OutOther) { return false; }
+			}
+
+			if (FVector::DistSquared(OutSelf, OutOther) >= SquaredTolerance) { return false; }
+			return true;
+		}
+	};
+
 	template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds>
-	FORCEINLINE static FBox GetLocalBounds(const FPCGPoint& Point)
+	static FBox GetLocalBounds(const FPCGPoint& Point)
 	{
 		if constexpr (S == EPCGExPointBoundsSource::ScaledBounds)
 		{
@@ -62,7 +172,7 @@ namespace PCGExMath
 	}
 
 	template <EPCGExPointBoundsSource S = EPCGExPointBoundsSource::ScaledBounds>
-	FORCEINLINE static FBox GetLocalBounds(const FPCGPoint* Point)
+	static FBox GetLocalBounds(const FPCGPoint* Point)
 	{
 		if constexpr (S == EPCGExPointBoundsSource::ScaledBounds)
 		{
@@ -84,21 +194,10 @@ namespace PCGExMath
 		}
 	}
 
-	FORCEINLINE static FBox GetLocalBounds(const FPCGPoint& Point, const EPCGExPointBoundsSource Source)
-	{
-		if (Source == EPCGExPointBoundsSource::ScaledBounds) { return GetLocalBounds<EPCGExPointBoundsSource::ScaledBounds>(Point); }
-		if (Source == EPCGExPointBoundsSource::Bounds) { return GetLocalBounds<EPCGExPointBoundsSource::Bounds>(Point); }
-		if (Source == EPCGExPointBoundsSource::DensityBounds) { return GetLocalBounds<EPCGExPointBoundsSource::DensityBounds>(Point); }
-		return FBox(FVector::OneVector * -1, FVector::OneVector);
-	}
-
-	FORCEINLINE static FBox GetLocalBounds(const FPCGPoint* Point, const EPCGExPointBoundsSource Source)
-	{
-		if (Source == EPCGExPointBoundsSource::ScaledBounds) { return GetLocalBounds<EPCGExPointBoundsSource::ScaledBounds>(Point); }
-		if (Source == EPCGExPointBoundsSource::Bounds) { return GetLocalBounds<EPCGExPointBoundsSource::Bounds>(Point); }
-		if (Source == EPCGExPointBoundsSource::DensityBounds) { return GetLocalBounds<EPCGExPointBoundsSource::DensityBounds>(Point); }
-		return FBox(FVector::OneVector * -1, FVector::OneVector);
-	}
+	PCGEXTENDEDTOOLKIT_API
+	FBox GetLocalBounds(const FPCGPoint& Point, const EPCGExPointBoundsSource Source);
+	PCGEXTENDEDTOOLKIT_API
+	FBox GetLocalBounds(const FPCGPoint* Point, const EPCGExPointBoundsSource Source);
 
 #pragma region basics
 
@@ -112,12 +211,8 @@ namespace PCGExMath
 		return FMath::Cos((180 - FMath::Clamp(FMath::Abs(Angle), 0, 180.0)) * (PI / 180.0));
 	}
 
-	FORCEINLINE static double ConvertStringToDouble(const FString& StringToConvert)
-	{
-		const TCHAR* CharArray = *StringToConvert;
-		const double Result = FCString::Atod(CharArray);
-		return FMath::IsNaN(Result) ? 0 : Result;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	double ConvertStringToDouble(const FString& StringToConvert);
 
 	// Remap function
 	FORCEINLINE static double Remap(const double InBase, const double InMin, const double InMax, const double OutMin = 0, const double OutMax = 1)
@@ -317,668 +412,20 @@ namespace PCGExMath
 		return Median;
 	}
 
-	FORCEINLINE static double GetMode(const TArray<double>& Values, const bool bHighest, const uint32 Tolerance = 5)
-	{
-		TMap<double, int32> Map;
-		int32 LastCount = 0;
-		double Mode = 0;
-
-		for (const double Value : Values)
-		{
-			const double AdjustedValue = FMath::RoundToZero(Value / Tolerance) * Tolerance;
-			const int32* Count = Map.Find(AdjustedValue);
-			const int32 UpdatedCount = Count ? *Count + 1 : 1;
-			Map.Add(Value, UpdatedCount);
-
-			if (LastCount < UpdatedCount)
-			{
-				LastCount = UpdatedCount;
-				Mode = AdjustedValue;
-			}
-			else if (LastCount == UpdatedCount)
-			{
-				if (bHighest) { Mode = FMath::Max(Mode, AdjustedValue); }
-				else { Mode = FMath::Min(Mode, AdjustedValue); }
-			}
-		}
-
-		return Mode;
-	}
-
-	FORCEINLINE static FVector SafeLinePlaneIntersection(
+	PCGEXTENDEDTOOLKIT_API
+	double GetMode(const TArray<double>& Values, const bool bHighest, const uint32 Tolerance = 5);
+	PCGEXTENDEDTOOLKIT_API
+	FVector SafeLinePlaneIntersection(
 		const FVector& Pt1, const FVector& Pt2,
 		const FVector& PlaneOrigin, const FVector& PlaneNormal,
-		bool& bIntersect)
-	{
-		if (FMath::IsNearlyZero(FVector::DotProduct((Pt1 - Pt2).GetSafeNormal(), PlaneNormal)))
-		{
-			bIntersect = false;
-			return FVector::ZeroVector;
-		}
+		bool& bIntersect);
 
-		bIntersect = true;
-		return FMath::LinePlaneIntersection(Pt1, Pt2, PlaneOrigin, PlaneNormal);
-	}
 
-	FORCEINLINE bool SphereOverlap(const FSphere& S1, const FSphere& S2, double& OutOverlap)
-	{
-		OutOverlap = (S1.W + S2.W) - FVector::Dist(S1.Center, S2.Center);
-		return OutOverlap > 0;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	bool SphereOverlap(const FSphere& S1, const FSphere& S2, double& OutOverlap);
+	PCGEXTENDEDTOOLKIT_API
+	bool SphereOverlap(const FBoxSphereBounds& S1, const FBoxSphereBounds& S2, double& OutOverlap);
 
-	FORCEINLINE bool SphereOverlap(const FBoxSphereBounds& S1, const FBoxSphereBounds& S2, double& OutOverlap)
-	{
-		return SphereOverlap(S1.GetSphere(), S2.GetSphere(), OutOverlap);
-	}
-
-#pragma endregion
-
-#pragma region Ops
-
-	template <typename T>
-	FORCEINLINE static T Min(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y), FMath::Min(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y), FMath::Min(A.Z, B.Z), FMath::Min(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FColor>)
-		{
-			return FColor(FMath::Min(A.R, B.R), FMath::Min(A.G, B.G), FMath::Min(A.B, B.B), FMath::Min(A.A, B.A));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Min(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(FMath::Min(A.Pitch, B.Pitch), FMath::Min(A.Yaw, B.Yaw), FMath::Min(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Min(A.GetRotation(), B.GetRotation()), Min(A.GetLocation(), B.GetLocation()), Min(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString>)
-		{
-			return A > B ? B : A;
-		}
-		else if constexpr (
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return A.ToString() > B.ToString() ? B : A;
-		}
-		else
-		{
-			return FMath::Min(A, B);
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T Max(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(FMath::Max(A.X, B.X), FMath::Max(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(FMath::Max(A.X, B.X), FMath::Max(A.Y, B.Y), FMath::Max(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(FMath::Max(A.X, B.X), FMath::Max(A.Y, B.Y), FMath::Max(A.Z, B.Z), FMath::Max(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FColor>)
-		{
-			return FColor(FMath::Max(A.R, B.R), FMath::Max(A.G, B.G), FMath::Max(A.B, B.B), FMath::Max(A.A, B.A));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Max(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(FMath::Max(A.Pitch, B.Pitch), FMath::Max(A.Yaw, B.Yaw), FMath::Max(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Max(A.GetRotation(), B.GetRotation()), Max(A.GetLocation(), B.GetLocation()), Max(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString>)
-		{
-			return A < B ? B : A;
-		}
-		else if constexpr (
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return A.ToString() < B.ToString() ? B : A;
-		}
-		else
-		{
-			return FMath::Max(A, B);
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T Add(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Add(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Add(A.GetRotation(), B.GetRotation()), Add(A.GetLocation(), B.GetLocation()), Add(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString>)
-		{
-			return A + B;
-		}
-		else if constexpr (std::is_same_v<T, FName>)
-		{
-			return FName(A.ToString() + B.ToString());
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return Max(A, B);
-		}
-		else
-		{
-			return A + B;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T WeightedAdd(const T& A, const T& B, const double& W = 0)
-	{
-		if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return WeightedAdd(A.Rotator(), B.Rotator(), W).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(WeightedAdd(A.Pitch, B.Pitch, W), WeightedAdd(A.Yaw, B.Yaw, W), WeightedAdd(A.Roll, B.Roll, W));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(WeightedAdd(A.GetRotation(), B.GetRotation(), W), WeightedAdd(A.GetLocation(), B.GetLocation(), W), WeightedAdd(A.GetScale3D(), B.GetScale3D(), W));
-		}
-		else if constexpr (
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName>)
-		{
-			return Add(A, B);
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return Max(A, B);
-		}
-		else
-		{
-			return A + B * W;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T Sub(const T& A, const T& B, const double& W = 0)
-	{
-		if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Sub(A.Rotator(), B.Rotator(), W).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(Sub(A.Pitch, B.Pitch, W), Sub(A.Yaw, B.Yaw, W), Sub(A.Roll, B.Roll, W));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Sub(A.GetRotation(), B.GetRotation(), W), Sub(A.GetLocation(), B.GetLocation(), W), Sub(A.GetScale3D(), B.GetScale3D(), W));
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return Min(A, B);
-		}
-		else
-		{
-			return A - B;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T WeightedSub(const T& A, const T& B, const double& W = 0)
-	{
-		if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return WeightedSub(A.Rotator(), B.Rotator(), W).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(WeightedSub(A.Pitch, B.Pitch, W), WeightedSub(A.Yaw, B.Yaw, W), WeightedSub(A.Roll, B.Roll, W));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(WeightedSub(A.GetRotation(), B.GetRotation(), W).GetNormalized(), WeightedSub(A.GetLocation(), B.GetLocation(), W), WeightedSub(A.GetScale3D(), B.GetScale3D(), W));
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return Min(A, B);
-		}
-		else
-		{
-			return A - B * W;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T UnsignedMin(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return !A || !B ? false : true;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(UnsignedMin(A.X, B.X), UnsignedMin(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(UnsignedMin(A.X, B.X), UnsignedMin(A.Y, B.Y), UnsignedMin(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(UnsignedMin(A.X, B.X), UnsignedMin(A.Y, B.Y), UnsignedMin(A.Z, B.Z), UnsignedMin(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Min(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(UnsignedMin(A.Pitch, B.Pitch), UnsignedMin(A.Yaw, B.Yaw), UnsignedMin(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(UnsignedMin(A.GetRotation(), B.GetRotation()), UnsignedMin(A.GetLocation(), B.GetLocation()), UnsignedMin(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return Min(B, A);
-		}
-		else
-		{
-			return FMath::Abs(A) > FMath::Abs(B) ? B : A;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T UnsignedMax(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B ? true : false;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(UnsignedMax(A.X, B.X), UnsignedMax(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(UnsignedMax(A.X, B.X), UnsignedMax(A.Y, B.Y), UnsignedMax(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(UnsignedMax(A.X, B.X), UnsignedMax(A.Y, B.Y), UnsignedMax(A.Z, B.Z), UnsignedMax(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Min(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(UnsignedMax(A.Pitch, B.Pitch), UnsignedMax(A.Yaw, B.Yaw), UnsignedMax(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(UnsignedMax(A.GetRotation(), B.GetRotation()), UnsignedMax(A.GetLocation(), B.GetLocation()), UnsignedMax(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return Max(B, A);
-		}
-		else
-		{
-			return FMath::Abs(A) < FMath::Abs(B) ? B : A;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T AbsoluteMin(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B ? true : false;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(AbsoluteMin(A.X, B.X), AbsoluteMin(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(AbsoluteMin(A.X, B.X), AbsoluteMin(A.Y, B.Y), AbsoluteMin(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(AbsoluteMin(A.X, B.X), AbsoluteMin(A.Y, B.Y), AbsoluteMin(A.Z, B.Z), AbsoluteMin(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Min(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(AbsoluteMin(A.Pitch, B.Pitch), AbsoluteMin(A.Yaw, B.Yaw), AbsoluteMin(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(AbsoluteMin(A.GetRotation(), B.GetRotation()), AbsoluteMin(A.GetLocation(), B.GetLocation()), AbsoluteMin(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return Min(B, A);
-		}
-		else
-		{
-			return FMath::Min(FMath::Abs(A), FMath::Abs(B));
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T AbsoluteMax(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B ? true : false;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(AbsoluteMax(A.X, B.X), AbsoluteMax(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(AbsoluteMax(A.X, B.X), AbsoluteMax(A.Y, B.Y), AbsoluteMax(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(AbsoluteMax(A.X, B.X), AbsoluteMax(A.Y, B.Y), AbsoluteMax(A.Z, B.Z), AbsoluteMax(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return Min(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(AbsoluteMax(A.Pitch, B.Pitch), AbsoluteMax(A.Yaw, B.Yaw), AbsoluteMax(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(AbsoluteMax(A.GetRotation(), B.GetRotation()), AbsoluteMax(A.GetLocation(), B.GetLocation()), AbsoluteMax(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString> || std::is_same_v<T, FName> || std::is_same_v<T, FSoftClassPath> || std::is_same_v<T, FSoftObjectPath>)
-		{
-			return Max(B, A);
-		}
-		else
-		{
-			return FMath::Max(FMath::Abs(A), FMath::Abs(B));
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T Lerp(const T& A, const T& B, const double& W = 0)
-	{
-		if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return FQuat::Slerp(A, B, W);
-		}
-		else if constexpr (std::is_same_v<T, FColor>)
-		{
-			return FMath::Lerp(A.ReinterpretAsLinear(), B.ReinterpretAsLinear(), W).ToFColor(false);
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(Lerp(A.Pitch, B.Pitch, W), Lerp(A.Yaw, B.Yaw, W), Lerp(A.Roll, B.Roll, W));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Lerp(A.GetRotation(), B.GetRotation(), W).GetNormalized(), Lerp(A.GetLocation(), B.GetLocation(), W), Lerp(A.GetScale3D(), B.GetScale3D(), W));
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return W > 0.5 ? B : A;
-		}
-		else
-		{
-			return FMath::Lerp(A, B, W);
-		}
-	}
-
-	template <typename T, typename CompilerSafety = void>
-	FORCEINLINE static T Div(const T& A, const double Divider)
-	{
-		if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(A.Pitch / Divider, A.Yaw / Divider, A.Roll / Divider);
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(Div(A.GetRotation(), Divider).GetNormalized(), Div(A.GetLocation(), Divider), Div(A.GetScale3D(), Divider));
-		}
-		else if constexpr (
-			std::is_same_v<T, bool> ||
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return A;
-		}
-		else
-		{
-			return A / Divider;
-		}
-	}
-
-	// SSE optimizations throw unreachable code with FQuat constexpr so we need explicit template impl
-	template <typename CompilerSafety = void>
-	FORCEINLINE static FQuat Div(const FQuat& A, const double Divider)
-	{
-		const double R = 1.0 / Divider;
-		return FQuat(A.X * R, A.Y * R, A.Z * R, A.W * R).GetNormalized();
-	}
-
-	template <typename T>
-	FORCEINLINE static T Mult(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return !A || !B ? false : true;
-		}
-		else if constexpr (
-			std::is_same_v<T, FString> ||
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftObjectPath> ||
-			std::is_same_v<T, FSoftClassPath>)
-		{
-			return A;
-		}
-		else
-		{
-			return A * B;
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T Copy(const T& A, const T& B) { return B; }
-
-	template <typename T>
-	FORCEINLINE static T NoBlend(const T& A, const T& B) { return A; }
-
-	template <typename T>
-	FORCEINLINE static T NaiveHash(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y), NaiveHash(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(NaiveHash(A.X, B.X), NaiveHash(A.Y, B.Y), NaiveHash(A.Z, B.Z), NaiveHash(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FColor>)
-		{
-			return FColor(NaiveHash(A.R, B.R), NaiveHash(A.G, B.G), NaiveHash(A.B, B.B), NaiveHash(A.A, B.A));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return NaiveHash(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(NaiveHash(A.Pitch, B.Pitch), NaiveHash(A.Yaw, B.Yaw), NaiveHash(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(NaiveHash(A.GetRotation(), B.GetRotation()), NaiveHash(A.GetLocation(), B.GetLocation()), NaiveHash(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString>)
-		{
-			return FString::Printf(TEXT("%d"), NaiveHash(GetTypeHash(A), GetTypeHash(B)));
-		}
-		else if constexpr (
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return T(NaiveHash(A.ToString(), B.ToString()));
-		}
-		else
-		{
-			return static_cast<T>(HashCombineFast(GetTypeHash(A), GetTypeHash(B)));
-		}
-	}
-
-	template <typename T>
-	FORCEINLINE static T NaiveUnsignedHash(const T& A, const T& B)
-	{
-		if constexpr (std::is_same_v<T, bool>)
-		{
-			return A || B;
-		}
-		else if constexpr (std::is_same_v<T, FVector2D>)
-		{
-			return FVector2D(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y));
-		}
-		else if constexpr (std::is_same_v<T, FVector>)
-		{
-			return FVector(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y), NaiveUnsignedHash(A.Z, B.Z));
-		}
-		else if constexpr (std::is_same_v<T, FVector4>)
-		{
-			return FVector4(NaiveUnsignedHash(A.X, B.X), NaiveUnsignedHash(A.Y, B.Y), NaiveUnsignedHash(A.Z, B.Z), NaiveUnsignedHash(A.W, B.W));
-		}
-		else if constexpr (std::is_same_v<T, FColor>)
-		{
-			return FColor(NaiveUnsignedHash(A.R, B.R), NaiveUnsignedHash(A.G, B.G), NaiveUnsignedHash(A.B, B.B), NaiveUnsignedHash(A.A, B.A));
-		}
-		else if constexpr (std::is_same_v<T, FQuat>)
-		{
-			return NaiveUnsignedHash(A.Rotator(), B.Rotator()).Quaternion();
-		}
-		else if constexpr (std::is_same_v<T, FRotator>)
-		{
-			return FRotator(NaiveUnsignedHash(A.Pitch, B.Pitch), NaiveUnsignedHash(A.Yaw, B.Yaw), NaiveUnsignedHash(A.Roll, B.Roll));
-		}
-		else if constexpr (std::is_same_v<T, FTransform>)
-		{
-			return FTransform(NaiveUnsignedHash(A.GetRotation(), B.GetRotation()), NaiveUnsignedHash(A.GetLocation(), B.GetLocation()), NaiveUnsignedHash(A.GetScale3D(), B.GetScale3D()));
-		}
-		else if constexpr (std::is_same_v<T, FString>)
-		{
-			return FString::Printf(TEXT("%d"), NaiveUnsignedHash(GetTypeHash(A), GetTypeHash(B)));
-		}
-		else if constexpr (
-			std::is_same_v<T, FName> ||
-			std::is_same_v<T, FSoftClassPath> ||
-			std::is_same_v<T, FSoftObjectPath>)
-		{
-			return T(NaiveUnsignedHash(A.ToString(), B.ToString()));
-		}
-		else
-		{
-			return static_cast<T>(GetTypeHash(PCGEx::H64U(GetTypeHash(A), GetTypeHash(B))));
-		}
-	}
 
 #pragma endregion
 
@@ -1178,166 +625,39 @@ namespace PCGExMath
 		else { return Quat.GetForwardVector(); }
 	}
 
-	FORCEINLINE static FVector GetDirection(const FQuat& Quat, const EPCGExAxis Dir)
-	{
-		switch (Dir)
-		{
-		default:
-		case EPCGExAxis::Forward: return GetDirection<EPCGExAxis::Forward>(Quat);
-		case EPCGExAxis::Backward: return GetDirection<EPCGExAxis::Backward>(Quat);
-		case EPCGExAxis::Right: return GetDirection<EPCGExAxis::Right>(Quat);
-		case EPCGExAxis::Left: return GetDirection<EPCGExAxis::Left>(Quat);
-		case EPCGExAxis::Up: return GetDirection<EPCGExAxis::Up>(Quat);
-		case EPCGExAxis::Down: return GetDirection<EPCGExAxis::Down>(Quat);
-		}
-	}
+	PCGEXTENDEDTOOLKIT_API
+	FVector GetDirection(const FQuat& Quat, const EPCGExAxis Dir);
+	PCGEXTENDEDTOOLKIT_API
+	FVector GetDirection(const EPCGExAxis Dir);
 
-	FORCEINLINE static FVector GetDirection(const EPCGExAxis Dir)
-	{
-		switch (Dir)
-		{
-		default:
-		case EPCGExAxis::Forward:
-			return FVector::ForwardVector;
-		case EPCGExAxis::Backward:
-			return FVector::BackwardVector;
-		case EPCGExAxis::Right:
-			return FVector::RightVector;
-		case EPCGExAxis::Left:
-			return FVector::LeftVector;
-		case EPCGExAxis::Up:
-			return FVector::UpVector;
-		case EPCGExAxis::Down:
-			return FVector::DownVector;
-		}
-	}
+	PCGEXTENDEDTOOLKIT_API
+	FQuat MakeDirection(const EPCGExAxis Dir, const FVector& InForward);
+	PCGEXTENDEDTOOLKIT_API
+	FQuat MakeDirection(const EPCGExAxis Dir, const FVector& InForward, const FVector& InUp);
 
-	FORCEINLINE static FQuat MakeDirection(const EPCGExAxis Dir, const FVector& InForward)
-	{
-		switch (Dir)
-		{
-		default:
-		case EPCGExAxis::Forward:
-			return FRotationMatrix::MakeFromX(InForward * -1).ToQuat();
-		case EPCGExAxis::Backward:
-			return FRotationMatrix::MakeFromX(InForward).ToQuat();
-		case EPCGExAxis::Right:
-			return FRotationMatrix::MakeFromY(InForward * -1).ToQuat();
-		case EPCGExAxis::Left:
-			return FRotationMatrix::MakeFromY(InForward).ToQuat();
-		case EPCGExAxis::Up:
-			return FRotationMatrix::MakeFromZ(InForward * -1).ToQuat();
-		case EPCGExAxis::Down:
-			return FRotationMatrix::MakeFromZ(InForward).ToQuat();
-		}
-	}
+	PCGEXTENDEDTOOLKIT_API
+	FVector GetNormal(const FVector& A, const FVector& B, const FVector& C);
+	PCGEXTENDEDTOOLKIT_API
+	FVector GetNormalUp(const FVector& A, const FVector& B, const FVector& Up);
 
-	FORCEINLINE static FQuat MakeDirection(const EPCGExAxis Dir, const FVector& InForward, const FVector& InUp)
-	{
-		switch (Dir)
-		{
-		default:
-		case EPCGExAxis::Forward:
-			return FRotationMatrix::MakeFromXZ(InForward * -1, InUp).ToQuat();
-		case EPCGExAxis::Backward:
-			return FRotationMatrix::MakeFromXZ(InForward, InUp).ToQuat();
-		case EPCGExAxis::Right:
-			return FRotationMatrix::MakeFromYZ(InForward * -1, InUp).ToQuat();
-		case EPCGExAxis::Left:
-			return FRotationMatrix::MakeFromYZ(InForward, InUp).ToQuat();
-		case EPCGExAxis::Up:
-			return FRotationMatrix::MakeFromZY(InForward * -1, InUp).ToQuat();
-		case EPCGExAxis::Down:
-			return FRotationMatrix::MakeFromZY(InForward, InUp).ToQuat();
-		}
-	}
+	PCGEXTENDEDTOOLKIT_API
+	FTransform MakeLookAtTransform(const FVector& LookAt, const FVector& LookUp, const EPCGExAxisAlign AlignAxis);
 
-	FORCEINLINE static FVector GetNormal(const FVector& A, const FVector& B, const FVector& C)
-	{
-		return FVector::CrossProduct((B - A), (C - A)).GetSafeNormal();
-	}
-
-	FORCEINLINE static FVector GetNormalUp(const FVector& A, const FVector& B, const FVector& Up)
-	{
-		return FVector::CrossProduct((B - A), ((B + Up) - A)).GetSafeNormal();
-	}
-
-	FORCEINLINE static FTransform MakeLookAtTransform(const FVector& LookAt, const FVector& LookUp, const EPCGExAxisAlign AlignAxis)
-	{
-		switch (AlignAxis)
-		{
-		case EPCGExAxisAlign::Forward:
-			return FTransform(FRotationMatrix::MakeFromXZ(LookAt * -1, LookUp));
-		case EPCGExAxisAlign::Backward:
-			return FTransform(FRotationMatrix::MakeFromXZ(LookAt, LookUp));
-		case EPCGExAxisAlign::Right:
-			return FTransform(FRotationMatrix::MakeFromYZ(LookAt * -1, LookUp));
-		case EPCGExAxisAlign::Left:
-			return FTransform(FRotationMatrix::MakeFromYZ(LookAt, LookUp));
-		case EPCGExAxisAlign::Up:
-			return FTransform(FRotationMatrix::MakeFromZY(LookAt * -1, LookUp));
-		case EPCGExAxisAlign::Down:
-			return FTransform(FRotationMatrix::MakeFromZY(LookAt, LookUp));
-		default: return FTransform::Identity;
-		}
-	}
-
-	FORCEINLINE static double GetAngle(const FVector& A, const FVector& B)
-	{
-		const FVector Cross = FVector::CrossProduct(A, B);
-		const double Atan2 = FMath::Atan2(Cross.Size(), A.Dot(B));
-		return Cross.Z < 0 ? TWO_PI - Atan2 : Atan2;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	double GetAngle(const FVector& A, const FVector& B);
 
 	// Expects normalized vectors
-	FORCEINLINE static double GetRadiansBetweenVectors(const FVector& A, const FVector& B, const FVector& UpVector = FVector::UpVector)
-	{
-		double Radians = FMath::Acos(FVector::DotProduct(A, B));
-		return FVector::CrossProduct(A, B).Z < 0 ? TWO_PI - Radians : Radians;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	double GetRadiansBetweenVectors(const FVector& A, const FVector& B, const FVector& UpVector = FVector::UpVector);
+	PCGEXTENDEDTOOLKIT_API
+	double GetDegreesBetweenVectors(const FVector& A, const FVector& B, const FVector& UpVector = FVector::UpVector);
 
-	FORCEINLINE static double GetDegreesBetweenVectors(const FVector& A, const FVector& B, const FVector& UpVector = FVector::UpVector)
-	{
-		const double D = FMath::RadiansToDegrees(FMath::Acos(FVector::DotProduct(A, B)));
-		return FVector::DotProduct(FVector::CrossProduct(A, B), UpVector) < 0 ? 360 - D : D;
-	}
-
-	FORCEINLINE static void CheckConvex(const FVector& A, const FVector& B, const FVector& C, bool& bIsConvex, int32& OutSign, const FVector& UpVector = FVector::UpVector)
-	{
-		if (!bIsConvex) { return; }
-
-		if (A == C)
-		{
-			bIsConvex = false;
-			return;
-		}
-
-		const double DP = FVector::DotProduct(FVector::CrossProduct((A - B), (C - A)), UpVector);
-		const int32 CurrentSign = (DP > 0.0f) ? 1 : (DP < 0.0f) ? -1 : 0;
-
-		if (CurrentSign != 0)
-		{
-			if (OutSign == 0) { OutSign = CurrentSign; }
-			else if (OutSign != CurrentSign) { bIsConvex = false; }
-		}
-	};
-
-	FORCEINLINE static FBox ScaledBox(const FBox& InBox, const FVector& InScale)
-	{
-		const FVector Extents = InBox.GetExtent() * InScale;
-		return FBox(-Extents, Extents);
-	}
-
-	FORCEINLINE static bool IsDirectionWithinTolerance(const FVector& A, const FVector& B, const FRotator& Limits)
-	{
-		const FRotator RA = A.Rotation();
-		const FRotator RB = B.Rotation();
-
-		return
-			FMath::Abs(FRotator::NormalizeAxis(RA.Yaw - RB.Yaw)) <= Limits.Yaw &&
-			FMath::Abs(FRotator::NormalizeAxis(RA.Pitch - RB.Pitch)) <= Limits.Pitch &&
-			FMath::Abs(FRotator::NormalizeAxis(RA.Roll - RB.Roll)) <= Limits.Roll;
-	}
+	PCGEXTENDEDTOOLKIT_API
+	void CheckConvex(const FVector& A, const FVector& B, const FVector& C, bool& bIsConvex, int32& OutSign, const FVector& UpVector = FVector::UpVector);
+	PCGEXTENDEDTOOLKIT_API
+	FBox ScaledBox(const FBox& InBox, const FVector& InScale);
+	PCGEXTENDEDTOOLKIT_API
+	bool IsDirectionWithinTolerance(const FVector& A, const FVector& B, const FRotator& Limits);
 
 	template <typename T>
 	FORCEINLINE static void TypeMinMax(T& Min, T& Max)
@@ -1389,16 +709,18 @@ namespace PCGExMath
 		}
 	}
 
-	FORCEINLINE double GetArcLength(const double R, const double StartAngleRadians, const double EndAngleRadians)
-	{
-		return R * FMath::Abs(FMath::Fmod(EndAngleRadians, TWO_PI) - FMath::Fmod(StartAngleRadians, TWO_PI));
-	}
+	PCGEXTENDEDTOOLKIT_API
+	double GetArcLength(const double R, const double StartAngleRadians, const double EndAngleRadians);
+
+	/** Distance from C to AB */
+	PCGEXTENDEDTOOLKIT_API
+	double GetPerpendicularDistance(const FVector& A, const FVector& B, const FVector& C);
 
 
 #pragma region Spatialized distances
 
 	template <EPCGExDistance Mode>
-	FORCEINLINE static FVector GetSpatializedCenter(
+	static FVector GetSpatializedCenter(
 		const FPCGPoint& FromPoint,
 		const FVector& FromCenter,
 		const FVector& ToCenter)

@@ -51,13 +51,13 @@ UPCGExFactoryData* UPCGExFilterGroupProviderSettings::CreateFactory(FPCGExContex
 
 	if (!GetInputFactories(
 		InContext, PCGExPointFilter::SourceFiltersLabel, NewFactory->FilterFactories,
-		PCGExFactories::AnyFilters, true))
+		PCGExFactories::AnyFilters, !bQuietMissingInputError))
 	{
 		InContext->ManagedObjects->Destroy(NewFactory);
 		return nullptr;
 	}
 
-	return NewFactory;
+	return Super::CreateFactory(InContext, NewFactory);
 }
 
 #undef LOCTEXT_NAMESPACE

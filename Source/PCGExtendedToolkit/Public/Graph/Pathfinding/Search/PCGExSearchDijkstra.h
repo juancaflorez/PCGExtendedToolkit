@@ -15,7 +15,7 @@ class UPCGExHeuristicOperation;
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Dijkstra", meta=(ToolTip ="Dijkstra search. Slower than A* but more respectful of modifiers and weights."))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSearchDijkstra : public UPCGExSearchOperation
+class UPCGExSearchDijkstra : public UPCGExSearchOperation
 {
 	GENERATED_BODY()
 
@@ -26,5 +26,4 @@ public:
 		const TSharedPtr<PCGExPathfinding::FPathQuery>& InQuery,
 		const TSharedPtr<PCGExHeuristics::FHeuristicsHandler>& Heuristics,
 		const TSharedPtr<PCGExHeuristics::FLocalFeedbackHandler>& LocalFeedback) const override;
-
 };

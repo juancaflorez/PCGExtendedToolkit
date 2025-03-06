@@ -15,7 +15,9 @@
 
 #define PCGEX_BITMASK_TRANSMUTE_CREATE_FACTORY(_NAME, _BODY) \
 	UPCGExFactoryData* UPCGEx##_NAME##ProviderSettings::CreateFactory(FPCGExContext* InContext, UPCGExFactoryData* InFactory) const{ \
-	UPCGEx##_NAME##Factory* NewFactory = NewObject<UPCGEx##_NAME##Factory>(); _BODY if(!Super::CreateFactory(InContext, NewFactory)){ InContext->ManagedObjects->Destroy(NewFactory); } return NewFactory; }
+	UPCGEx##_NAME##Factory* NewFactory = NewObject<UPCGEx##_NAME##Factory>(); _BODY \
+	if(!Super::CreateFactory(InContext, NewFactory)){ InContext->ManagedObjects->Destroy(NewFactory); return nullptr; }\
+	return NewFactory; }
 
 #define PCGEX_BITMASK_TRANSMUTE_CREATE_OPERATION(_NAME, _BODY) \
 	UPCGExActionOperation* UPCGEx##_NAME##Factory::CreateOperation(FPCGExContext* InContext) const{ \
@@ -39,8 +41,8 @@ namespace PCGExActions
 /**
  * 
  */
-UCLASS()
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExActionOperation : public UPCGExOperation
+UCLASS(Abstract)
+class PCGEXTENDEDTOOLKIT_API UPCGExActionOperation : public UPCGExOperation
 {
 	GENERATED_BODY()
 
@@ -61,8 +63,8 @@ protected:
 	TSharedPtr<PCGExPointFilter::FManager> FilterManager;
 };
 
-UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExActionFactoryData : public UPCGExFactoryData
+UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
+class PCGEXTENDEDTOOLKIT_API UPCGExActionFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
@@ -70,6 +72,7 @@ public:
 	TSharedPtr<PCGEx::FAttributesInfos> CheckSuccessInfos;
 	TSharedPtr<PCGEx::FAttributesInfos> CheckFailInfos;
 
+	UPROPERTY()
 	TArray<TObjectPtr<const UPCGExFilterFactoryData>> FilterFactories;
 
 	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::Action; }
@@ -82,7 +85,7 @@ public:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Action")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExActionProviderSettings : public UPCGExFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExActionProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 

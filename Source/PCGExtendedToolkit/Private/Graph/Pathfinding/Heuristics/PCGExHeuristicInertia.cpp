@@ -3,21 +3,54 @@
 
 #include "Graph/Pathfinding/Heuristics/PCGExHeuristicInertia.h"
 
-
-void UPCGExHeuristicInertia::PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster)
+double UPCGExHeuristicInertia::GetGlobalScore(
+	const PCGExCluster::FNode& From,
+	const PCGExCluster::FNode& Seed,
+	const PCGExCluster::FNode& Goal) const
 {
-	if (bInvert)
+	return GetScoreInternal(GlobalInertiaScore);
+}
+
+double UPCGExHeuristicInertia::GetEdgeScore(
+	const PCGExCluster::FNode& From,
+	const PCGExCluster::FNode& To,
+	const PCGExGraph::FEdge& Edge,
+	const PCGExCluster::FNode& Seed,
+	const PCGExCluster::FNode& Goal,
+	const TSharedPtr<PCGEx::FHashLookup> TravelStack) const
+{
+	if (TravelStack)
 	{
-		OutMin = 0;
-		OutMax = 1;
-	}
-	else
-	{
-		OutMin = 1;
-		OutMax = 0;
+		int32 PathNodeIndex = PCGEx::NH64A(TravelStack->Get(From.Index));
+		int32 PathEdgeIndex = -1;
+
+		if (PathNodeIndex != -1)
+		{
+			FVector Avg = Cluster->GetDir(PathNodeIndex, From.Index);
+			int32 Sampled = 1;
+			while (PathNodeIndex != -1 && Sampled < MaxSamples)
+			{
+				const int32 CurrentIndex = PathNodeIndex;
+				PCGEx::NH64(TravelStack->Get(CurrentIndex), PathNodeIndex, PathEdgeIndex);
+				if (PathNodeIndex != -1)
+				{
+					Avg += Cluster->GetDir(PathNodeIndex, CurrentIndex);
+					Sampled++;
+				}
+			}
+
+			if (!bIgnoreIfNotEnoughSamples || Sampled == MaxSamples)
+			{
+				const double Dot = FVector::DotProduct(
+					(Avg / Sampled).GetSafeNormal(),
+					Cluster->GetDir(From.Index, To.Index));
+
+				return GetScoreInternal(PCGExMath::Remap(Dot, -1, 1, 1, 0)) * ReferenceWeight;
+			}
+		}
 	}
 
-	Super::PrepareForCluster(InCluster);
+	return GetScoreInternal(FallbackInertiaScore);
 }
 
 UPCGExHeuristicOperation* UPCGExHeuristicsFactoryInertia::CreateOperation(FPCGExContext* InContext) const

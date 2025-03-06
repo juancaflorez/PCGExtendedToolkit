@@ -7,11 +7,33 @@
 #include "UObject/Object.h"
 
 #include "PCGExMacros.h"
+#include "PCGExHelpers.h"
 #include "Kismet/KismetStringLibrary.h"
+
+//#include "Data/PCGExDataTag.generated.h"
+
+#define PCGEX_FOREACH_SUPPORTEDTAGTYPE(MACRO) \
+MACRO(Integer, int64) \
+MACRO(FloatingPoint, double) \
+MACRO(String, FString) \
+MACRO(Vector2, FVector2D) \
+MACRO(Vector, FVector) \
+MACRO(Vector4, FVector4)
+
+UENUM()
+enum class EPCGExSupportedTagValue : uint8
+{
+	Integer       = 0 UMETA(DisplayName = "Integer", ToolTip="Int32 / Int64"),
+	FloatingPoint = 1 UMETA(DisplayName = "Floating Point", ToolTip="Double / float"),
+	String        = 2 UMETA(DisplayName = "String", ToolTip="String"),
+	Vector2       = 3 UMETA(DisplayName = "Vector 2D", ToolTip="Vector 2D"),
+	Vector        = 4 UMETA(DisplayName = "Vector", ToolTip="Vector"),
+	Vector4       = 5 UMETA(DisplayName = "Vector 4", ToolTip="Vector 4"),
+};
 
 namespace PCGExTags
 {
-	class FTagValue : public TSharedFromThis<FTagValue>
+	class PCGEXTENDEDTOOLKIT_API FTagValue : public TSharedFromThis<FTagValue>
 	{
 	public:
 		virtual ~FTagValue() = default;
@@ -22,10 +44,18 @@ namespace PCGExTags
 		}
 
 		virtual FString Flatten(const FString& LeftSide) = 0;
+
+		virtual bool IsNumeric() const = 0;
+		virtual bool IsText() const = 0;
+
+		virtual double AsDouble() const = 0;
+		virtual FString AsString() const = 0;
+
+		bool SameValue(const TSharedPtr<FTagValue>& Other) const;
 	};
 
 	template <typename T>
-	class TTagValue : public FTagValue
+	class PCGEXTENDEDTOOLKIT_API TTagValue : public FTagValue
 	{
 	public:
 		T Value;
@@ -59,56 +89,41 @@ namespace PCGExTags
 				return LeftSide;
 			}
 		}
+
+		virtual bool IsNumeric() const override
+		{
+			if constexpr (std::is_same_v<T, bool> || std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return true; }
+			else { return false; }
+		}
+
+		virtual bool IsText() const override
+		{
+			if constexpr (std::is_same_v<T, FString> || std::is_same_v<T, FSoftClassPath> || std::is_same_v<T, FSoftObjectPath> || std::is_same_v<T, FName>) { return true; }
+			else { return false; }
+		}
+
+		virtual double AsDouble() const override
+		{
+			if constexpr (std::is_same_v<T, bool>) { return Value ? 1 : 0; }
+			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64> || std::is_same_v<T, float> || std::is_same_v<T, double>) { return static_cast<double>(Value); }
+			else if constexpr (std::is_same_v<T, FVector2D> || std::is_same_v<T, FVector> || std::is_same_v<T, FVector4>) { return Value.X; }
+			else { return 0; }
+		}
+
+		virtual FString AsString() const override
+		{
+			if constexpr (std::is_same_v<T, bool>) { return Value ? TEXT("true") : TEXT("false"); }
+			else if constexpr (std::is_same_v<T, FName>) { return Value.ToString(); }
+			else if constexpr (std::is_same_v<T, FString>) { return Value; }
+			else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) { return FString::Printf(TEXT("%.2f"), Value); }
+			else if constexpr (std::is_same_v<T, int32> || std::is_same_v<T, int64>) { return FString::Printf(TEXT("%d"), Value); }
+			else if constexpr (std::is_same_v<T, FVector2D> || std::is_same_v<T, FVector> || std::is_same_v<T, FVector4>) { return FString::Printf(TEXT("%s"), *Value.ToString()); }
+			else if constexpr (std::is_same_v<T, FString>) { return FString::Printf(TEXT("%s"), *Value); }
+			else { return TEXT(""); }
+		}
 	};
 
-	static TSharedPtr<FTagValue> TryGetValueTag(const FString& InTag, FString& OutLeftSide)
-	{
-		int32 DividerPosition = INDEX_NONE;
-		if (!InTag.FindChar(':', DividerPosition))
-		{
-			return nullptr;
-		}
-
-		OutLeftSide = InTag.Left(DividerPosition);
-		FString RightSide = InTag.RightChop(DividerPosition + 1);
-
-		if (OutLeftSide.IsEmpty())
-		{
-			return nullptr;
-		}
-		if (RightSide.IsEmpty())
-		{
-			return nullptr;
-		}
-		if (RightSide.IsNumeric())
-		{
-			int32 FloatingPointPosition = INDEX_NONE;
-			if (InTag.FindChar('.', FloatingPointPosition))
-			{
-				return MakeShared<TTagValue<double>>(FCString::Atod(*RightSide));
-			}
-			return MakeShared<TTagValue<int32>>(FCString::Atoi(*RightSide));
-		}
-
-		if (FVector ParsedVector; ParsedVector.InitFromString(RightSide))
-		{
-			return MakeShared<TTagValue<FVector>>(ParsedVector);
-		}
-
-		if (FVector2D ParsedVector2D; ParsedVector2D.InitFromString(RightSide))
-		{
-			return MakeShared<TTagValue<FVector2D>>(ParsedVector2D);
-		}
-
-		if (FVector4 ParsedVector4; ParsedVector4.InitFromString(RightSide))
-		{
-			return MakeShared<TTagValue<FVector4>>(ParsedVector4);
-		}
-
-		return MakeShared<TTagValue<FString>>(RightSide);
-
-		return nullptr;
-	}
+	TSharedPtr<FTagValue> TryGetValueTag(const FString& InTag, FString& OutLeftSide);
 
 	using IDType = TSharedPtr<TTagValue<int32>>;
 }
@@ -118,124 +133,40 @@ namespace PCGExData
 	using namespace PCGExTags;
 	const FString TagSeparator = FSTRING(":");
 
-	struct FTags
+	class PCGEXTENDEDTOOLKIT_API FTags : public TSharedFromThis<FTags>
 	{
 		mutable FRWLock TagsLock;
+
+	public:
 		TSet<FString> RawTags;                          // Contains all data tag
 		TMap<FString, TSharedPtr<FTagValue>> ValueTags; // Prefix:ValueTag
 
-		int32 Num() const { return RawTags.Num() + ValueTags.Num(); }
+		int32 Num() const;
+		bool IsEmpty() const;
 
-		bool IsEmpty() const { return RawTags.IsEmpty() && ValueTags.IsEmpty(); }
+		FTags();
+		explicit FTags(const TSet<FString>& InTags);
+		explicit FTags(const TSharedPtr<FTags>& InTags);
 
-		FTags()
-		{
-			RawTags.Empty();
-			ValueTags.Empty();
-		}
+		void Append(const TSharedRef<FTags>& InTags);
+		void Append(const TArray<FString>& InTags);
+		void Append(const TSet<FString>& InTags);
 
-		explicit FTags(const TSet<FString>& InTags)
-			: FTags()
-		{
-			for (const FString& TagString : InTags) { ParseAndAdd(TagString); }
-		}
+		void Reset();
+		void Reset(const TSharedPtr<FTags>& InTags);
 
-		explicit FTags(const TSharedPtr<FTags>& InTags)
-			: FTags()
-		{
-			Reset(InTags);
-		}
+		void DumpTo(TSet<FString>& InTags, const bool bFlatten = true) const;
+		void DumpTo(TArray<FName>& InTags, const bool bFlatten = true) const;
 
-		void Append(const TSharedRef<FTags>& InTags)
-		{
-			Append(InTags->FlattenToArray());
-		}
 
-		void Append(const TArray<FString>& InTags)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			for (const FString& TagString : InTags) { ParseAndAdd(TagString); }
-		}
-
-		void Append(const TSet<FString>& InTags)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			for (const FString& TagString : InTags) { ParseAndAdd(TagString); }
-		}
-
-		void Reset()
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			RawTags.Empty();
-			ValueTags.Empty();
-		}
-
-		void Reset(const TSharedPtr<FTags>& InTags)
-		{
-			Reset();
-			if (InTags) { Append(InTags.ToSharedRef()); }
-		}
-
-		void DumpTo(TSet<FString>& InTags, const bool bFlatten = true) const
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-
-			InTags.Reserve(InTags.Num() + Num());
-			InTags.Append(RawTags);
-			if (bFlatten) { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { InTags.Add(Pair.Value->Flatten(Pair.Key)); } }
-			else { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { InTags.Add(Pair.Key); } }
-		}
-
-		void DumpTo(TArray<FName>& InTags, const bool bFlatten = true) const
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-			InTags.Reserve(Num());
-			InTags.Append(FlattenToArrayOfNames(bFlatten));
-		}
-
-		TSet<FString> Flatten()
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-
-			TSet<FString> Flattened;
-			Flattened.Reserve(Num());
-			Flattened.Append(RawTags);
-			for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { Flattened.Add(Pair.Value->Flatten(Pair.Key)); }
-			return Flattened;
-		}
-
-		TArray<FString> FlattenToArray(const bool bIncludeValue = true) const
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-
-			TArray<FString> Flattened;
-			Flattened.Reserve(Num());
-			for (const FString& Key : RawTags) { Flattened.Add(Key); }
-			if (bIncludeValue) { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { Flattened.Add(Pair.Value->Flatten(Pair.Key)); } }
-			else { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { Flattened.Add(Pair.Key); } }
-			return Flattened;
-		}
-
-		TArray<FName> FlattenToArrayOfNames(const bool bIncludeValue = true) const
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-
-			TArray<FName> Flattened;
-			Flattened.Reserve(Num());
-			for (const FString& Key : RawTags) { Flattened.Add(FName(Key)); }
-			if (bIncludeValue) { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { Flattened.Add(FName(Pair.Value->Flatten(Pair.Key))); } }
-			else { for (const TPair<FString, TSharedPtr<FTagValue>>& Pair : ValueTags) { Flattened.Add(FName(Pair.Key)); } }
-			return Flattened;
-		}
+		TSet<FString> Flatten();
+		TArray<FString> FlattenToArray(const bool bIncludeValue = true) const;
+		TArray<FName> FlattenToArrayOfNames(const bool bIncludeValue = true) const;
 
 		~FTags() = default;
 
 		/* Simple add to raw tags */
-		void AddRaw(const FString& Key)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			ParseAndAdd(Key);
-		}
+		void AddRaw(const FString& Key);
 
 		template <typename T>
 		TSharedPtr<TTagValue<T>> GetOrSet(const FString& Key, const T& Value)
@@ -275,33 +206,9 @@ namespace PCGExData
 			return Set<T>(Key, Value->Value);
 		}
 
-		void Remove(const FString& Key)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			ValueTags.Remove(Key);
-			RawTags.Remove(Key);
-		}
-
-		void Remove(const TSet<FString>& InSet)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			for (const FString& Tag : InSet)
-			{
-				ValueTags.Remove(Tag);
-				RawTags.Remove(Tag);
-			}
-		}
-
-		void Remove(const TSet<FName>& InSet)
-		{
-			FWriteScopeLock WriteScopeLock(TagsLock);
-			for (const FName& Tag : InSet)
-			{
-				FString Key = Tag.ToString();
-				ValueTags.Remove(Key);
-				RawTags.Remove(Key);
-			}
-		}
+		void Remove(const FString& Key);
+		void Remove(const TSet<FString>& InSet);
+		void Remove(const TSet<FName>& InSet);
 
 		template <typename T>
 		TSharedPtr<TTagValue<T>> GetTypedValue(const FString& Key)
@@ -319,46 +226,13 @@ namespace PCGExData
 			return nullptr;
 		}
 
-		TSharedPtr<FTagValue> GetValue(const FString& Key)
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-			if (const TSharedPtr<FTagValue>* ValueTagPtr = ValueTags.Find(Key)) { return *ValueTagPtr; }
-			return nullptr;
-		}
-
-		bool IsTagged(const FString& Key) const
-		{
-			FReadScopeLock ReadScopeLock(TagsLock);
-			return ValueTags.Contains(Key) || RawTags.Contains(Key);
-		}
+		TSharedPtr<FTagValue> GetValue(const FString& Key);
+		bool IsTagged(const FString& Key) const;
 
 	protected:
-		void ParseAndAdd(const FString& InTag)
-		{
-			FString InKey = TEXT("");
+		void ParseAndAdd(const FString& InTag);
 
-			if (const TSharedPtr<FTagValue> TagValue = TryGetValueTag(InTag, InKey))
-			{
-				ValueTags.Add(InKey, TagValue);
-				return;
-			}
-
-			RawTags.Add(InTag);
-		}
-
-		// NAME::VALUE
-		static bool GetTagFromString(const FString& Input, FString& OutKey, FString& OutValue)
-		{
-			if (!Input.Contains(TagSeparator)) { return false; }
-
-			TArray<FString> Split = UKismetStringLibrary::ParseIntoArray(Input, TagSeparator, true);
-
-			if (Split.IsEmpty() || Split.Num() < 2) { return false; }
-
-			OutKey = Split[0];
-			Split.RemoveAt(0);
-			OutValue = FString::Join(Split, TEXT(""));
-			return true;
-		}
+		// NAME:VALUE
+		static bool GetTagFromString(const FString& Input, FString& OutKey, FString& OutValue);
 	};
 }

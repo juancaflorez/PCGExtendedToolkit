@@ -16,7 +16,7 @@ bool UPCGExDotFilterFactory::Init(FPCGExContext* InContext)
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExDotFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FDotFilter>(this);
+	return MakeShared<PCGExPointFilter::FDotFilter>(this);
 }
 
 bool UPCGExDotFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -31,14 +31,14 @@ bool UPCGExDotFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext*
 	return true;
 }
 
-bool PCGExPointsFilter::FDotFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FDotFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
 	OperandA = PointDataFacade->GetScopedBroadcaster<FVector>(TypedFilterFactory->Config.OperandA);
 	if (!OperandA)
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand A attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandA.GetName())));
+		PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand A", TypedFilterFactory->Config.OperandA)
 		return false;
 	}
 
@@ -47,12 +47,23 @@ bool PCGExPointsFilter::FDotFilter::Init(FPCGExContext* InContext, const TShared
 		OperandB = PointDataFacade->GetScopedBroadcaster<FVector>(TypedFilterFactory->Config.OperandB);
 		if (!OperandB)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Operand B attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.OperandB.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Operand B", TypedFilterFactory->Config.OperandB)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FDotFilter::Test(const int32 PointIndex) const
+{
+	const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
+	const FVector B = OperandB ? OperandB->Read(PointIndex).GetSafeNormal() : TypedFilterFactory->Config.OperandBConstant;
+	return DotComparison.Test(
+		FVector::DotProduct(
+			TypedFilterFactory->Config.bTransformOperandA ? Point.Transform.TransformVectorNoScale(OperandA->Read(PointIndex)) : OperandA->Read(PointIndex),
+			TypedFilterFactory->Config.bTransformOperandB ? Point.Transform.TransformVectorNoScale(B) : B),
+		PointIndex);
 }
 
 PCGEX_CREATE_FILTER_FACTORY(Dot)

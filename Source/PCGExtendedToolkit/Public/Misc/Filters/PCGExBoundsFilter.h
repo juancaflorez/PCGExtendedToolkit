@@ -30,7 +30,7 @@ enum class EPCGExBoundsFilterCompareMode : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsFilterConfig
+struct FPCGExBoundsFilterConfig
 {
 	GENERATED_BODY()
 
@@ -75,7 +75,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBoundsFilterFactory : public UPCGExFilterFactoryData
+class UPCGExBoundsFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -91,15 +91,15 @@ public:
 	virtual bool Init(FPCGExContext* InContext) override;
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 
-	virtual bool GetRequiresPreparation(FPCGExContext* InContext) override { return true; }
+	virtual bool WantsPreparation(FPCGExContext* InContext) override { return true; }
 	virtual bool Prepare(FPCGExContext* InContext) override;
 
 	virtual void BeginDestroy() override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBoundsFilter final : public PCGExPointFilter::FSimpleFilter
+	class FBoundsFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FBoundsFilter(const TObjectPtr<const UPCGExBoundsFilterFactory>& InFactory)
@@ -118,9 +118,9 @@ namespace PCGExPointsFilter
 		using BoundCheckCallback = std::function<bool(const FPCGPoint&)>;
 		BoundCheckCallback BoundCheck;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const FPCGPoint& Point) const override { return BoundCheck(Point); }
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override { return BoundCheck(PointDataFacade->Source->GetInPoint(PointIndex)); }
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const FPCGPoint& Point) const override { return BoundCheck(Point); }
+		virtual bool Test(const int32 PointIndex) const override { return BoundCheck(PointDataFacade->Source->GetInPoint(PointIndex)); }
 
 		virtual ~FBoundsFilter() override
 		{
@@ -131,7 +131,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBoundsFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExBoundsFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

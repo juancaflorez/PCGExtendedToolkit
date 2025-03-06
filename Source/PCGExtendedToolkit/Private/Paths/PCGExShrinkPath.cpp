@@ -14,8 +14,6 @@ UPCGExShrinkPathSettings::UPCGExShrinkPathSettings(
 	bSupportClosedLoops = false;
 }
 
-PCGExData::EIOInit UPCGExShrinkPathSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 PCGEX_INITIALIZE_ELEMENT(ShrinkPath)
 
 void FPCGExShrinkPathContext::GetShrinkAmounts(const TSharedRef<PCGExData::FPointIO>& PointIO, double& Start, double& End, EPCGExPathShrinkDistanceCutType& StartCut, EPCGExPathShrinkDistanceCutType& EndCut) const
@@ -159,16 +157,18 @@ namespace PCGExShrinkPath
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExShrinkPath::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
-		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
+		const TSharedRef<PCGExData::FPointIO> PointIO = PointDataFacade->Source;
 
 		ON_SCOPE_EXIT
 		{
+			PCGEX_ASYNC_CHKD_VOID(AsyncManager)
+
 			if (PointIO->GetIn() != PointIO->GetOut() && PointIO->GetNum(PCGExData::ESource::Out) <= 1)
 			{
 				PointIO->InitializeOutput(PCGExData::EIOInit::None);

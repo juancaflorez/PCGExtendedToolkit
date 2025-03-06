@@ -15,7 +15,7 @@
 #include "PCGExDotFilter.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDotFilterConfig
+struct FPCGExDotFilterConfig
 {
 	GENERATED_BODY()
 
@@ -60,7 +60,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDotFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExDotFilterFactory : public UPCGExFilterFactoryData
+class UPCGExDotFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -73,9 +73,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FDotFilter final : public PCGExPointFilter::FSimpleFilter
+	class FDotFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FDotFilter(const TObjectPtr<const UPCGExDotFilterFactory>& InFactory)
@@ -91,17 +91,9 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGExData::TBuffer<FVector>> OperandA;
 		TSharedPtr<PCGExData::TBuffer<FVector>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
-			const FVector B = OperandB ? OperandB->Read(PointIndex).GetSafeNormal() : TypedFilterFactory->Config.OperandBConstant;
-			return DotComparison.Test(
-				FVector::DotProduct(
-					TypedFilterFactory->Config.bTransformOperandA ? Point.Transform.TransformVectorNoScale(OperandA->Read(PointIndex)) : OperandA->Read(PointIndex),
-					TypedFilterFactory->Config.bTransformOperandB ? Point.Transform.TransformVectorNoScale(B) : B),
-				PointIndex);
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FDotFilter() override
 		{
@@ -112,7 +104,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExDotFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExDotFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExBitwiseOperationElement"
 #define PCGEX_NAMESPACE BitwiseOperation
 
-PCGExData::EIOInit UPCGExBitwiseOperationSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(BitwiseOperation)
 
 bool FPCGExBitwiseOperationElement::Boot(FPCGExContext* InContext) const
@@ -67,12 +65,13 @@ bool FPCGExBitwiseOperationElement::ExecuteInternal(FPCGContext* InContext) cons
 
 namespace PCGExBitwiseOperation
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExBitwiseOperation::Process);
 
-
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		Writer = PointDataFacade->GetWritable<int64>(Settings->FlagAttribute, 0, false, PCGExData::EBufferInit::Inherit);
 

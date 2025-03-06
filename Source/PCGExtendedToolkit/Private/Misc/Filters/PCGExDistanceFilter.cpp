@@ -15,13 +15,12 @@ bool UPCGExDistanceFilterFactory::SupportsDirectEvaluation() const
 bool UPCGExDistanceFilterFactory::Init(FPCGExContext* InContext)
 {
 	if (!Super::Init(InContext)) { return false; }
-
-	return false;
+	return true;
 }
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExDistanceFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FDistanceFilter>(this);
+	return MakeShared<PCGExPointFilter::FDistanceFilter>(this);
 }
 
 bool UPCGExDistanceFilterFactory::RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const
@@ -56,7 +55,7 @@ void UPCGExDistanceFilterFactory::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-bool PCGExPointsFilter::FDistanceFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+bool PCGExPointFilter::FDistanceFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 {
 	if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -73,12 +72,165 @@ bool PCGExPointsFilter::FDistanceFilter::Init(FPCGExContext* InContext, const TS
 
 		if (!DistanceThresholdGetter)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Distance Threshold attribute: \"{0}\"."), FText::FromName(TypedFilterFactory->Config.DistanceThreshold.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Distance Threshold", TypedFilterFactory->Config.DistanceThreshold)
 			return false;
 		}
 	}
 
 	return true;
+}
+
+bool PCGExPointFilter::FDistanceFilter::Test(const FPCGPoint& Point) const
+{
+	double BestDist = MAX_dbl;
+
+	if (Distances->bOverlapIsZero)
+	{
+		bool bOverlap = false;
+		for (int i = 0; i < NumTargets; i++)
+		{
+			const UPCGPointData::PointOctree* TargetOctree = *(Octrees->GetData() + i);
+			if (const uintptr_t Current = *(TargetsPtr->GetData() + i); Current == SelfPtr)
+			{
+				if (bIgnoreSelf) { continue; }
+
+				// Ignore current point when testing against self
+				TargetOctree->FindNearbyElements(
+					Point.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						double Dist = Distances->GetDistSquared(Point, *PointRef.Point, bOverlap);
+						if (bOverlap) { Dist = 0; }
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+			else
+			{
+				TargetOctree->FindNearbyElements(
+					Point.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						double Dist = Distances->GetDistSquared(Point, *PointRef.Point, bOverlap);
+						if (bOverlap) { Dist = 0; }
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+		}
+	}
+	else
+	{
+		for (int i = 0; i < NumTargets; i++)
+		{
+			const UPCGPointData::PointOctree* TargetOctree = *(Octrees->GetData() + i);
+
+			if (const uintptr_t Current = *(TargetsPtr->GetData() + i); Current == SelfPtr)
+			{
+				if (bIgnoreSelf) { continue; }
+
+				// Ignore current point when testing against self
+				TargetOctree->FindNearbyElements(
+					Point.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						const double Dist = Distances->GetDistSquared(Point, *PointRef.Point);
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+			else
+			{
+				TargetOctree->FindNearbyElements(
+					Point.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						const double Dist = Distances->GetDistSquared(Point, *PointRef.Point);
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+		}
+	}
+
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, FMath::Sqrt(BestDist), TypedFilterFactory->Config.DistanceThresholdConstant, TypedFilterFactory->Config.Tolerance);
+}
+
+bool PCGExPointFilter::FDistanceFilter::Test(const int32 PointIndex) const
+{
+	const double B = DistanceThresholdGetter ? DistanceThresholdGetter->Read(PointIndex) : TypedFilterFactory->Config.DistanceThresholdConstant;
+
+	const FPCGPoint& SourcePt = PointDataFacade->Source->GetInPoint(PointIndex);
+	double BestDist = MAX_dbl;
+
+	if (Distances->bOverlapIsZero)
+	{
+		bool bOverlap = false;
+		for (int i = 0; i < NumTargets; i++)
+		{
+			const UPCGPointData::PointOctree* TargetOctree = *(Octrees->GetData() + i);
+			if (const uintptr_t Current = *(TargetsPtr->GetData() + i); Current == SelfPtr)
+			{
+				if (bIgnoreSelf) { continue; }
+
+				// Ignore current point when testing against self
+				TargetOctree->FindNearbyElements(
+					SourcePt.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						if (const ptrdiff_t OtherIndex = PointRef.Point - PointDataFacade->GetIn()->GetPoints().GetData();
+							OtherIndex == PointIndex) { return; }
+
+						double Dist = Distances->GetDistSquared(SourcePt, *PointRef.Point, bOverlap);
+						if (bOverlap) { Dist = 0; }
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+			else
+			{
+				TargetOctree->FindNearbyElements(
+					SourcePt.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						double Dist = Distances->GetDistSquared(SourcePt, *PointRef.Point, bOverlap);
+						if (bOverlap) { Dist = 0; }
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+		}
+	}
+	else
+	{
+		for (int i = 0; i < NumTargets; i++)
+		{
+			const UPCGPointData::PointOctree* TargetOctree = *(Octrees->GetData() + i);
+
+			if (const uintptr_t Current = *(TargetsPtr->GetData() + i); Current == SelfPtr)
+			{
+				if (bIgnoreSelf) { continue; }
+
+				// Ignore current point when testing against self
+				TargetOctree->FindNearbyElements(
+					SourcePt.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						if (const ptrdiff_t OtherIndex = PointRef.Point - PointDataFacade->GetIn()->GetPoints().GetData();
+							OtherIndex == PointIndex) { return; }
+
+						const double Dist = Distances->GetDistSquared(SourcePt, *PointRef.Point);
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+			else
+			{
+				TargetOctree->FindNearbyElements(
+					SourcePt.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
+					{
+						const double Dist = Distances->GetDistSquared(SourcePt, *PointRef.Point);
+						if (Dist > BestDist) { return; }
+						BestDist = Dist;
+					});
+			}
+		}
+	}
+
+	return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, FMath::Sqrt(BestDist), B, TypedFilterFactory->Config.Tolerance);
 }
 
 TArray<FPCGPinProperties> UPCGExDistanceFilterProviderSettings::InputPinProperties() const

@@ -5,10 +5,74 @@
 
 #include "PCGEx.h"
 #include "PCGExMacros.h"
+#include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
 namespace PCGExAssetCollection
 {
+	int32 FCategory::GetPick(const int32 Index, const EPCGExIndexPickMode PickMode) const
+	{
+		switch (PickMode)
+		{
+		default:
+		case EPCGExIndexPickMode::Ascending:
+			return GetPickAscending(Index);
+		case EPCGExIndexPickMode::Descending:
+			return GetPickDescending(Index);
+		case EPCGExIndexPickMode::WeightAscending:
+			return GetPickWeightAscending(Index);
+		case EPCGExIndexPickMode::WeightDescending:
+			return GetPickWeightDescending(Index);
+		}
+	}
+
+	int32 FCategory::GetPickAscending(const int32 Index) const
+	{
+		return Indices.IsValidIndex(Index) ? Indices[Index] : -1;
+	}
+
+	int32 FCategory::GetPickDescending(const int32 Index) const
+	{
+		return Indices.IsValidIndex(Index) ? Indices[(Indices.Num() - 1) - Index] : -1;
+	}
+
+	int32 FCategory::GetPickWeightAscending(const int32 Index) const
+	{
+		return Order.IsValidIndex(Index) ? Indices[Order[Index]] : -1;
+	}
+
+	int32 FCategory::GetPickWeightDescending(const int32 Index) const
+	{
+		return Order.IsValidIndex(Index) ? Indices[Order[(Order.Num() - 1) - Index]] : -1;
+	}
+
+	int32 FCategory::GetPickRandom(const int32 Seed) const
+	{
+		return Indices[Order[FRandomStream(Seed).RandRange(0, Order.Num() - 1)]];
+	}
+
+	int32 FCategory::GetPickRandomWeighted(const int32 Seed) const
+	{
+		const int32 Threshold = FRandomStream(Seed).RandRange(0, WeightSum - 1);
+		int32 Pick = 0;
+		while (Pick < Weights.Num() && Weights[Pick] < Threshold) { Pick++; }
+		return Indices[Order[Pick]];
+	}
+
+	void FCategory::Reserve(const int32 Num)
+	{
+		Indices.Reserve(Num);
+		Weights.Reserve(Num);
+		Order.Reserve(Num);
+	}
+
+	void FCategory::Shrink()
+	{
+		Indices.Shrink();
+		Weights.Shrink();
+		Order.Shrink();
+	}
+
 	void FCategory::RegisterEntry(const int32 Index, const FPCGExAssetCollectionEntry* InEntry)
 	{
 		Entries.Add(InEntry);
@@ -34,6 +98,12 @@ namespace PCGExAssetCollection
 		}
 	}
 }
+
+#if WITH_EDITOR
+void FPCGExAssetCollectionEntry::EDITOR_Sanitize()
+{
+}
+#endif
 
 bool FPCGExAssetCollectionEntry::Validate(const UPCGExAssetCollection* ParentCollection)
 {
@@ -92,6 +162,72 @@ namespace PCGExAssetCollection
 		{
 			(*CategoryPtr)->RegisterEntry(Index, InEntry);
 		}
+	}
+
+	void GetBoundingBoxBySpawning(const TSoftClassPtr<AActor>& InActorClass, FVector& Origin, FVector& BoxExtent, const bool bOnlyCollidingComponents, const bool bIncludeFromChildActors)
+	{
+#if WITH_EDITOR
+		UWorld* World = GWorld;
+		if (!World)
+		{
+			UE_LOG(LogTemp, Error, TEXT("No world to compute actor bounds!"));
+			return;
+		}
+
+		if (IsInGameThread())
+		{
+			UClass* ActorClass = InActorClass.LoadSynchronous();
+			if (!ActorClass) { return; }
+
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.bNoFail = true;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			AActor* TempActor = World->SpawnActor<AActor>(ActorClass, FTransform(), SpawnParams);
+			if (!TempActor)
+			{
+				UE_LOG(LogTemp, Error, TEXT("Failed to create temp actor!"));
+				return;
+			}
+
+			// Compute the bounds
+			TempActor->GetActorBounds(bOnlyCollidingComponents, Origin, BoxExtent, bIncludeFromChildActors);
+
+			// Hide the actor to ensure it doesn't affect gameplay or rendering
+			TempActor->SetActorHiddenInGame(true);
+			TempActor->SetActorEnableCollision(false);
+
+			// Destroy the temporary actor
+			TempActor->Destroy();
+		}
+		else
+		{
+			// If this throw, it's because a collection has been initialized outside of game thread, which is bad.
+			UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning executed outside of game thread."));
+		}
+#else
+		UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning called in non-editor context."));
+#endif
+	}
+
+	void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const TSoftClassPtr<AActor>& InActor, const bool bOnlyCollidingComponents, const bool bIncludeFromChildActors)
+	{
+		FVector Origin = FVector::ZeroVector;
+		FVector Extents = FVector::ZeroVector;
+		GetBoundingBoxBySpawning(InActor, Origin, Extents, bOnlyCollidingComponents, bIncludeFromChildActors);
+
+		InStaging.Bounds = FBoxCenterAndExtent(Origin, Extents).GetBox();
+	}
+
+	void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const UStaticMesh* InMesh)
+	{
+		if (!InMesh)
+		{
+			InStaging.Bounds = FBox(ForceInit);
+			return;
+		}
+
+		InStaging.Bounds = InMesh->GetBoundingBox();
 	}
 
 	void FCache::Compile()
@@ -209,15 +345,39 @@ MarkPackageDirty();
 
 void UPCGExAssetCollection::EDITOR_SortByWeightAscending() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_SortByWeightAscendingTyped();) }
 
+void UPCGExAssetCollection::EDITOR_SortByWeightAscendingTyped()
+{
+}
+
 void UPCGExAssetCollection::EDITOR_SortByWeightDescending() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_SortByWeightDescendingTyped();) }
+
+void UPCGExAssetCollection::EDITOR_SortByWeightDescendingTyped()
+{
+}
 
 void UPCGExAssetCollection::EDITOR_SetWeightIndex() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_SetWeightIndexTyped();) }
 
+void UPCGExAssetCollection::EDITOR_SetWeightIndexTyped()
+{
+}
+
 void UPCGExAssetCollection::EDITOR_PadWeight() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_PadWeightTyped();) }
+
+void UPCGExAssetCollection::EDITOR_PadWeightTyped()
+{
+}
 
 void UPCGExAssetCollection::EDITOR_WeightOne() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_WeightOneTyped();) }
 
+void UPCGExAssetCollection::EDITOR_WeightOneTyped()
+{
+}
+
 void UPCGExAssetCollection::EDITOR_WeightRandom() { PCGEX_ASSET_COLLECTION_UTIL_CALL(EDITOR_WeightRandomTyped();) }
+
+void UPCGExAssetCollection::EDITOR_WeightRandomTyped()
+{
+}
 
 void UPCGExAssetCollection::EDITOR_SanitizeAndRebuildStagingData(const bool bRecursive)
 {
@@ -241,6 +401,11 @@ void UPCGExAssetCollection::GetAssetPaths(TSet<FSoftObjectPath>& OutPaths, const
 {
 }
 
+
+FPCGExRoamingAssetCollectionDetails::FPCGExRoamingAssetCollectionDetails(const TSubclassOf<UPCGExAssetCollection>& InAssetCollectionType)
+	: bSupportCustomType(false), AssetCollectionType(InAssetCollectionType)
+{
+}
 
 bool FPCGExRoamingAssetCollectionDetails::Validate(FPCGExContext* InContext) const
 {

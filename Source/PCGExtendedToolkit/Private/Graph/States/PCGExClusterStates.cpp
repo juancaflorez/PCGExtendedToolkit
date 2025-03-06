@@ -30,6 +30,7 @@ namespace PCGExClusterStates
 {
 	FState::~FState()
 	{
+		
 	}
 
 	bool FState::Init(FPCGExContext* InContext, const TSharedRef<PCGExCluster::FCluster>& InCluster, const TSharedRef<PCGExData::FFacade>& InPointDataFacade, const TSharedRef<PCGExData::FFacade>& InEdgeDataFacade)
@@ -118,9 +119,11 @@ UPCGExFactoryData* UPCGExClusterStateFactoryProviderSettings::CreateFactory(FPCG
 	NewFactory->Priority = Priority;
 	NewFactory->Config = Config;
 
+	Super::CreateFactory(InContext, NewFactory);
+
 	if (!GetInputFactories(
 		InContext, PCGExPointFilter::SourceFiltersLabel, NewFactory->FilterFactories,
-		PCGExFactories::ClusterNodeFilters))
+		PCGExFactories::ClusterNodeFilters, !bQuietMissingInputError))
 	{
 		InContext->ManagedObjects->Destroy(NewFactory);
 		return nullptr;

@@ -11,6 +11,7 @@
 #include "Data/Blending/PCGExUnionBlender.h"
 #include "Data/Blending/PCGExDataBlending.h"
 
+
 #include "SubPoints/DataBlending/PCGExSubPointsBlendOperation.h"
 #include "PCGExPathCrossings.generated.h"
 
@@ -18,7 +19,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathCrossingsSettings : public UPCGExPathProcessorSettings
+class UPCGExPathCrossingsSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -33,11 +34,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** If enabled, crossings are only computed per path, against themselves only. Note: this ignores the "bEnableSelfIntersection" from details below. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, ClampMin=0))
 	bool bSelfIntersectionOnly = false;
@@ -109,7 +106,7 @@ public:
 	FString HasNoCrossingsTag = TEXT("HasNoCrossings");
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathCrossingsContext final : FPCGExPathProcessorContext
+struct FPCGExPathCrossingsContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathCrossingsElement;
 
@@ -125,7 +122,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathCrossingsContext final : FPCGExPathP
 	FPCGExBlendingDetails CrossingBlending;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathCrossingsElement final : public FPCGExPathProcessorElement
+class FPCGExPathCrossingsElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -140,7 +137,7 @@ protected:
 
 namespace PCGExPathCrossings
 {
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FCrossing
+	struct PCGEXTENDEDTOOLKIT_API FCrossing
 	{
 		int32 Index = -1;
 
@@ -196,7 +193,7 @@ namespace PCGExPathCrossings
 
 		const PCGExPaths::FPathEdgeOctree* GetEdgeOctree() const { return Path->GetEdgeOctree(); }
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void OnRangeProcessingComplete() override;
 		void CollapseCrossing(const int32 Index);

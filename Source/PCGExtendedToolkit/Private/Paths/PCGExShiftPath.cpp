@@ -3,6 +3,7 @@
 
 #include "Paths/PCGExShiftPath.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExShiftPathElement"
 #define PCGEX_NAMESPACE ShiftPath
 
@@ -19,8 +20,6 @@ void UPCGExShiftPathSettings::PostEditChangeProperty(FPropertyChangedEvent& Prop
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 #endif
-
-PCGExData::EIOInit UPCGExShiftPathSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 PCGEX_INITIALIZE_ELEMENT(ShiftPath)
 
@@ -70,11 +69,13 @@ namespace PCGExShiftPath
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExShiftPath::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		MaxIndex = PointDataFacade->GetNum(PCGExData::ESource::In) - 1;
 		PivotIndex = Settings->bReverseShift ? MaxIndex : 0;

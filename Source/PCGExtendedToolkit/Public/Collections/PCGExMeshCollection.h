@@ -23,13 +23,11 @@ enum class EPCGExMaterialVariantsMode : uint8
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Material Override Entry")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideEntry
+struct PCGEXTENDEDTOOLKIT_API FPCGExMaterialOverrideEntry
 {
 	GENERATED_BODY()
 
-	FPCGExMaterialOverrideEntry()
-	{
-	}
+	FPCGExMaterialOverrideEntry() = default;
 
 	/** Material slot index. -1 uses the index inside the container. */
 	UPROPERTY(EditAnywhere, Category = Settings)
@@ -40,15 +38,13 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideEntry
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Material Override Collection")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideCollection
+struct PCGEXTENDEDTOOLKIT_API FPCGExMaterialOverrideCollection
 {
 	GENERATED_BODY()
 
 	virtual ~FPCGExMaterialOverrideCollection() = default;
 
-	FPCGExMaterialOverrideCollection()
-	{
-	}
+	FPCGExMaterialOverrideCollection() = default;
 
 	UPROPERTY(EditAnywhere, Category = Settings, meta=(EditCondition = "bEnabled", ClampMin=1))
 	int32 Weight = 1;
@@ -61,22 +57,19 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideCollection
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(VisibleAnywhere, Category=Settings, meta=(HideInDetailPanel, EditCondition="false", EditConditionHides))
 	FName DisplayName = NAME_None;
+#endif
 
-	void UpdateDisplayName()
-	{
-	}
-
+#if WITH_EDITOR
+	void UpdateDisplayName();
 #endif
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Material Override Single Entry")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideSingleEntry
+struct PCGEXTENDEDTOOLKIT_API FPCGExMaterialOverrideSingleEntry
 {
 	GENERATED_BODY()
 
-	FPCGExMaterialOverrideSingleEntry()
-	{
-	}
+	FPCGExMaterialOverrideSingleEntry() = default;
 
 	UPROPERTY(EditAnywhere, Category = Settings, meta=(EditCondition = "bEnabled", ClampMin=1))
 	int32 Weight = 1;
@@ -87,16 +80,14 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMaterialOverrideSingleEntry
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(VisibleAnywhere, Category=Settings, meta=(HideInDetailPanel, EditCondition="false", EditConditionHides))
 	FName DisplayName = NAME_None;
-
-	void UpdateDisplayName()
-	{
-		DisplayName = FName(Material.GetAssetName());
-	}
+#endif
+#if WITH_EDITOR
+	void UpdateDisplayName();
 #endif
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Mesh Collection Entry")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshCollectionEntry : public FPCGExAssetCollectionEntry
+struct PCGEXTENDEDTOOLKIT_API FPCGExMeshCollectionEntry : public FPCGExAssetCollectionEntry
 {
 	GENERATED_BODY()
 
@@ -120,7 +111,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshCollectionEntry : public FPCGExAsset
 	EPCGExMaterialVariantsMode MaterialVariants = EPCGExMaterialVariantsMode::None;
 
 	/** Material slot index. -1 uses the index inside the container. */
-	UPROPERTY(EditAnywhere, Category = Settings, meta=(DisplayName=" └─ Slot Index", EditCondition="!bIsSubCollection  && MaterialVariants==EPCGExMaterialVariantsMode::Single", EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = Settings, meta=(DisplayName=" ├─ Slot Index", EditCondition="!bIsSubCollection  && MaterialVariants==EPCGExMaterialVariantsMode::Single", EditConditionHides))
 	int32 SlotIndex = 0;
 
 	/** A list of single material variants */
@@ -175,7 +166,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExMeshCollectionEntry : public FPCGExAsset
 };
 
 UCLASS(BlueprintType, DisplayName="[PCGEx] Mesh Collection")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExMeshCollection : public UPCGExAssetCollection
+class PCGEXTENDEDTOOLKIT_API UPCGExMeshCollection : public UPCGExAssetCollection
 {
 	GENERATED_BODY()
 

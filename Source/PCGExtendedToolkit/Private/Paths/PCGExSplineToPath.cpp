@@ -45,7 +45,7 @@ bool FPCGExSplineToPathElement::Boot(FPCGExContext* InContext) const
 		for (const FPCGTaggedData& TaggedData : Targets)
 		{
 			const UPCGSplineData* SplineData = Cast<UPCGSplineData>(TaggedData.Data);
-			if (!SplineData) { continue; }
+			if (!SplineData || SplineData->SplineStruct.GetNumberOfSplineSegments() <= 0) { continue; }
 
 			switch (Settings->SampleInputs)
 			{
@@ -192,7 +192,6 @@ namespace PCGExSplineToPath
 			ApplyTransform(MutablePoints[i], Spline.GetTransformAtDistanceAlongSpline(LengthAtPoint, ESplineCoordinateSpace::Type::World, true));
 
 			int32 PtType = -1;
-
 
 			PCGEX_OUTPUT_VALUE(LengthAtPoint, i, LengthAtPoint);
 			PCGEX_OUTPUT_VALUE(Alpha, i, LengthAtPoint / TotalLength);

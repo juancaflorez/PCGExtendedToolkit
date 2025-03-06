@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExOffsetPathElement"
 #define PCGEX_NAMESPACE OffsetPath
 
-PCGExData::EIOInit UPCGExOffsetPathSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 PCGEX_INITIALIZE_ELEMENT(OffsetPath)
 
 bool FPCGExOffsetPathElement::Boot(FPCGExContext* InContext) const
@@ -63,7 +61,7 @@ bool FPCGExOffsetPathElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExOffsetPath
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExOffsetPath::Process);
 
@@ -100,7 +98,7 @@ namespace PCGExOffsetPath
 			OffsetGetter = PointDataFacade->GetScopedBroadcaster<double>(Settings->OffsetAttribute);
 			if (!OffsetGetter)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FText::Format(FTEXT("Input missing offset size attribute: \"{0}\"."), FText::FromName(Settings->OffsetAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, "Offset", Settings->OffsetAttribute)
 				return false;
 			}
 		}
@@ -110,7 +108,7 @@ namespace PCGExOffsetPath
 			DirectionGetter = PointDataFacade->GetScopedBroadcaster<FVector>(Settings->DirectionAttribute);
 			if (!DirectionGetter)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FText::Format(FTEXT("Input missing UpVector attribute: \"{0}\"."), FText::FromName(Settings->DirectionAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, "Direction", Settings->DirectionAttribute)
 				return false;
 			}
 		}

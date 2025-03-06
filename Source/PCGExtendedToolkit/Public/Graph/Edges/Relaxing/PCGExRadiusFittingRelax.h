@@ -12,7 +12,7 @@
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Radius Fitting")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExRadiusFittingRelax : public UPCGExFittingRelaxBase
+class UPCGExRadiusFittingRelax : public UPCGExFittingRelaxBase
 {
 	GENERATED_BODY()
 
@@ -34,7 +34,7 @@ public:
 		RadiusBuffer = PrimaryDataFacade->GetBroadcaster<double>(RadiusAttribute);
 		if (!RadiusBuffer)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("Invalid Radius attribute: \"{0}\"."), FText::FromName(RadiusAttribute.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(Context, "Radius", RadiusAttribute)
 			return false;
 		}
 

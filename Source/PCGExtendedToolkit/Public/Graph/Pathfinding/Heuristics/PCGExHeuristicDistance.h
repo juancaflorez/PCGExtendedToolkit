@@ -13,7 +13,7 @@
 #include "PCGExHeuristicDistance.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigShortestDistance : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigShortestDistance : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -27,31 +27,26 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigShortestDistance : public
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Shortest Distance")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicDistance : public UPCGExHeuristicOperation
+class UPCGExHeuristicDistance : public UPCGExHeuristicOperation
 {
 	GENERATED_BODY()
 
 public:
 	virtual void PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster) override;
 
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		return GetScoreInternal(Cluster->GetDist(From, Goal) / BoundsSize);
-	}
+		const PCGExCluster::FNode& Goal) const override;
 
-	FORCEINLINE virtual double GetEdgeScore(
+
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
-	{
-		return GetScoreInternal((*Cluster->EdgeLengths)[Edge.Index]);
-	}
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override;
 
 protected:
 	double BoundsSize = 0;
@@ -60,7 +55,7 @@ protected:
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryShortestDistance : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactoryShortestDistance : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
@@ -73,7 +68,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsShortestDistanceProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicsShortestDistanceProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

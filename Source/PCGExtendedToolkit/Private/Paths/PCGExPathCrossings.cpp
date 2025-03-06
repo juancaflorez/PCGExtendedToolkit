@@ -20,8 +20,6 @@ TArray<FPCGPinProperties> UPCGExPathCrossingsSettings::InputPinProperties() cons
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExPathCrossingsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 PCGEX_INITIALIZE_ELEMENT(PathCrossings)
 
 bool FPCGExPathCrossingsElement::Boot(FPCGExContext* InContext) const
@@ -101,7 +99,7 @@ bool FPCGExPathCrossingsElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExPathCrossings
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExPathCrossings::Process);
 

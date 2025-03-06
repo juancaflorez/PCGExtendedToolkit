@@ -3,13 +3,11 @@
 
 
 #include "Misc/PCGExAttributeRemap.h"
+#include "PCGExHelpers.h"
 
 
 #define LOCTEXT_NAMESPACE "PCGExAttributeRemap"
 #define PCGEX_NAMESPACE AttributeRemap
-
-
-PCGExData::EIOInit UPCGExAttributeRemapSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 #if WITH_EDITOR
 FString UPCGExAttributeRemapSettings::GetDisplayName() const
@@ -18,10 +16,7 @@ FString UPCGExAttributeRemapSettings::GetDisplayName() const
 	{
 		return Attributes.Source.ToString() + " → " + Attributes.Target.ToString();
 	}
-	else
-	{
-		return Attributes.Source.ToString();
-	}
+	return Attributes.Source.ToString();
 }
 #endif
 
@@ -115,10 +110,13 @@ namespace PCGExAttributeRemap
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
+		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
+
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		const TSharedPtr<PCGEx::FAttributesInfos> Infos = PCGEx::FAttributesInfos::Get(PointDataFacade->GetIn()->Metadata);
 		const PCGEx::FAttributeIdentity* Identity = Infos->Find(Settings->Attributes.Source);
@@ -130,35 +128,7 @@ namespace PCGExAttributeRemap
 		}
 
 		UnderlyingType = Identity->UnderlyingType;
-
-		switch (UnderlyingType)
-		{
-		case EPCGMetadataTypes::Float:
-		case EPCGMetadataTypes::Double:
-		case EPCGMetadataTypes::Integer32:
-		case EPCGMetadataTypes::Integer64:
-			Dimensions = 1;
-			break;
-		case EPCGMetadataTypes::Vector2:
-			Dimensions = 2;
-			break;
-		case EPCGMetadataTypes::Vector:
-		case EPCGMetadataTypes::Rotator:
-			Dimensions = 3;
-			break;
-		case EPCGMetadataTypes::Vector4:
-		case EPCGMetadataTypes::Quaternion:
-			Dimensions = 4;
-			break;
-		default:
-		case EPCGMetadataTypes::Transform:
-		case EPCGMetadataTypes::String:
-		case EPCGMetadataTypes::Boolean:
-		case EPCGMetadataTypes::Name:
-		case EPCGMetadataTypes::Unknown:
-			Dimensions = -1;
-			break;
-		}
+		Dimensions = PCGEx::GetMetadataSize(UnderlyingType);
 
 		if (Dimensions == -1)
 		{
@@ -184,8 +154,8 @@ namespace PCGExAttributeRemap
 		for (int i = 0; i < Dimensions; i++)
 		{
 			FPCGExComponentRemapRule& Rule = Rules.Add_GetRef(FPCGExComponentRemapRule(Context->RemapSettings[Context->RemapIndices[i]]));
-			Rule.RemapDetails.InMin = MAX_dbl;
-			Rule.RemapDetails.InMax = MIN_dbl_neg;
+			if (!Rule.RemapDetails.bUseInMin) { Rule.RemapDetails.InMin = MAX_dbl; }
+			if (!Rule.RemapDetails.bUseInMax) { Rule.RemapDetails.InMax = MIN_dbl_neg; }
 		}
 
 		PCGEX_ASYNC_GROUP_CHKD(AsyncManager, FetchTask)
@@ -208,7 +178,7 @@ namespace PCGExAttributeRemap
 						Rule.RemapDetails.InMax = Rule.MaxCache->Flatten([&](const double& In, const double& Out) { return FMath::Max(In, Out); });
 					}
 
-					if (Rule.RemapDetails.RangeMethod == EPCGExRangeType::FullRange) { Rule.RemapDetails.InMin = 0; }
+					if (Rule.RemapDetails.RangeMethod == EPCGExRangeType::FullRange && Rule.RemapDetails.InMin > 0) { Rule.RemapDetails.InMin = 0; }
 				}
 
 				This->OnPreparationComplete();

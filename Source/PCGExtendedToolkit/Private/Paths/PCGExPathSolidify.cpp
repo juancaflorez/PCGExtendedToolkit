@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExPathSolidifyElement"
 #define PCGEX_NAMESPACE PathSolidify
 
-PCGExData::EIOInit UPCGExPathSolidifySettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 PCGEX_INITIALIZE_ELEMENT(PathSolidify)
 
 bool FPCGExPathSolidifyElement::Boot(FPCGExContext* InContext) const
@@ -41,7 +39,6 @@ bool FPCGExPathSolidifyElement::ExecuteInternal(FPCGContext* InContext) const
 					return false;
 				}
 
-				Entry->InitializeOutput(PCGExData::EIOInit::Duplicate);
 				return true;
 			},
 			[&](const TSharedPtr<PCGExPointsMT::TBatch<PCGExPathSolidify::FProcessor>>& NewBatch)
@@ -65,7 +62,7 @@ namespace PCGExPathSolidify
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExPathSolidify::Process);
 
@@ -73,6 +70,8 @@ namespace PCGExPathSolidify
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		const TSharedRef<PCGExData::FPointIO>& PointIO = PointDataFacade->Source;
 		bClosedLoop = Context->ClosedLoop.IsClosedLoop(PointIO);
@@ -90,7 +89,7 @@ namespace PCGExPathSolidify
 #define PCGEX_CREATE_LOCAL_AXIS_GETTER(_AXIS)\
 if (Settings->bWriteRadius##_AXIS && Settings->Radius##_AXIS##Input == EPCGExInputValueType::Attribute){\
 SolidificationRad##_AXIS = PointDataFacade->GetBroadcaster<double>(Settings->Radius##_AXIS##SourceAttribute);\
-if (!SolidificationRad##_AXIS){ PCGE_LOG_C(Warning, GraphAndLog, Context, FText::Format(FTEXT("Some paths don't have the specified Radius Attribute \"{0}\"."), FText::FromName(Settings->Radius##_AXIS##SourceAttribute.GetName()))); return false; }}
+if (!SolidificationRad##_AXIS){ PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, ""#_AXIS"", Settings->Radius##_AXIS##SourceAttribute) return false; }}
 		PCGEX_FOREACH_XYZ(PCGEX_CREATE_LOCAL_AXIS_GETTER)
 #undef PCGEX_CREATE_LOCAL_AXIS_GETTER
 
@@ -99,7 +98,7 @@ if (!SolidificationRad##_AXIS){ PCGE_LOG_C(Warning, GraphAndLog, Context, FText:
 			SolidificationLerpGetter = PointDataFacade->GetBroadcaster<double>(Settings->SolidificationLerpAttribute);
 			if (!SolidificationLerpGetter)
 			{
-				PCGE_LOG_C(Warning, GraphAndLog, ExecutionContext, FText::Format(FTEXT("Some paths don't have the specified SolidificationEdgeLerp Attribute \"{0}\"."), FText::FromName(Settings->SolidificationLerpAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, "SolidificationEdgeLerp", Settings->SolidificationLerpAttribute)
 				return false;
 			}
 		}

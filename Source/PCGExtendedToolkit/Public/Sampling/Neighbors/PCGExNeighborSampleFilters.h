@@ -20,7 +20,7 @@
 ///
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
+struct FPCGExSamplerFilterConfig
 {
 	GENERATED_BODY()
 
@@ -39,7 +39,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
 	/** If enabled, outputs the value divided by the total number of samples */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName = " └─ Normalize", EditCondition="bWriteInsideNum", EditConditionHides, HideEditConditionToggle))
 	bool bNormalizeInsideNum = false;
-	
+
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle, InlineEditConditionToggle))
 	bool bWriteOutsideNum = false;
@@ -51,7 +51,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
 	/** If enabled, outputs the value divided by the total number of samples */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName = " └─ Normalize", EditCondition="bWriteOutsideNum", EditConditionHides, HideEditConditionToggle))
 	bool bNormalizeOutsideNum = false;
-	
+
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteTotalNum = false;
@@ -59,7 +59,6 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
 	/** Name of the attribute to write the total number of points tested */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName = "Total Num", EditCondition="bWriteTotalNum"))
 	FName TotalNumAttributeName = FName(FName("TotalNum"));
-
 
 
 	/** */
@@ -74,7 +73,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName = " └─ Normalize", EditCondition="bWriteInsideWeight", EditConditionHides, HideEditConditionToggle))
 	bool bNormalizeInsideWeight = false;
 
-	
+
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteOutsideWeight = false;
@@ -87,7 +86,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName = " └─ Normalize", EditCondition="bWriteOutsideWeight", EditConditionHides, HideEditConditionToggle))
 	bool bNormalizeOutsideWeight = false;
 
-	
+
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
 	bool bWriteTotalWeight = false;
@@ -101,7 +100,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSamplerFilterConfig
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleFilters : public UPCGExNeighborSampleOperation
+class UPCGExNeighborSampleFilters : public UPCGExNeighborSampleOperation
 {
 	GENERATED_BODY()
 
@@ -112,60 +111,11 @@ public:
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
 
 	virtual void PrepareForCluster(FPCGExContext* InContext, TSharedRef<PCGExCluster::FCluster> InCluster, TSharedRef<PCGExData::FFacade> InVtxDataFacade, TSharedRef<PCGExData::FFacade> InEdgeDataFacade) override;
+	virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const override;
 
-	FORCEINLINE virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const override
-	{
-	}
-
-	FORCEINLINE virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override
-	{
-		if (FilterManager->Test(*Cluster->GetNode(Lk)))
-		{
-			Inside[TargetNode.Index] += 1;
-			InsideWeight[TargetNode.Index] += Weight;
-		}
-		else
-		{
-			Outside[TargetNode.Index] += 1;
-			OutsideWeight[TargetNode.Index] += Weight;
-		}
-	}
-
-	FORCEINLINE virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override
-	{
-		if (FilterManager->Test(*Cluster->GetEdge(Lk)))
-		{
-			Inside[TargetNode.Index] += 1;
-			InsideWeight[TargetNode.Index] += Weight;
-		}
-		else
-		{
-			Outside[TargetNode.Index] += 1;
-			OutsideWeight[TargetNode.Index] += Weight;
-		}
-	}
-
-	FORCEINLINE virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight) override
-	{
-		const int32 WriteIndex = TargetNode.PointIndex;
-		const int32 ReadIndex = TargetNode.Index;
-		
-		if (NumInsideBuffer) { NumInsideBuffer->GetMutable(WriteIndex) = Inside[ReadIndex]; }
-		else if (NormalizedNumInsideBuffer) { NormalizedNumInsideBuffer->GetMutable(WriteIndex) = static_cast<double>(Inside[ReadIndex]) / static_cast<double>(Count); }
-
-		if (NumOutsideBuffer) { NumOutsideBuffer->GetMutable(WriteIndex) = Outside[ReadIndex]; }
-		else if (NormalizedNumOutsideBuffer) { NormalizedNumOutsideBuffer->GetMutable(WriteIndex) = static_cast<double>(Outside[ReadIndex]) / static_cast<double>(Count); }
-
-		if (TotalNumBuffer) { TotalNumBuffer->GetMutable(WriteIndex) = Count; }
-
-		if (WeightInsideBuffer) { WeightInsideBuffer->GetMutable(WriteIndex) = InsideWeight[ReadIndex]; }
-		else if (NormalizedWeightInsideBuffer) { NormalizedWeightInsideBuffer->GetMutable(WriteIndex) = InsideWeight[ReadIndex] / TotalWeight; }
-
-		if (WeightOutsideBuffer) { WeightOutsideBuffer->GetMutable(WriteIndex) = Outside[ReadIndex]; }
-		else if (NormalizedWeightOutsideBuffer) { NormalizedWeightOutsideBuffer->GetMutable(WriteIndex) = OutsideWeight[ReadIndex] / TotalWeight; }
-
-		if (TotalWeightBuffer) { TotalWeightBuffer->GetMutable(WriteIndex) = TotalWeight; }
-	}
+	virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override;
+	virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override;
+	virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight) override;
 
 	virtual void CompleteOperation() override;
 
@@ -181,18 +131,18 @@ protected:
 	TSharedPtr<PCGExData::TBuffer<double>> NormalizedNumInsideBuffer;
 	TSharedPtr<PCGExData::TBuffer<double>> WeightInsideBuffer;
 	TSharedPtr<PCGExData::TBuffer<double>> NormalizedWeightInsideBuffer;
-	
+
 	TSharedPtr<PCGExData::TBuffer<int32>> NumOutsideBuffer;
 	TSharedPtr<PCGExData::TBuffer<double>> NormalizedNumOutsideBuffer;
 	TSharedPtr<PCGExData::TBuffer<double>> WeightOutsideBuffer;
 	TSharedPtr<PCGExData::TBuffer<double>> NormalizedWeightOutsideBuffer;
-	
+
 	TSharedPtr<PCGExData::TBuffer<int32>> TotalNumBuffer;
 	TSharedPtr<PCGExData::TBuffer<int32>> TotalWeightBuffer;
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryFilters : public UPCGExNeighborSamplerFactoryData
+class UPCGExNeighborSamplerFactoryFilters : public UPCGExNeighborSamplerFactoryData
 {
 	GENERATED_BODY()
 
@@ -202,7 +152,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|NeighborSample")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleFiltersSettings : public UPCGExNeighborSampleProviderSettings
+class UPCGExNeighborSampleFiltersSettings : public UPCGExNeighborSampleProviderSettings
 {
 	GENERATED_BODY()
 

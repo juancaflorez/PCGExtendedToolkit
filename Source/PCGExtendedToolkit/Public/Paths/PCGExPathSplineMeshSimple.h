@@ -20,14 +20,18 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Path")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPathSplineMeshSimpleSettings : public UPCGExPathProcessorSettings
+class UPCGExPathSplineMeshSimpleSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
 public:
+	UPCGExPathSplineMeshSimpleSettings(const FObjectInitializer& ObjectInitializer);
+
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(PathSplineMeshSimple, "Path : Spline Mesh (Simple)", "Create spline mesh components from paths.");
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Spawner; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(UPCGExPathProcessorSettings::GetNodeTitleColor()); }
 #endif
 
 protected:
@@ -36,7 +40,6 @@ protected:
 
 public:
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 
 	/** The name of the attribute to write asset path to.*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -66,31 +69,43 @@ public:
 	FName LeaveTangentAttribute = "LeaveTangent";
 
 	/** Type of Start Offset */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_NotOverridable))
 	EPCGExInputValueType StartOffsetInput = EPCGExInputValueType::Constant;
 
 	/** Start Offset Attribute (Vector 2 expected)*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Start Offset (Attr)", EditCondition="StartOffsetInput!=EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_Overridable, DisplayName="Start Offset (Attr)", EditCondition="StartOffsetInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FName StartOffsetAttribute = FName("StartOffset");
 
 	/** Start Offset Constant */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Start Offset", EditCondition="StartOffsetInput==EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_Overridable, DisplayName="Start Offset", EditCondition="StartOffsetInput==EPCGExInputValueType::Constant", EditConditionHides))
 	FVector2D StartOffset = FVector2D::ZeroVector;
 
 	/** Type of End Offset */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_NotOverridable))
 	EPCGExInputValueType EndOffsetInput = EPCGExInputValueType::Constant;
 
 	/** End Offset Attribute (Vector 2 expected)*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="End Offset (Attr)", EditCondition="EndOffsetInput!=EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_Overridable, DisplayName="End Offset (Attr)", EditCondition="EndOffsetInput!=EPCGExInputValueType::Constant", EditConditionHides))
 	FName EndOffsetAttribute = FName("EndOffset");
 
 	/** End Offset Constant */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="End Offset", EditCondition="EndOffsetInput==EPCGExInputValueType::Constant", EditConditionHides))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Offsets", meta=(PCG_Overridable, DisplayName="End Offset", EditCondition="EndOffsetInput==EPCGExInputValueType::Constant", EditConditionHides))
 	FVector2D EndOffset = FVector2D::ZeroVector;
 
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable))
+	EPCGExSplineMeshUpMode SplineMeshUpMode = EPCGExSplineMeshUpMode::Constant;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Mesh Up Vector (Attr)", EditCondition="SplineMeshUpMode==EPCGExSplineMeshUpMode::Attribute", EditConditionHides))
+	FPCGAttributePropertyInputSelector SplineMeshUpVectorAttribute;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Mesh Up Vector", EditCondition="SplineMeshUpMode==EPCGExSplineMeshUpMode::Constant", EditConditionHides))
+	FVector SplineMeshUpVector = FVector::UpVector;
+
 	/**  */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Spline Axis Align"))
 	EPCGExMinimalAxis SplineMeshAxisConstant = EPCGExMinimalAxis::X;
 
 	/** Tagging details */
@@ -109,7 +124,7 @@ protected:
 	virtual bool IsCacheable() const override { return false; }
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshSimpleContext final : FPCGExPathProcessorContext
+struct FPCGExPathSplineMeshSimpleContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExPathSplineMeshSimpleElement;
 
@@ -117,7 +132,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshSimpleContext final : FPCG
 	TSharedPtr<PCGEx::TAssetLoader<UStaticMesh>> StaticMeshLoader;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPathSplineMeshSimpleElement final : public FPCGExPathProcessorElement
+class FPCGExPathSplineMeshSimpleElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -146,6 +161,7 @@ namespace PCGExPathSplineMeshSimple
 		int32 C1 = 1;
 		int32 C2 = 2;
 
+		TSharedPtr<PCGExData::TBuffer<FVector>> UpGetter;
 		TSharedPtr<PCGExData::TBuffer<FVector2D>> StartOffsetGetter;
 		TSharedPtr<PCGExData::TBuffer<FVector2D>> EndOffsetGetter;
 
@@ -171,7 +187,7 @@ namespace PCGExPathSplineMeshSimple
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

@@ -13,7 +13,7 @@
 #include "PCGExHeuristicSteepness.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigSteepness : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigSteepness : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -21,6 +21,14 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigSteepness : public FPCGEx
 		FPCGExHeuristicConfigBase()
 	{
 	}
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, InlineEditConditionToggle))
+	bool bAccumulateScore = false;
+
+	/** How many previous edges should be added to the current score. Use this when dealing with very smooth terrain to exacerbate steepness. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, EditCondition="bAccumulateScore", ClampMin=1))
+	int32 AccumulationSamples = 1;
 
 	/** Vector pointing in the "up" direction. Mirrored. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -35,7 +43,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigSteepness : public FPCGEx
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Steepness")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicSteepness : public UPCGExHeuristicOperation
+class UPCGExHeuristicSteepness : public UPCGExHeuristicOperation
 {
 	GENERATED_BODY()
 
@@ -44,38 +52,31 @@ class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicSteepness : public UPCGExHeurist
 public:
 	virtual void PrepareForCluster(const TSharedPtr<const PCGExCluster::FCluster>& InCluster) override;
 
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		return GetScoreInternal(GetDot(Cluster->GetPos(From), Cluster->GetPos(Goal)));
-	}
+		const PCGExCluster::FNode& Goal) const override;
 
-	FORCEINLINE virtual double GetEdgeScore(
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override
-	{
-		return GetScoreInternal(GetDot(Cluster->GetPos(From), Cluster->GetPos(To)));
-	}
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack) const override;
 
 protected:
+	bool bAccumulate = false;
+	int32 MaxSamples = 1;
+
 	FVector UpwardVector = FVector::UpVector;
 	bool bAbsoluteSteepness = true;
 
-	FORCEINLINE double GetDot(const FVector& From, const FVector& To) const
-	{
-		const double Dot = FVector::DotProduct((To - From).GetSafeNormal(), UpwardVector);
-		return bAbsoluteSteepness ? FMath::Abs(Dot) : PCGExMath::Remap(Dot, -1, 1);
-	}
+	double GetDot(const FVector& From, const FVector& To) const;
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactorySteepness : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactorySteepness : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
@@ -88,7 +89,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsSteepnessProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicsSteepnessProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

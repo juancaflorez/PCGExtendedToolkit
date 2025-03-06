@@ -7,8 +7,6 @@
 #define LOCTEXT_NAMESPACE "PCGExSampleOverlapStatsElement"
 #define PCGEX_NAMESPACE SampleOverlapStats
 
-PCGExData::EIOInit UPCGExSampleOverlapStatsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 TSharedPtr<PCGExSampleOverlapStats::FOverlap> FPCGExSampleOverlapStatsContext::RegisterOverlap(
 	PCGExSampleOverlapStats::FProcessor* InA,
 	PCGExSampleOverlapStats::FProcessor* InB,
@@ -110,11 +108,13 @@ namespace PCGExSampleOverlapStats
 		Overlaps.Add(Overlap.ToSharedRef());
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		{
 			const TSharedRef<PCGExData::FFacade>& OutputFacade = PointDataFacade;

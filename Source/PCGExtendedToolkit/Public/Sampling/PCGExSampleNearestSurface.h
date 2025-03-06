@@ -9,6 +9,7 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExSampling.h"
+#include "PCGExScopedContainers.h"
 #include "Data/PCGExDataForward.h"
 
 
@@ -43,7 +44,7 @@ class UPCGExFilterFactoryData;
  * This way we can multi-thread the various calculations instead of mixing everything along with async/game thread collision
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Sampling")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSampleNearestSurfaceSettings : public UPCGExPointsProcessorSettings
+class UPCGExSampleNearestSurfaceSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -61,7 +62,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourcePointFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -187,7 +187,7 @@ public:
 	bool bPruneFailedSamples = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSurfaceContext final : FPCGExPointsProcessorContext
+struct FPCGExSampleNearestSurfaceContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExSampleNearestSurfaceElement;
 
@@ -202,7 +202,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSurfaceContext final : FPCG
 	PCGEX_FOREACH_FIELD_NEARESTSURFACE(PCGEX_OUTPUT_DECL_TOGGLE)
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSampleNearestSurfaceElement final : public FPCGExPointsProcessorElement
+class FPCGExSampleNearestSurfaceElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -238,7 +238,7 @@ namespace PCGExSampleNearestSurface
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;

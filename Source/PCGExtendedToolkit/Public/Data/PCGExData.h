@@ -7,6 +7,7 @@
 #include "UObject/Object.h"
 
 #include "PCGExHelpers.h"
+#include "PCGExMath.h"
 #include "PCGExPointIO.h"
 #include "PCGExAttributeHelpers.h"
 #include "PCGExDataFilter.h"
@@ -33,7 +34,7 @@
 #pragma endregion
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeGatherDetails : public FPCGExNameFiltersDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExAttributeGatherDetails : public FPCGExNameFiltersDetails
 {
 	GENERATED_BODY()
 
@@ -77,7 +78,7 @@ namespace PCGExData
 		return PCGEx::H64(GetTypeHash(FullName), static_cast<int32>(Type));
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBufferBase : public TSharedFromThis<FBufferBase>
+	class PCGEXTENDEDTOOLKIT_API FBufferBase : public TSharedFromThis<FBufferBase>
 	{
 		friend class FFacade;
 
@@ -131,10 +132,7 @@ namespace PCGExData
 		template <typename T>
 		bool IsA() const { return Type == PCGEx::GetMetadataType<T>(); }
 
-		virtual ~FBufferBase()
-		{
-			PCGEX_LOG_DTR(FBufferBase)
-		}
+		virtual ~FBufferBase() = default;
 
 		virtual void Write(const bool bEnsureValidKeys = true)
 		{
@@ -152,11 +150,11 @@ namespace PCGExData
 		virtual PCGEx::FAttributeIdentity GetTargetOutputIdentity() PCGEX_NOT_IMPLEMENTED_RET(FBuffer::GetTargetOutputIdentity, PCGEx::FAttributeIdentity())
 		virtual bool OutputsToDifferentName() const;
 
-		FORCEINLINE bool GetAllowsInterpolation() const { return OutAttribute ? OutAttribute->AllowsInterpolation() : InAttribute ? InAttribute->AllowsInterpolation() : false; }
+		bool GetAllowsInterpolation() const { return OutAttribute ? OutAttribute->AllowsInterpolation() : InAttribute ? InAttribute->AllowsInterpolation() : false; }
 	};
 
 	template <typename T, EBufferLevel BufferLevel = EBufferLevel::Local>
-	class /*PCGEXTENDEDTOOLKIT_API*/ TBuffer final : public FBufferBase
+	class TBuffer final : public FBufferBase
 	{
 		friend class FFacade;
 
@@ -194,20 +192,20 @@ namespace PCGExData
 		const FPCGMetadataAttribute<T>* GetTypedInAttribute() const { return TypedInAttribute; }
 		FPCGMetadataAttribute<T>* GetTypedOutAttribute() { return TypedOutAttribute; }
 
-		FORCEINLINE T& GetMutable(const int32 Index) { return *(OutValues->GetData() + Index); }
-		FORCEINLINE const T& GetConst(const int32 Index) { return *(OutValues->GetData() + Index); }
-		FORCEINLINE const T& Read(const int32 Index) const { return *(InValues->GetData() + Index); }
-		FORCEINLINE const T& ReadImmediate(const int32 Index) const { return TypedInAttribute->GetValueFromItemKey(InPoints[Index].MetadataEntry); }
+		T& GetMutable(const int32 Index) { return *(OutValues->GetData() + Index); }
+		const T& GetConst(const int32 Index) { return *(OutValues->GetData() + Index); }
+		const T& Read(const int32 Index) const { return *(InValues->GetData() + Index); }
+		const T& ReadImmediate(const int32 Index) const { return TypedInAttribute->GetValueFromItemKey(InPoints[Index].MetadataEntry); }
 
-		FORCEINLINE void Set(const int32 Index, const T& Value) { *(OutValues->GetData() + Index) = Value; }
-		FORCEINLINE void SetImmediate(const int32 Index, const T& Value) { TypedOutAttribute->SetValue(InPoints[Index], Value); }
+		void Set(const int32 Index, const T& Value) { *(OutValues->GetData() + Index) = Value; }
+		void SetImmediate(const int32 Index, const T& Value) { TypedOutAttribute->SetValue(InPoints[Index], Value); }
 
 		virtual PCGEx::FAttributeIdentity GetTargetOutputIdentity() override
 		{
 			check(IsWritable() && OutAttribute)
 
 			if (OutputsToDifferentName()) { return PCGEx::FAttributeIdentity(TargetOutputName, PCGEx::GetMetadataType<T>(), OutAttribute->AllowsInterpolation()); }
-			else { return PCGEx::FAttributeIdentity(OutAttribute->Name, PCGEx::GetMetadataType<T>(), OutAttribute->AllowsInterpolation()); }
+			return PCGEx::FAttributeIdentity(OutAttribute->Name, PCGEx::GetMetadataType<T>(), OutAttribute->AllowsInterpolation());
 		}
 
 		virtual bool OutputsToDifferentName() const override
@@ -447,9 +445,8 @@ namespace PCGExData
 
 			if (OutputsToDifferentName())
 			{
-
 				// If we want to output to a different name, ensure the new attribute exists and hope we did proper validations beforehand
-				
+
 				// 'template' spec required for clang on mac, and rider keeps removing it without the comment below.
 				// ReSharper disable once CppRedundantTemplateKeyword
 				TypedOutAttribute = Source->GetOut()->Metadata->template FindOrCreateAttribute<T>(TargetOutputName, TypedOutAttribute->GetValueFromItemKey(PCGInvalidEntryKey), TypedOutAttribute->AllowsInterpolation());
@@ -466,9 +463,8 @@ namespace PCGExData
 			}
 			else if (TypedOutAttribute)
 			{
-
 				// if we're not writing to a different name, then go through the usual flow
-				
+
 				TUniquePtr<FPCGAttributeAccessor<T>> OutAccessor = MakeUnique<FPCGAttributeAccessor<T>>(TypedOutAttribute, Source->GetOut()->Metadata);
 				if (!OutAccessor.IsValid()) { return; }
 
@@ -508,7 +504,7 @@ namespace PCGExData
 		}
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FFacade : public TSharedFromThis<FFacade>
+	class PCGEXTENDEDTOOLKIT_API FFacade : public TSharedFromThis<FFacade>
 	{
 		mutable FRWLock BufferLock;
 		mutable FRWLock CloudLock;
@@ -523,8 +519,8 @@ namespace PCGExData
 
 		bool bSupportsScopedGet = false;
 
-		FORCEINLINE int32 GetNum(const ESource InSource = ESource::In) const { return Source->GetNum(InSource); }
-		FORCEINLINE TArray<FPCGPoint>& GetMutablePoints() const { return Source->GetMutablePoints(); }
+		int32 GetNum(const ESource InSource = ESource::In) const { return Source->GetNum(InSource); }
+		TArray<FPCGPoint>& GetMutablePoints() const { return Source->GetMutablePoints(); }
 
 		TSharedPtr<FBufferBase> FindBuffer_Unsafe(const uint64 UID);
 		TSharedPtr<FBufferBase> FindBuffer(const uint64 UID);
@@ -538,12 +534,9 @@ namespace PCGExData
 			PCGEX_LOG_CTR(FFacade)
 		}
 
-		~FFacade()
-		{
-			PCGEX_LOG_DTR(FFacade)
-		}
+		~FFacade() = default;
 
-		FORCEINLINE bool IsDataValid(const ESource InSource) const { return Source->IsDataValid(InSource); }
+		bool IsDataValid(const ESource InSource) const { return Source->IsDataValid(InSource); }
 
 		bool ShareSource(const FFacade* OtherManager) const { return this == OtherManager || OtherManager->Source == Source; }
 
@@ -607,6 +600,13 @@ namespace PCGExData
 			return Buffer->PrepareWrite(Init) ? Buffer : nullptr;
 		}
 
+		TSharedPtr<FBufferBase> GetWritable(EPCGMetadataTypes Type, const FPCGMetadataAttributeBase* InAttribute, EBufferInit Init);
+		TSharedPtr<FBufferBase> GetWritable(EPCGMetadataTypes Type, const FName InName, EBufferInit Init);
+
+#pragma endregion
+
+#pragma region Readable
+
 		template <typename T>
 		TSharedPtr<TBuffer<T>> GetReadable(const FName InName, const ESource InSource = ESource::In)
 		{
@@ -619,10 +619,6 @@ namespace PCGExData
 
 			return Buffer;
 		}
-
-#pragma endregion
-
-#pragma region Readable
 
 		template <typename T>
 		TSharedPtr<TBuffer<T>> GetScopedReadable(const FName InName)
@@ -778,7 +774,7 @@ namespace PCGExData
 
 #pragma region Facade prep
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FReadableBufferConfig
+	struct PCGEXTENDEDTOOLKIT_API FReadableBufferConfig
 	{
 		EBufferPreloadType Mode = EBufferPreloadType::RawAttribute;
 		FPCGAttributePropertyInputSelector Selector;
@@ -809,7 +805,7 @@ namespace PCGExData
 		void Read(const TSharedRef<FFacade>& InFacade) const;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FFacadePreloader : public TSharedFromThis<FFacadePreloader>
+	class PCGEXTENDEDTOOLKIT_API FFacadePreloader : public TSharedFromThis<FFacadePreloader>
 	{
 	protected:
 		TWeakPtr<FFacade> InternalDataFacadePtr;
@@ -886,7 +882,7 @@ namespace PCGExData
 
 #pragma region Compound
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FUnionData : public TSharedFromThis<FUnionData>
+	class PCGEXTENDEDTOOLKIT_API FUnionData : public TSharedFromThis<FUnionData>
 	{
 	protected:
 		mutable FRWLock UnionLock;
@@ -922,7 +918,7 @@ namespace PCGExData
 		}
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FUnionMetadata : public TSharedFromThis<FUnionMetadata>
+	class PCGEXTENDEDTOOLKIT_API FUnionMetadata : public TSharedFromThis<FUnionMetadata>
 	{
 	public:
 		TArray<TSharedPtr<FUnionData>> Entries;
@@ -941,7 +937,7 @@ namespace PCGExData
 		uint64 Append(const int32 Index, const int32 IOIndex, const int32 ItemIndex);
 		bool IOIndexOverlap(const int32 InIdx, const TSet<int32>& InIndices);
 
-		FORCEINLINE TSharedPtr<FUnionData> Get(const int32 Index) const { return Entries.IsValidIndex(Index) ? Entries[Index] : nullptr; }
+		TSharedPtr<FUnionData> Get(const int32 Index) const { return Entries.IsValidIndex(Index) ? Entries[Index] : nullptr; }
 	};
 
 #pragma endregion
@@ -994,31 +990,8 @@ namespace PCGExData
 
 #pragma endregion
 
-	static TSharedPtr<FFacade> TryGetSingleFacade(FPCGExContext* InContext, const FName InputPinLabel, const bool bThrowError)
-	{
-		TSharedPtr<FFacade> SingleFacade;
-		if (const TSharedPtr<FPointIO> SingleIO = TryGetSingleInput(InContext, InputPinLabel, bThrowError))
-		{
-			SingleFacade = MakeShared<FFacade>(SingleIO.ToSharedRef());
-		}
-
-		return SingleFacade;
-	}
-
-	static bool TryGetFacades(FPCGExContext* InContext, const FName InputPinLabel, TArray<TSharedPtr<FFacade>>& OutFacades, const bool bThrowError)
-	{
-		TSharedPtr<PCGExData::FPointIOCollection> TargetsCollection = MakeShared<PCGExData::FPointIOCollection>(InContext, PCGEx::SourceTargetsLabel, PCGExData::EIOInit::None);
-		if (TargetsCollection->IsEmpty())
-		{
-			if (bThrowError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FText::FromString(TEXT("Missing or zero-points '{0}' inputs")), FText::FromName(InputPinLabel))); }
-			return false;
-		}
-
-		OutFacades.Reserve(OutFacades.Num() + TargetsCollection->Num());
-		for (const TSharedPtr<FPointIO>& IO : TargetsCollection->Pairs) { OutFacades.Add(MakeShared<FFacade>(IO.ToSharedRef())); }
-
-		return true;
-	}
+	TSharedPtr<FFacade> TryGetSingleFacade(FPCGExContext* InContext, const FName InputPinLabel, const bool bThrowError);
+	bool TryGetFacades(FPCGExContext* InContext, const FName InputPinLabel, TArray<TSharedPtr<FFacade>>& OutFacades, const bool bThrowError, const bool bIsTransactional = false);
 
 	template <bool bReverse = false>
 	static void GetTransforms(const TArray<FPCGPoint>& InPoints, TArray<FTransform>& OutTransforms)
@@ -1029,7 +1002,7 @@ namespace PCGExData
 		else { for (int i = 0; i <= MaxIndex; i++) { OutTransforms[MaxIndex - i] = InPoints[i].Transform; } }
 	}
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FWriteBufferTask final : public PCGExMT::FTask
+	class PCGEXTENDEDTOOLKIT_API FWriteBufferTask final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FWriteTask)

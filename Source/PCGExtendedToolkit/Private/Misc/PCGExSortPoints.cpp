@@ -4,6 +4,7 @@
 
 #include "Misc/PCGExSortPoints.h"
 
+
 #include "Misc/PCGExModularSortPoints.h"
 
 
@@ -19,8 +20,6 @@ void UPCGExSortPointsSettings::PostEditChangeProperty(FPropertyChangedEvent& Pro
 #endif
 
 FPCGElementPtr UPCGExSortPointsBaseSettings::CreateElement() const { return MakeShared<FPCGExSortPointsBaseElement>(); }
-
-PCGExData::EIOInit UPCGExSortPointsBaseSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 bool UPCGExSortPointsBaseSettings::GetSortingRules(FPCGExContext* InContext, TArray<FPCGExSortRuleConfig>& OutRules) const
 {
@@ -81,11 +80,13 @@ namespace PCGExSortPoints
 		Sorter->RegisterBuffersDependencies(FacadePreloader);
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSortPoints::Process);
 
 		if (!TPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		if (!Sorter->Init())
 		{

@@ -10,6 +10,8 @@
 
 #include "Data/PCGExPointFilter.h"
 #include "PCGExPointsProcessor.h"
+
+
 #include "Transform/Tensors/PCGExTensor.h"
 #include "Transform/Tensors/PCGExTensorHandler.h"
 
@@ -17,7 +19,7 @@
 #include "PCGExTensorDotFilter.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorDotFilterConfig
+struct FPCGExTensorDotFilterConfig
 {
 	GENERATED_BODY()
 
@@ -48,7 +50,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorDotFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorDotFilterFactory : public UPCGExFilterFactoryData
+class UPCGExTensorDotFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -56,18 +58,19 @@ public:
 	UPROPERTY()
 	FPCGExTensorDotFilterConfig Config;
 
+	UPROPERTY()
+	TArray<TObjectPtr<const UPCGExTensorFactoryData>> TensorFactories;
+
 	TSharedPtr<PCGExTensor::FTensorsHandler> TensorsHandler;
 
 	virtual bool Init(FPCGExContext* InContext) override;
 	virtual TSharedPtr<PCGExPointFilter::FFilter> CreateFilter() const override;
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
-
-	TArray<TObjectPtr<const UPCGExTensorFactoryData>> TensorFactories;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FTensorDotFilter final : public PCGExPointFilter::FSimpleFilter
+	class FTensorDotFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FTensorDotFilter(const TObjectPtr<const UPCGExTensorDotFilterFactory>& InFactory)
@@ -84,22 +87,8 @@ namespace PCGExPointsFilter
 
 		TSharedPtr<PCGExData::TBuffer<FVector>> OperandA;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const FPCGPoint& Point = PointDataFacade->Source->GetInPoint(PointIndex);
-
-			bool bSuccess = false;
-			const PCGExTensor::FTensorSample Sample = TensorsHandler->Sample(Point.Transform, bSuccess);
-
-			if (!bSuccess) { return false; }
-
-			return DotComparison.Test(
-				FVector::DotProduct(
-					TypedFilterFactory->Config.bTransformOperandA ? OperandA->Read(PointIndex) : Point.Transform.TransformVectorNoScale(OperandA->Read(PointIndex)),
-					Sample.DirectionAndSize.GetSafeNormal()),
-				DotComparison.GetComparisonThreshold(PointIndex));
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FTensorDotFilter() override
 		{
@@ -110,7 +99,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorDotFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExTensorDotFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

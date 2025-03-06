@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "PCGPoint.h"
+#include "Data/Blending/PCGExDataBlending.h"
 #include "Paths/SubPoints/PCGExSubPointsOperation.h"
 #include "PCGExSubPointsBlendOperation.generated.h"
 
@@ -17,7 +18,7 @@ namespace PCGExDataBlending
  * 
  */
 UCLASS(Abstract)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExSubPointsBlendOperation : public UPCGExSubPointsOperation
+class PCGEXTENDEDTOOLKIT_API UPCGExSubPointsBlendOperation : public UPCGExSubPointsOperation
 {
 	GENERATED_BODY()
 

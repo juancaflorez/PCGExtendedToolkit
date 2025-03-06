@@ -11,8 +11,6 @@
 #define LOCTEXT_NAMESPACE "PCGExSmoothElement"
 #define PCGEX_NAMESPACE Smooth
 
-PCGExData::EIOInit UPCGExSmoothSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 TArray<FPCGPinProperties> UPCGExSmoothSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
@@ -74,7 +72,7 @@ namespace PCGExSmooth
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSmooth::Process);
 
@@ -82,6 +80,7 @@ namespace PCGExSmooth
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
 
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		bClosedLoop = Context->ClosedLoop.IsClosedLoop(PointDataFacade->Source);
 		NumPoints = PointDataFacade->GetNum();
@@ -94,7 +93,7 @@ namespace PCGExSmooth
 			Influence = PointDataFacade->GetScopedBroadcaster<double>(Settings->InfluenceAttribute);
 			if (!Influence)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FText::Format(FTEXT("Input missing influence attribute: \"{0}\"."), FText::FromName(Settings->InfluenceAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, "Influence", Settings->InfluenceAttribute)
 				return false;
 			}
 		}
@@ -104,7 +103,7 @@ namespace PCGExSmooth
 			Smoothing = PointDataFacade->GetScopedBroadcaster<double>(Settings->SmoothingAmountAttribute);
 			if (!Smoothing)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, ExecutionContext, FText::Format(FTEXT("Input missing smoothing amount attribute: \"{0}\"."), FText::FromName(Settings->InfluenceAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(ExecutionContext, "Smoothing", Settings->SmoothingAmountAttribute)
 				return false;
 			}
 		}

@@ -3,6 +3,7 @@
 
 #include "Misc/Filters/PCGExSplineInclusionFilter.h"
 
+
 #include "Paths/PCGExPaths.h"
 
 
@@ -13,44 +14,60 @@ bool UPCGExSplineInclusionFilterFactory::Init(FPCGExContext* InContext)
 {
 	if (!Super::Init(InContext)) { return false; }
 
-	TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(FName("Splines"));
-	if (!Targets.IsEmpty())
-	{
-		for (const FPCGTaggedData& TaggedData : Targets)
-		{
-			const UPCGSplineData* SplineData = Cast<UPCGSplineData>(TaggedData.Data);
-			if (!SplineData) { continue; }
-
-			const bool bIsClosedLoop = SplineData->SplineStruct.bClosedLoop;
-			if (Config.SampleInputs == EPCGExSplineSamplingIncludeMode::ClosedLoopOnly && !bIsClosedLoop) { continue; }
-			if (Config.SampleInputs == EPCGExSplineSamplingIncludeMode::OpenSplineOnly && bIsClosedLoop) { continue; }
-
-			Splines.Add(SplineData->SplineStruct);
-		}
-	}
-
-	if (Splines.IsEmpty())
-	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)"));
-		return false;
-	}
 
 	return true;
 }
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExSplineInclusionFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FSplineInclusionFilter>(this);
+	return MakeShared<PCGExPointFilter::FSplineInclusionFilter>(this);
+}
+
+bool UPCGExSplineInclusionFilterFactory::WantsPreparation(FPCGExContext* InContext)
+{
+	return true;
+}
+
+bool UPCGExSplineInclusionFilterFactory::Prepare(FPCGExContext* InContext)
+{
+	if (!Super::Prepare(InContext)) { return false; }
+
+	Splines = MakeShared<TArray<FPCGSplineStruct>>();
+
+	if (TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(FName("Splines"));
+		!Targets.IsEmpty())
+	{
+		for (const FPCGTaggedData& TaggedData : Targets)
+		{
+			const UPCGSplineData* SplineData = Cast<UPCGSplineData>(TaggedData.Data);
+			if (!SplineData || SplineData->SplineStruct.GetNumberOfSplineSegments() <= 0) { continue; }
+
+			const bool bIsClosedLoop = SplineData->SplineStruct.bClosedLoop;
+			if (Config.SampleInputs == EPCGExSplineSamplingIncludeMode::ClosedLoopOnly && !bIsClosedLoop) { continue; }
+			if (Config.SampleInputs == EPCGExSplineSamplingIncludeMode::OpenSplineOnly && bIsClosedLoop) { continue; }
+
+			Splines->Add(SplineData->SplineStruct);
+		}
+	}
+
+	if (Splines->IsEmpty())
+	{
+		if (!bQuietMissingInputError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)")); }
+		return false;
+	}
+
+	return true;
 }
 
 void UPCGExSplineInclusionFilterFactory::BeginDestroy()
 {
+	Splines.Reset();
 	Super::BeginDestroy();
 }
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	bool FSplineInclusionFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+	bool FSplineInclusionFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 	{
 		if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 

@@ -5,10 +5,9 @@
 
 #include "PCGExDataMath.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExResamplePathElement"
 #define PCGEX_NAMESPACE ResamplePath
-
-PCGExData::EIOInit UPCGExResamplePathSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
 
 PCGEX_INITIALIZE_ELEMENT(ResamplePath)
 
@@ -57,7 +56,7 @@ bool FPCGExResamplePathElement::ExecuteInternal(FPCGContext* InContext) const
 
 namespace PCGExResamplePath
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExResamplePath::Process);
 
@@ -192,7 +191,8 @@ namespace PCGExResamplePath
 
 		//if (SourcesRange == 1)
 		//{
-		const double Weight = FVector::DistSquared(Path->GetPos(Sample.Start), Sample.Location) / FVector::DistSquared(Path->GetPos(Sample.Start), Path->GetPos(Sample.End));
+		// TODO : Implement proper blending. Division by zero here when there are collocated points
+		constexpr double Weight = 0.5; //FVector::DistSquared(Path->GetPos(Sample.Start), Sample.Location) / FVector::DistSquared(Path->GetPos(Sample.Start), Path->GetPos(Sample.End));
 		MetadataBlender->PrepareForBlending(Index);
 		MetadataBlender->Blend(Index, Sample.Start, Index, Weight);
 		MetadataBlender->Blend(Index, Sample.End, Index, 1 - Weight);

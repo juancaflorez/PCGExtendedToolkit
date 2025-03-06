@@ -19,7 +19,7 @@ namespace PCGExDiscardByPointCount
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExDiscardByPointCountSettings : public UPCGExPointsProcessorSettings
+class UPCGExDiscardByPointCountSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -35,11 +35,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Don't output Clusters if they have less points than a specified amount. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, InlineEditConditionToggle))
 	bool bRemoveBelow = true;
@@ -61,7 +57,7 @@ public:
 	bool bAllowEmptyOutputs = false;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDiscardByPointCountElement final : public FPCGExPointsProcessorElement
+class FPCGExDiscardByPointCountElement final : public FPCGExPointsProcessorElement
 {
 	virtual bool Boot(FPCGExContext* InContext) const override;
 

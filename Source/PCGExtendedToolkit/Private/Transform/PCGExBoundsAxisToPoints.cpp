@@ -7,8 +7,6 @@
 #define LOCTEXT_NAMESPACE "PCGExBoundsAxisToPointsElement"
 #define PCGEX_NAMESPACE BoundsAxisToPoints
 
-PCGExData::EIOInit UPCGExBoundsAxisToPointsSettings::GetMainOutputInitMode() const { return bGeneratePerPointData ? PCGExData::EIOInit::None : PCGExData::EIOInit::Duplicate; }
-
 PCGEX_INITIALIZE_ELEMENT(BoundsAxisToPoints)
 
 bool FPCGExBoundsAxisToPointsElement::Boot(FPCGExContext* InContext) const
@@ -48,11 +46,13 @@ bool FPCGExBoundsAxisToPointsElement::ExecuteInternal(FPCGContext* InContext) co
 
 namespace PCGExBoundsAxisToPoints
 {
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExBoundsAxisToPoints::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, Settings->bGeneratePerPointData ? PCGExData::EIOInit::None : PCGExData::EIOInit::Duplicate)
 
 		bSetExtents = Settings->bSetExtents;
 		Extents = Settings->Extents;

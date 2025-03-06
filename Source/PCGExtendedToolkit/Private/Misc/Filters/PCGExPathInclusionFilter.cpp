@@ -11,10 +11,24 @@ bool UPCGExPathInclusionFilterFactory::Init(FPCGExContext* InContext)
 {
 	if (!Super::Init(InContext)) { return false; }
 
-	TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(PCGExGraph::SourcePathsLabel);
 	Config.ClosedLoop.Init();
 
-	if (!Targets.IsEmpty())
+	return true;
+}
+
+bool UPCGExPathInclusionFilterFactory::WantsPreparation(FPCGExContext* InContext)
+{
+	return true;
+}
+
+bool UPCGExPathInclusionFilterFactory::Prepare(FPCGExContext* InContext)
+{
+	if (!Super::Prepare(InContext)) { return false; }
+
+	Splines = MakeShared<TArray<TSharedPtr<FPCGSplineStruct>>>();
+
+	if (TArray<FPCGTaggedData> Targets = InContext->InputData.GetInputsByPin(PCGExPaths::SourcePathsLabel);
+		!Targets.IsEmpty())
 	{
 		for (const FPCGTaggedData& TaggedData : Targets)
 		{
@@ -27,14 +41,14 @@ bool UPCGExPathInclusionFilterFactory::Init(FPCGExContext* InContext)
 
 			if (TSharedPtr<FPCGSplineStruct> SplineStruct = PCGExPaths::MakeSplineFromPoints(PathData, Config.PointType, bIsClosedLoop))
 			{
-				Splines.Add(SplineStruct);
+				Splines->Add(SplineStruct);
 			}
 		}
 	}
 
-	if (Splines.IsEmpty())
+	if (Splines->IsEmpty())
 	{
-		PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)"));
+		if (!bQuietMissingInputError) { PCGE_LOG_C(Error, GraphAndLog, InContext, FTEXT("No splines (no input matches criteria or empty dataset)")); }
 		return false;
 	}
 
@@ -43,18 +57,18 @@ bool UPCGExPathInclusionFilterFactory::Init(FPCGExContext* InContext)
 
 TSharedPtr<PCGExPointFilter::FFilter> UPCGExPathInclusionFilterFactory::CreateFilter() const
 {
-	return MakeShared<PCGExPointsFilter::FPathInclusionFilter>(this);
+	return MakeShared<PCGExPointFilter::FPathInclusionFilter>(this);
 }
 
 void UPCGExPathInclusionFilterFactory::BeginDestroy()
 {
-	Splines.Empty();
+	Splines.Reset();
 	Super::BeginDestroy();
 }
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	bool FPathInclusionFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+	bool FPathInclusionFilter::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 	{
 		if (!FFilter::Init(InContext, InPointDataFacade)) { return false; }
 
@@ -105,12 +119,13 @@ namespace PCGExPointsFilter
 	{
 		uint8 State = None;
 
+		const TArray<TSharedPtr<FPCGSplineStruct>>& SplinesRef = *Splines.Get();
 		const FVector Pos = Point.Transform.GetLocation();
 
 		if (TypedFilterFactory->Config.Pick == EPCGExSplineFilterPick::Closest)
 		{
 			double ClosestDist = MAX_dbl;
-			for (const TSharedPtr<const FPCGSplineStruct>& Spline : Splines)
+			for (const TSharedPtr<FPCGSplineStruct>& Spline : SplinesRef)
 			{
 				const FTransform T = PCGExPaths::GetClosestTransform(Spline, Pos, TypedFilterFactory->Config.bSplineScalesTolerance);
 				const FVector& TLoc = T.GetLocation();
@@ -136,7 +151,7 @@ namespace PCGExPointsFilter
 		}
 		else
 		{
-			for (const TSharedPtr<const FPCGSplineStruct>& Spline : Splines)
+			for (const TSharedPtr<FPCGSplineStruct>& Spline : SplinesRef)
 			{
 				const FTransform T = PCGExPaths::GetClosestTransform(Spline, Pos, TypedFilterFactory->Config.bSplineScalesTolerance);
 				const FVector& TLoc = T.GetLocation();
@@ -155,13 +170,14 @@ namespace PCGExPointsFilter
 	bool FPathInclusionFilter::Test(const int32 PointIndex) const
 	{
 		uint8 State = None;
+		const TArray<TSharedPtr<FPCGSplineStruct>>& SplinesRef = *Splines.Get();
 
 		const FVector Pos = PointDataFacade->Source->GetInPoint(PointIndex).Transform.GetLocation();
 
 		if (TypedFilterFactory->Config.Pick == EPCGExSplineFilterPick::Closest)
 		{
 			double ClosestDist = MAX_dbl;
-			for (const TSharedPtr<const FPCGSplineStruct>& Spline : Splines)
+			for (const TSharedPtr<FPCGSplineStruct>& Spline : SplinesRef)
 			{
 				const FTransform T = PCGExPaths::GetClosestTransform(Spline, Pos, TypedFilterFactory->Config.bSplineScalesTolerance);
 				const FVector& TLoc = T.GetLocation();
@@ -187,7 +203,7 @@ namespace PCGExPointsFilter
 		}
 		else
 		{
-			for (const TSharedPtr<const FPCGSplineStruct>& Spline : Splines)
+			for (const TSharedPtr<FPCGSplineStruct>& Spline : SplinesRef)
 			{
 				const FTransform T = PCGExPaths::GetClosestTransform(Spline, Pos, TypedFilterFactory->Config.bSplineScalesTolerance);
 				const FVector& TLoc = T.GetLocation();
@@ -207,7 +223,7 @@ namespace PCGExPointsFilter
 TArray<FPCGPinProperties> UPCGExPathInclusionFilterProviderSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
-	PCGEX_PIN_POINTS(PCGExGraph::SourcePathsLabel, TEXT("Paths will be used for testing"), Required, {})
+	PCGEX_PIN_POINTS(PCGExPaths::SourcePathsLabel, TEXT("Paths will be used for testing"), Required, {})
 	return PinProperties;
 }
 

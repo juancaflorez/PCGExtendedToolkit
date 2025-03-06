@@ -5,6 +5,8 @@
 
 #include "CoreMinimal.h"
 #include "PCGExGlobalSettings.h"
+
+
 #include "Graph/PCGExEdgesProcessor.h"
 #include "PCGExPackAttributesToProperties.generated.h"
 
@@ -13,7 +15,7 @@ MACRO(EdgeLength, double)
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDebugAttributeToProperty
+struct FPCGExDebugAttributeToProperty
 {
 	GENERATED_BODY()
 
@@ -100,7 +102,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDebugAttributeToProperty
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Debug")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExPackAttributesToPropertiesSettings : public UPCGExPointsProcessorSettings
+class UPCGExPackAttributesToPropertiesSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -133,12 +135,12 @@ private:
 	friend class FPCGExPackAttributesToPropertiesElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPackAttributesToPropertiesContext final : FPCGExPointsProcessorContext
+struct FPCGExPackAttributesToPropertiesContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExPackAttributesToPropertiesElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPackAttributesToPropertiesElement final : public FPCGExPointsProcessorElement
+class FPCGExPackAttributesToPropertiesElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -167,7 +169,7 @@ namespace PCGExPackAttributesToProperties
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 	};
 }

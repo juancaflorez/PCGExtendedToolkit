@@ -11,7 +11,21 @@
 #define LOCTEXT_NAMESPACE "PCGExFusePointsElement"
 #define PCGEX_NAMESPACE FusePoints
 
-PCGExData::EIOInit UPCGExFusePointsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::New; }
+namespace PCGExFuse
+{
+	FFusedPoint::FFusedPoint(const int32 InIndex, const FVector& InPosition)
+		: Index(InIndex), Position(InPosition)
+	{
+	}
+
+	void FFusedPoint::Add(const int32 InIndex, const double Distance)
+	{
+		FWriteScopeLock WriteLock(IndicesLock);
+		Fused.Add(InIndex);
+		Distances.Add(Distance);
+		MaxDistance = FMath::Max(MaxDistance, Distance);
+	}
+}
 
 PCGEX_INITIALIZE_ELEMENT(FusePoints)
 
@@ -61,12 +75,13 @@ namespace PCGExFusePoints
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExFusePoints::Process);
 
-
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::New)
 
 		UnionGraph = MakeShared<PCGExGraph::FUnionGraph>(
 			Settings->PointPointIntersectionDetails.FuseDetails,

@@ -57,7 +57,7 @@ enum class EPCGExVariationMode : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExScaleToFitDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExScaleToFitDetails
 {
 	GENERATED_BODY()
 
@@ -99,36 +99,11 @@ private:
 		const FVector& InPtSize,
 		const FVector& InStSize,
 		const FVector& MinMaxFit,
-		FVector& OutScale)
-	{
-		const double Scale = InScale[Axis];
-		double FinalScale = Scale;
-
-		switch (Fit)
-		{
-		default:
-		case EPCGExScaleToFit::None:
-			break;
-		case EPCGExScaleToFit::Fill:
-			FinalScale = ((InPtSize[Axis] * Scale) / InStSize[Axis]);
-			break;
-		case EPCGExScaleToFit::Min:
-			FinalScale = MinMaxFit[0];
-			break;
-		case EPCGExScaleToFit::Max:
-			FinalScale = MinMaxFit[1];
-			break;
-		case EPCGExScaleToFit::Avg:
-			FinalScale = MinMaxFit[2];
-			break;
-		}
-
-		OutScale[Axis] = FinalScale;
-	}
+		FVector& OutScale);
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSingleJustifyDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExSingleJustifyDetails
 {
 	GENERATED_BODY()
 
@@ -189,7 +164,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSingleJustifyDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExJustificationDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExJustificationDetails
 {
 	GENERATED_BODY()
 
@@ -244,7 +219,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExJustificationDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingVariations
+struct PCGEXTENDEDTOOLKIT_API FPCGExFittingVariations
 {
 	GENERATED_BODY()
 
@@ -276,9 +251,8 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingVariations
 	bool bUniformScale = true;
 };
 
-
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingVariationsDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExFittingVariationsDetails
 {
 	GENERATED_BODY()
 
@@ -294,9 +268,10 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingVariationsDetails
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	EPCGExVariationMode Scale = EPCGExVariationMode::Disabled;
-
+	
 	bool bEnabledBefore = true;
 	bool bEnabledAfter = true;
+		
 	int Seed = 0;
 
 	void Init(const int InSeed);
@@ -308,7 +283,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingVariationsDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingDetailsHandler
+struct PCGEXTENDEDTOOLKIT_API FPCGExFittingDetailsHandler
 {
 	GENERATED_BODY()
 
@@ -352,14 +327,45 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFittingDetailsHandler
 		OutTransform.AddToTranslation(TargetPoint.Transform.GetRotation().RotateVector(OutTranslation));
 		OutTransform.SetScale3D(OutScale);
 	}
+
+	template <bool bWorldSpace = true>
+	void ComputeTransform(const int32 TargetIndex, const FPCGPoint& TargetPoint, FTransform& OutTransform, FBox& InOutBounds) const
+	{
+		//
+		check(TargetDataFacade);
+
+		if constexpr (bWorldSpace) { OutTransform = TargetPoint.Transform; }
+
+		FVector OutScale = TargetPoint.Transform.GetScale3D();
+		const FBox RefBounds = PCGExMath::GetLocalBounds<EPCGExPointBoundsSource::ScaledBounds>(TargetPoint);
+		const FBox& OriginalInBounds = InOutBounds;
+
+		ScaleToFit.Process(TargetPoint, OriginalInBounds, OutScale, InOutBounds);
+
+		//
+
+		FVector OutTranslation = FVector::ZeroVector;
+		Justification.Process(
+			TargetIndex, RefBounds,
+			FBox(InOutBounds.Min * OutScale, InOutBounds.Max * OutScale),
+			OutTranslation);
+
+		OutTransform.AddToTranslation(TargetPoint.Transform.GetRotation().RotateVector(OutTranslation));
+		OutTransform.SetScale3D(OutScale);
+	}
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTransformDetails : public FPCGExFittingDetailsHandler
+struct PCGEXTENDEDTOOLKIT_API FPCGExTransformDetails : public FPCGExFittingDetailsHandler
 {
 	GENERATED_BODY()
 
 	explicit FPCGExTransformDetails()
+	{
+	}
+	
+	explicit FPCGExTransformDetails(const bool InInheritScale, const bool InInheritRotation)
+		: bInheritScale(InInheritScale), bInheritRotation(InInheritRotation)
 	{
 	}
 
@@ -373,7 +379,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTransformDetails : public FPCGExFittingD
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExLeanTransformDetails : public FPCGExFittingDetailsHandler
+struct PCGEXTENDEDTOOLKIT_API FPCGExLeanTransformDetails
 {
 	GENERATED_BODY()
 
@@ -381,11 +387,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExLeanTransformDetails : public FPCGExFitt
 	{
 	}
 
-	/** If enabled, copied point will be scaled by the target' scale. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayAfter="Justification"))
+	/** If enabled, point will be scaled by the target' scale. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bInheritScale = false;
 
-	/** If enabled, copied points will be rotated by the target' rotation. */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayAfter="bInheritScale"))
+	/** If enabled, points will be rotated by the target' rotation. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bInheritRotation = false;
 };

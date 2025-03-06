@@ -5,6 +5,9 @@
 
 #include "CoreMinimal.h"
 #include "PCGExPointsProcessor.h"
+#include "PCGExScopedContainers.h"
+
+
 #include "Geometry/PCGExGeo.h"
 #include "Graph/PCGExGraph.h"
 #include "PCGExConnectPoints.generated.h"
@@ -16,7 +19,7 @@ class UPCGExProbeOperation;
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExConnectPointsSettings : public UPCGExPointsProcessorSettings
+class UPCGExConnectPointsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -35,7 +38,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
 	//~End UPCGExPointsProcessorSettings
 
@@ -56,10 +58,10 @@ public:
 
 	/** Graph & Edges output properties */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Cluster Output Settings"))
-	FPCGExGraphBuilderDetails GraphBuilderDetails;
+	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails(EPCGExMinimalAxis::X);
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectPointsContext final : FPCGExPointsProcessorContext
+struct FPCGExConnectPointsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExConnectPointsElement;
 
@@ -70,7 +72,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectPointsContext final : FPCGExPoint
 	FVector CWCoincidenceTolerance = FVector::OneVector;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExConnectPointsElement final : public FPCGExPointsProcessorElement
+class FPCGExConnectPointsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -123,7 +125,7 @@ namespace PCGExConnectPoints
 
 		virtual ~FProcessor() override;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		void OnPreparationComplete();
 		virtual void PrepareLoopScopesForPoints(const TArray<PCGExMT::FScope>& Loops) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;

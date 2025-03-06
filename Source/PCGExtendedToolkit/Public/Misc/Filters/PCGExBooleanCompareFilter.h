@@ -16,7 +16,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBooleanCompareFilterConfig
+struct FPCGExBooleanCompareFilterConfig
 {
 	GENERATED_BODY()
 
@@ -50,7 +50,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBooleanCompareFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBooleanCompareFilterFactory : public UPCGExFilterFactoryData
+class UPCGExBooleanCompareFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -62,9 +62,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FBooleanCompareFilter final : public PCGExPointFilter::FSimpleFilter
+	class FBooleanCompareFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FBooleanCompareFilter(const TObjectPtr<const UPCGExBooleanCompareFilterFactory>& InDefinition)
@@ -77,13 +77,8 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGExData::TBuffer<bool>> OperandA;
 		TSharedPtr<PCGExData::TBuffer<bool>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const double A = OperandA->Read(PointIndex);
-			const double B = OperandB ? OperandB->Read(PointIndex) : TypedFilterFactory->Config.OperandBConstant;
-			return TypedFilterFactory->Config.Comparison == EPCGExEquality::Equal ? A == B : A != B;
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FBooleanCompareFilter() override
 		{
@@ -94,7 +89,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBooleanCompareFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExBooleanCompareFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

@@ -25,7 +25,7 @@ enum class EPCGExRollingTriggerMode : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeRollingSettings : public UPCGExPathProcessorSettings
+class UPCGExAttributeRollingSettings : public UPCGExPathProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -43,7 +43,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPaths::SourceTriggerFilters, "Filters used to check if a point triggers the select behavior.", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -60,13 +59,13 @@ public:
 	bool bReverseRolling = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRollingContext final : FPCGExPathProcessorContext
+struct FPCGExAttributeRollingContext final : FPCGExPathProcessorContext
 {
 	friend class FPCGExAttributeRollingElement;
 	FPCGExBlendingDetails BlendingSettings;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeRollingElement final : public FPCGExPathProcessorElement
+class FPCGExAttributeRollingElement final : public FPCGExPathProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -100,7 +99,7 @@ namespace PCGExAttributeRolling
 
 		virtual ~FProcessor() override;
 		virtual void RegisterBuffersDependencies(PCGExData::FFacadePreloader& FacadePreloader) override;
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSingleRangeIteration(const int32 Iteration, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;

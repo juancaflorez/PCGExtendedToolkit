@@ -50,8 +50,6 @@ void FPCGExOverlapScoresWeighting::Max(const FPCGExOverlapScoresWeighting& Other
 	CustomTagScore = FMath::Max(CustomTagScore, Other.CustomTagScore);
 }
 
-PCGExData::EIOInit UPCGExDiscardByOverlapSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 TSharedPtr<PCGExDiscardByOverlap::FOverlap> FPCGExDiscardByOverlapContext::RegisterOverlap(
 	PCGExDiscardByOverlap::FProcessor* InA,
 	PCGExDiscardByOverlap::FProcessor* InB,
@@ -245,7 +243,7 @@ namespace PCGExDiscardByOverlap
 		Overlaps.Empty();
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
@@ -414,6 +412,11 @@ namespace PCGExDiscardByOverlap
 		}
 	}
 
+	void FProcessor::OnRangeProcessingComplete()
+	{
+		TPointsProcessor<FPCGExDiscardByOverlapContext, UPCGExDiscardByOverlapSettings>::OnRangeProcessingComplete();
+	}
+
 	void FProcessor::CompleteWork()
 	{
 		// 2 - Find overlaps between large bounds, we'll be searching only there.
@@ -435,7 +438,10 @@ namespace PCGExDiscardByOverlap
 				else
 				{
 					// Require one more expensive step...
-					This->StartParallelLoopForRange(This->ManagedOverlaps.Num(), 8);
+					if (!This->ManagedOverlaps.IsEmpty())
+					{
+						This->StartParallelLoopForRange(This->ManagedOverlaps.Num(), 8);
+					}
 				}
 			};
 

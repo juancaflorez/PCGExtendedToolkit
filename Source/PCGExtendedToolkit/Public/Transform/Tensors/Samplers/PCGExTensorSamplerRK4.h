@@ -17,12 +17,12 @@
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "RK4", meta=(DisplayName = "RK4", ToolTip ="Samples the field using Runge-Kutta 4 method"))
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSamplerRK4 : public UPCGExTensorSampler
+class UPCGExTensorSamplerRK4 : public UPCGExTensorSampler
 {
 	GENERATED_BODY()
 
 public:
 	virtual void CopySettingsFrom(const UPCGExOperation* Other) override;
 	virtual bool PrepareForData(FPCGExContext* InContext) override;
-	virtual PCGExTensor::FTensorSample Sample(const TArray<UPCGExTensorOperation*>& InTensors, const FTransform& InProbe, bool& OutSuccess) const override;
+	virtual PCGExTensor::FTensorSample Sample(const TArray<UPCGExTensorOperation*>& InTensors, int32 InSeedIndex, const FTransform& InProbe, bool& OutSuccess) const override;
 };

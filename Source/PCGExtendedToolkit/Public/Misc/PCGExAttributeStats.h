@@ -8,6 +8,8 @@
 
 #include "PCGExPointsProcessor.h"
 #include "Data/PCGExAttributeHelpers.h"
+
+
 #include "Sampling/PCGExSampling.h"
 
 
@@ -16,13 +18,13 @@
 UENUM()
 enum class EPCGExStatsOutputToPoints : uint8
 {
-	None   = 0 UMETA(DisplayName = "No output", ToolTip="Writes nothing to input points"),
-	Prefix = 1 UMETA(DisplayName = "Prefix", ToolTip="Write stats values to points, using selected name as a prefix to the attribute' name"),
-	Suffix = 2 UMETA(DisplayName = "Suffix", ToolTip="Write stats values to points, using selected name as a suffix to the attribute' name"),
+	None   = 0 UMETA(DisplayName = "No output", ToolTip="None"),
+	Prefix = 1 UMETA(DisplayName = "Prefix", ToolTip="Uses specified name as a prefix to the attribute' name"),
+	Suffix = 2 UMETA(DisplayName = "Suffix", ToolTip="Uss specified name as a suffix to the attribute' name"),
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributeStatsSettings : public UPCGExPointsProcessorSettings
+class UPCGExAttributeStatsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -46,7 +48,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -61,6 +62,10 @@ public:
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
 	EPCGExStatsOutputToPoints OutputToPoints = EPCGExStatsOutputToPoints::None;
+
+	/** Output to tags */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
+	EPCGExStatsOutputToPoints OutputToTags = EPCGExStatsOutputToPoints::None;
 
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
@@ -136,6 +141,22 @@ public:
 
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bOutputDifferentValuesNum = true;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, DisplayName = "Different Values Num", EditCondition="bOutputDifferentValuesNum"))
+	FName DifferentValuesNumAttributeName = FName(TEXT("DifferentValues"));
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
+	bool bOutputDifferentSetValuesNum = true;
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, DisplayName = "Different Set Values Num", EditCondition="bOutputDifferentSetValuesNum"))
+	FName DifferentSetValuesNumAttributeName = FName(TEXT("DifferentSetValues"));
+
+	/** */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Outputs", meta = (PCG_Overridable, InlineEditConditionToggle))
 	bool bOutputDefaultValuesNum = true;
 
 	/** */
@@ -207,7 +228,7 @@ private:
 	friend class FPCGExAttributeStatsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeStatsContext final : FPCGExPointsProcessorContext
+struct FPCGExAttributeStatsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExAttributeStatsElement;
 	TSharedPtr<PCGEx::FAttributesInfos> AttributesInfos;
@@ -217,7 +238,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeStatsContext final : FPCGExPoin
 	TArray<int64> Rows;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributeStatsElement final : public FPCGExPointsProcessorElement
+class FPCGExAttributeStatsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -271,6 +292,8 @@ namespace PCGExAttributeStats
 		T MinUniqueValue = T{};
 		int32 UniqueValuesNum = 0;
 		int32 UniqueSetValuesNum = 0;
+		int32 DifferentValuesNum = 0;
+		int32 DifferentSetValuesNum = 0;
 		int32 DefaultValuesNum = 0;
 
 		explicit TAttributeStats(const PCGEx::FAttributeIdentity& InIdentity, const int64 InKey)
@@ -288,10 +311,12 @@ namespace PCGExAttributeStats
 
 			FString StrName = Identity.Name.ToString();
 			UPCGMetadata* PointsMetadata = nullptr;
+
 			if (Settings->OutputToPoints != EPCGExStatsOutputToPoints::None) { PointsMetadata = InDataFacade->GetOut()->Metadata; }
 
 #define PCGEX_OUTPUT_STAT(_NAME, _TYPE, _VALUE) \
 	if(Settings->bOutput##_NAME){ ParamData->Metadata->GetMutableTypedAttribute<_TYPE>(Settings->_NAME##AttributeName)->SetValue(Key, _VALUE); \
+	if(Settings->OutputToTags != EPCGExStatsOutputToPoints::None){ InDataFacade->Source->Tags->Set<_TYPE>(Settings->OutputToTags == EPCGExStatsOutputToPoints::Prefix ? (Settings->_NAME##AttributeName.ToString() + StrName) : (StrName + Settings->_NAME##AttributeName.ToString()), _VALUE); } \
 	if (PointsMetadata){\
 		FName PrintName = Settings->OutputToPoints == EPCGExStatsOutputToPoints::Prefix ? FName(Settings->_NAME##AttributeName.ToString() + StrName) : FName(StrName + Settings->_NAME##AttributeName.ToString());\
 		if (PointsMetadata->GetConstTypedAttribute<_TYPE>(PrintName)) { PointsMetadata->DeleteAttribute(PrintName); }\
@@ -337,9 +362,9 @@ namespace PCGExAttributeStats
 				/*
 				auto ProcessBasics = [&](const T& InValue)
 				{
-					MinValue = PCGExMath::Min(MinValue, InValue);
-					MaxValue = PCGExMath::Max(MaxValue, InValue);
-					AverageValue = PCGExMath::Add(AverageValue, InValue);
+					MinValue = PCGExBlend::Min(MinValue, InValue);
+					MaxValue = PCGExBlend::Max(MaxValue, InValue);
+					AverageValue = PCGExBlend::Add(AverageValue, InValue);
 				};
 				*/
 
@@ -350,9 +375,9 @@ namespace PCGExAttributeStats
 
 					const T& Value = Buffer->Read(i);
 
-					MinValue = PCGExMath::Min(MinValue, Value);
-					MaxValue = PCGExMath::Max(MaxValue, Value);
-					AverageValue = PCGExMath::Add(AverageValue, Value);
+					MinValue = PCGExBlend::Min(MinValue, Value);
+					MaxValue = PCGExBlend::Max(MaxValue, Value);
+					AverageValue = PCGExBlend::Add(AverageValue, Value);
 
 					const int32 Count = ValuesCount.FindOrAdd(Value, 0);
 					ValuesCount.Add(Value, Count + 1);
@@ -366,8 +391,8 @@ namespace PCGExAttributeStats
 						const int32 SetCount = SetValuesCount.FindOrAdd(Value, 0);
 						SetValuesCount.Add(Value, SetCount + 1);
 
-						SetMinValue = PCGExMath::Min(SetMinValue, Value);
-						SetMaxValue = PCGExMath::Max(SetMaxValue, Value);
+						SetMinValue = PCGExBlend::Min(SetMinValue, Value);
+						SetMaxValue = PCGExBlend::Max(SetMaxValue, Value);
 					}
 				}
 
@@ -409,6 +434,8 @@ namespace PCGExAttributeStats
 					for (const TPair<T, int32>& Pair : SetValuesCount) { if (Pair.Value == 1) { UniqueSetValuesNum++; } }
 				}
 
+				DifferentValuesNum = ValuesCount.Num();
+				DifferentSetValuesNum = SetValuesCount.Num();
 
 				ValuesCount.Empty();
 				SetValuesCount.Empty();
@@ -420,9 +447,11 @@ namespace PCGExAttributeStats
 				PCGEX_OUTPUT_STAT(MaxValue, T, MaxValue)
 				PCGEX_OUTPUT_STAT(SetMinValue, T, SetMinValue)
 				PCGEX_OUTPUT_STAT(SetMaxValue, T, SetMaxValue)
-				PCGEX_OUTPUT_STAT(AverageValue, T, PCGExMath::Div(AverageValue, static_cast<double>(NumValues)))
+				PCGEX_OUTPUT_STAT(AverageValue, T, PCGExBlend::Div(AverageValue, static_cast<double>(NumValues)))
 				PCGEX_OUTPUT_STAT(UniqueValuesNum, int32, UniqueValuesNum)
 				PCGEX_OUTPUT_STAT(UniqueSetValuesNum, int32, UniqueSetValuesNum)
+				PCGEX_OUTPUT_STAT(DifferentValuesNum, int32, DifferentValuesNum)
+				PCGEX_OUTPUT_STAT(DifferentSetValuesNum, int32, DifferentSetValuesNum)
 				PCGEX_OUTPUT_STAT(DefaultValuesNum, int32, DefaultValuesNum)
 				PCGEX_OUTPUT_STAT(HasOnlyDefaultValues, bool, NumValues == DefaultValuesNum)
 				PCGEX_OUTPUT_STAT(HasOnlySetValues, bool, DefaultValuesNum == 0)
@@ -450,7 +479,7 @@ namespace PCGExAttributeStats
 		virtual ~FProcessor() override;
 
 		virtual bool IsTrivial() const override { return false; }
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void CompleteWork() override;
 	};
 }

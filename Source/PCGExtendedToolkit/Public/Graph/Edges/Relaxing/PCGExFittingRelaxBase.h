@@ -20,7 +20,7 @@ enum class EPCGExRelaxEdgeFitting : uint8
  * 
  */
 UCLASS(Abstract, MinimalAPI, DisplayName = "Abstract Fitting")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExFittingRelaxBase : public UPCGExRelaxClusterOperation
+class UPCGExFittingRelaxBase : public UPCGExRelaxClusterOperation
 {
 	GENERATED_BODY()
 
@@ -73,7 +73,7 @@ public:
 			EdgeLengthBuffer = SecondaryDataFacade->GetBroadcaster<double>(DesiredEdgeLengthAttribute);
 			if (!EdgeLengthBuffer)
 			{
-				PCGE_LOG_C(Error, GraphAndLog, Context, FText::Format(FTEXT("Invalid Edge length attribute: \"{0}\"."), FText::FromName(DesiredEdgeLengthAttribute.GetName())));
+				PCGEX_LOG_INVALID_SELECTOR_C(Context, "Edge Length", DesiredEdgeLengthAttribute)
 				return false;
 			}
 
@@ -154,7 +154,7 @@ protected:
 	TSharedPtr<PCGExData::TBuffer<double>> EdgeLengthBuffer;
 	TSharedPtr<TArray<double>> EdgeLengths;
 
-	FORCEINLINE void ApplyForces(const int32 AddIndex, const int32 SubtractIndex, const FVector& Delta)
+	void ApplyForces(const int32 AddIndex, const int32 SubtractIndex, const FVector& Delta)
 	{
 		FPlatformAtomics::InterlockedAdd(&Forces[AddIndex].X, Delta.X);
 		FPlatformAtomics::InterlockedAdd(&Forces[AddIndex].Y, Delta.Y);

@@ -18,7 +18,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExGameplayTagsFilterConfig
+struct FPCGExGameplayTagsFilterConfig
 {
 	GENERATED_BODY()
 
@@ -56,7 +56,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExGameplayTagsFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExGameplayTagsFilterFactory : public UPCGExFilterFactoryData
+class UPCGExGameplayTagsFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -67,9 +67,9 @@ public:
 	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FGameplayTagsFilter final : public PCGExPointFilter::FSimpleFilter
+	class FGameplayTagsFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FGameplayTagsFilter(const TObjectPtr<const UPCGExGameplayTagsFilterFactory>& InDefinition)
@@ -87,26 +87,8 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGExData::TBuffer<FSoftObjectPath>> ActorReferences;
 #endif
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			AActor* TargetActor = TSoftObjectPtr<AActor>(ActorReferences->Read(PointIndex)).Get();
-			if (!TargetActor) { return TypedFilterFactory->Config.bFallbackMissingActor; }
-
-			const FCachedPropertyPath Path = FCachedPropertyPath(PathSegments);
-			FGameplayTagContainer TagContainer;
-			FProperty* Property = nullptr;
-
-			if (!PropertyPathHelpers::GetPropertyValue(TargetActor, Path, TagContainer, Property))
-			{
-				if (!TypedFilterFactory->Config.bQuietMissingPropertyWarning)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("GameplayTags filter could not resolve target property : \"%s\"."), *TypedFilterFactory->Config.PropertyPath);
-				}
-				return TypedFilterFactory->Config.bFallbackPropertyPath;
-			}
-			return TypedFilterFactory->Config.TagQuery.Matches(TagContainer);
-		}
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FGameplayTagsFilter() override
 		{
@@ -117,7 +99,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExGameplayTagsFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExGameplayTagsFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

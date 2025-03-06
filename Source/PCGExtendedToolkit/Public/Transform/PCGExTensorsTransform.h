@@ -9,6 +9,8 @@
 
 #include "PCGExPointsProcessor.h"
 #include "PCGExTransform.h"
+
+
 #include "Paths/PCGExPaths.h"
 #include "Sampling/PCGExSampling.h"
 #include "Tensors/PCGExTensor.h"
@@ -34,7 +36,7 @@ enum class EPCGExTensorTransformMode : uint8
 };
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorsTransformSettings : public UPCGExPointsProcessorSettings
+class UPCGExTensorsTransformSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -52,7 +54,6 @@ protected:
 
 	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	PCGEX_NODE_POINT_FILTER(PCGExPointFilter::SourceFiltersLabel, "Filters", PCGExFactories::PointFilters, false)
 	//~End UPCGExPointsProcessorSettings
 
@@ -128,23 +129,23 @@ private:
 	friend class FPCGExTensorsTransformElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorsTransformContext final : FPCGExPointsProcessorContext
+struct FPCGExTensorsTransformContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExTensorsTransformElement;
-	
+
 	TArray<TObjectPtr<const UPCGExTensorFactoryData>> TensorFactories;
 	TArray<TObjectPtr<const UPCGExFilterFactoryData>> StopFilterFactories;
-	
+
 	PCGEX_FOREACH_FIELD_TRTENSOR(PCGEX_OUTPUT_DECL_TOGGLE)
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExTensorsTransformElement final : public FPCGExPointsProcessorElement
+class FPCGExTensorsTransformElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
 		TWeakObjectPtr<UPCGComponent> SourceComponent,
 		const UPCGNode* Node) override;
-	
+
 protected:
 	virtual bool Boot(FPCGExContext* InContext) const override;
 	virtual bool ExecuteInternal(FPCGContext* Context) const override;
@@ -175,7 +176,7 @@ namespace PCGExTensorsTransform
 
 		virtual bool IsTrivial() const override { return false; }
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void PrepareSingleLoopScopeForPoints(const PCGExMT::FScope& Scope) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void OnPointsProcessingComplete() override;

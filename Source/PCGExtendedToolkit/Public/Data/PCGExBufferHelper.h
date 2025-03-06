@@ -16,7 +16,7 @@ namespace PCGExData
 	};
 
 	template <EBufferHelperMode Mode = EBufferHelperMode::Write>
-	class TBufferHelper : public TSharedFromThis<TBufferHelper<Mode>>
+	class PCGEXTENDEDTOOLKIT_API TBufferHelper : public TSharedFromThis<TBufferHelper<Mode>>
 	{
 		TSharedPtr<FFacade> DataFacade;
 		TMap<FName, TSharedPtr<FBufferBase>> BufferMap;
@@ -46,7 +46,7 @@ namespace PCGExData
 		{
 			{
 				FReadScopeLock ReadScopeLock(BufferLock);
-				if (TSharedPtr<FBufferBase>* BufferPtr = BufferMap.Find(InName))
+				if (const TSharedPtr<FBufferBase>* BufferPtr = BufferMap.Find(InName))
 				{
 					if (!(*BufferPtr)->IsA<T>())
 					{
@@ -91,7 +91,7 @@ namespace PCGExData
 		{
 			{
 				FReadScopeLock ReadScopeLock(BufferLock);
-				if (TSharedPtr<FBufferBase>* BufferPtr = BufferMap.Find(InName))
+				if (const TSharedPtr<FBufferBase>* BufferPtr = BufferMap.Find(InName))
 				{
 					if (!(*BufferPtr)->IsA<T>())
 					{
@@ -133,7 +133,7 @@ namespace PCGExData
 		}
 
 		template <typename T>
-		FORCEINLINE bool SetValue(const FName& InAttributeName, const int32 InIndex, const T& InValue)
+		bool SetValue(const FName& InAttributeName, const int32 InIndex, const T& InValue)
 		{
 			TSharedPtr<TBuffer<T>> Buffer = GetBuffer<T>(InAttributeName);
 			if (!Buffer) { return false; }
@@ -159,7 +159,7 @@ namespace PCGExData
 		}
 
 		template <typename T>
-		FORCEINLINE bool GetValue(const FName& InAttributeName, const int32 InIndex, T& OutValue)
+		bool GetValue(const FName& InAttributeName, const int32 InIndex, T& OutValue)
 		{
 			TSharedPtr<TBuffer<T>> Buffer = GetBuffer<T>(InAttributeName);
 			if (!Buffer) { return false; }

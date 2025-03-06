@@ -8,7 +8,7 @@
 
 namespace PCGExFilterGroup
 {
-	bool FFilterGroup::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade)
+	bool FFilterGroup::Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade)
 	{
 		PointDataFacade = InPointDataFacade;
 		return InitManaged(InContext);
@@ -105,12 +105,19 @@ namespace PCGExFilterGroup
 	}
 }
 
-#define PCGEX_FILTERGROUP_FOREACH(_BODY) for (const TObjectPtr<const UPCGExFilterFactoryData>& SubFilter : FilterFactories) { if (!SubFilter.Get()) { continue; } _BODY }
+#define PCGEX_FILTERGROUP_FOREACH(_BODY) for (const TObjectPtr<const UPCGExFilterFactoryData>& SubFilter : FilterFactories) { if (!IsValid(SubFilter)) { continue; } _BODY }
 
 bool UPCGExFilterGroupFactoryData::SupportsDirectEvaluation() const
 {
 	// Ensure we grab dependencies from plugged-in factories recursively
 	PCGEX_FILTERGROUP_FOREACH(if (!SubFilter->SupportsDirectEvaluation()) { return false; })
+	return true;
+}
+
+bool UPCGExFilterGroupFactoryData::SupportsCollectionEvaluation() const
+{
+	// Ensure we grab dependencies from plugged-in factories recursively
+	PCGEX_FILTERGROUP_FOREACH(if(!SubFilter->SupportsCollectionEvaluation()){ return false; })
 	return true;
 }
 

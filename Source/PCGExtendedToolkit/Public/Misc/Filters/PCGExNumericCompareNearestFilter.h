@@ -17,7 +17,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNumericCompareNearestFilterConfig
+struct FPCGExNumericCompareNearestFilterConfig
 {
 	GENERATED_BODY()
 
@@ -59,7 +59,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExNumericCompareNearestFilterConfig
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNumericCompareNearestFilterFactory : public UPCGExFilterFactoryData
+class UPCGExNumericCompareNearestFilterFactory : public UPCGExFilterFactoryData
 {
 	GENERATED_BODY()
 
@@ -76,9 +76,9 @@ public:
 	virtual void BeginDestroy() override;
 };
 
-namespace PCGExPointsFilter
+namespace PCGExPointFilter
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FNumericCompareNearestFilter final : public PCGExPointFilter::FSimpleFilter
+	class FNumericCompareNearestFilter final : public FSimpleFilter
 	{
 	public:
 		explicit FNumericCompareNearestFilter(const TObjectPtr<const UPCGExNumericCompareNearestFilterFactory>& InDefinition)
@@ -98,32 +98,9 @@ namespace PCGExPointsFilter
 		TSharedPtr<PCGExData::TBuffer<double>> OperandA;
 		TSharedPtr<PCGExData::TBuffer<double>> OperandB;
 
-		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade> InPointDataFacade) override;
+		virtual bool Init(FPCGExContext* InContext, const TSharedPtr<PCGExData::FFacade>& InPointDataFacade) override;
 
-		FORCEINLINE virtual bool Test(const int32 PointIndex) const override
-		{
-			const double B = OperandB ? OperandB->Read(PointIndex) : TypedFilterFactory->Config.OperandBConstant;
-
-			const FPCGPoint& SourcePt = PointDataFacade->Source->GetInPoint(PointIndex);
-			double BestDist = MAX_dbl;
-			int32 TargetIndex = -1;
-
-			TargetOctree->FindNearbyElements(
-				SourcePt.Transform.GetLocation(), [&](const FPCGPointRef& PointRef)
-				{
-					FVector SourcePosition = FVector::ZeroVector;
-					FVector TargetPosition = FVector::ZeroVector;
-					Distances->GetCenters(SourcePt, *PointRef.Point, SourcePosition, TargetPosition);
-					const double Dist = FVector::DistSquared(SourcePosition, TargetPosition);
-					if (Dist > BestDist) { return; }
-					BestDist = Dist;
-					TargetIndex = PointRef.Point - InPointsStart;
-				});
-
-			if (TargetIndex == -1) { return false; }
-
-			return PCGExCompare::Compare(TypedFilterFactory->Config.Comparison, OperandA->Read(TargetIndex), B, TypedFilterFactory->Config.Tolerance);
-		}
+		virtual bool Test(const int32 PointIndex) const override;
 
 		virtual ~FNumericCompareNearestFilter() override
 		{
@@ -134,7 +111,7 @@ namespace PCGExPointsFilter
 ///
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Filter")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNumericCompareNearestFilterProviderSettings : public UPCGExFilterProviderSettings
+class UPCGExNumericCompareNearestFilterProviderSettings : public UPCGExFilterProviderSettings
 {
 	GENERATED_BODY()
 

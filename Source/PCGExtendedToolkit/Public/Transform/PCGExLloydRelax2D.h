@@ -17,7 +17,7 @@
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExLloydRelax2DSettings : public UPCGExPointsProcessorSettings
+class UPCGExLloydRelax2DSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -32,11 +32,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, ClampMin=1))
 	int32 Iterations = 5;
@@ -50,12 +46,12 @@ public:
 	FPCGExGeo2DProjectionDetails ProjectionDetails;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExLloydRelax2DContext final : FPCGExPointsProcessorContext
+struct FPCGExLloydRelax2DContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExLloydRelax2DElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExLloydRelax2DElement final : public FPCGExPointsProcessorElement
+class FPCGExLloydRelax2DElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -85,12 +81,12 @@ namespace PCGExLloydRelax2D
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FLloydRelaxTask final : public PCGExMT::FPCGExIndexedTask
+	class FLloydRelaxTask final : public PCGExMT::FPCGExIndexedTask
 	{
 	public:
 		FLloydRelaxTask(const int32 InTaskIndex,

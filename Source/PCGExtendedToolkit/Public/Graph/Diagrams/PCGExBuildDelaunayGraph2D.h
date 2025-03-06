@@ -24,7 +24,7 @@ enum class EPCGExUrquhartSiteMergeMode : uint8
  * 
  */
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Clusters")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBuildDelaunayGraph2DSettings : public UPCGExPointsProcessorSettings
+class UPCGExBuildDelaunayGraph2DSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -43,7 +43,6 @@ protected:
 	//~Begin UPCGExPointsProcessorSettings
 public:
 	virtual FName GetMainOutputPin() const override { return PCGExGraph::OutputVerticesLabel; }
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
 	//~End UPCGExPointsProcessorSettings
 
 	/** Output the Urquhart graph of the Delaunay triangulation (removes the longest edge of each Delaunay cell) */
@@ -84,21 +83,20 @@ public:
 
 	/** Graph & Edges output properties */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable, DisplayName="Cluster Output Settings"))
-	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails();
+	FPCGExGraphBuilderDetails GraphBuilderDetails = FPCGExGraphBuilderDetails(EPCGExMinimalAxis::X);
 
 private:
 	friend class FPCGExBuildDelaunayGraph2DElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildDelaunayGraph2DContext final : FPCGExPointsProcessorContext
+struct FPCGExBuildDelaunayGraph2DContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBuildDelaunayGraph2DElement;
 
 	TSharedPtr<PCGExData::FPointIOCollection> MainSites;
 };
 
-
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBuildDelaunayGraph2DElement final : public FPCGExPointsProcessorElement
+class FPCGExBuildDelaunayGraph2DElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -133,13 +131,13 @@ namespace PCGExBuildDelaunay2D
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 		virtual void Write() override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FOutputDelaunaySites2D final : public PCGExMT::FTask
+	class FOutputDelaunaySites2D final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FOutputDelaunaySites2D)
@@ -158,7 +156,7 @@ namespace PCGExBuildDelaunay2D
 		virtual void ExecuteTask(const TSharedPtr<PCGExMT::FTaskManager>& AsyncManager) override;
 	};
 
-	class /*PCGEXTENDEDTOOLKIT_API*/ FOutputDelaunayUrquhartSites2D final : public PCGExMT::FTask
+	class FOutputDelaunayUrquhartSites2D final : public PCGExMT::FTask
 	{
 	public:
 		PCGEX_ASYNC_TASK_NAME(FOutputDelaunayUrquhartSites2D)

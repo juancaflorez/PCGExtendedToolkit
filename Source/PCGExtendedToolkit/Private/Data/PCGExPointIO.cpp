@@ -145,16 +145,26 @@ namespace PCGExData
 		}
 	}
 
+	void FPointIO::PrintInKeysMap(TMap<PCGMetadataEntryKey, int32>& InMap) const
+	{
+		const TArray<FPCGPoint>& PointList = In->GetPoints();
+		InMap.Empty(PointList.Num());
+		for (int i = 0; i < PointList.Num(); i++) { InMap.Add(PointList[i].MetadataEntry, i); }
+	}
+
+	void FPointIO::PrintOutInKeysMap(TMap<PCGMetadataEntryKey, int32>& InMap) const
+	{
+		if (Out) { PrintOutKeysMap(InMap); }
+		else { PrintInKeysMap(InMap); }
+	}
+
 	void FPointIO::CleanupKeys()
 	{
 		InKeys.Reset();
 		OutKeys.Reset();
 	}
 
-	FPointIO::~FPointIO()
-	{
-		PCGEX_LOG_DTR(FPointIO)
-	}
+	FPointIO::~FPointIO() = default;
 
 	bool FPointIO::StageOutput() const
 	{
@@ -214,10 +224,7 @@ namespace PCGExData
 		Initialize(Sources, InitOut);
 	}
 
-	FPointIOCollection::~FPointIOCollection()
-	{
-		PCGEX_LOG_DTR(FPointIOCollection);
-	}
+	FPointIOCollection::~FPointIOCollection() = default;
 
 	void FPointIOCollection::Initialize(
 		TArray<FPCGTaggedData>& Sources,
@@ -313,6 +320,8 @@ namespace PCGExData
 
 	void FPointIOCollection::StageOutputs()
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FPointIOCollection::StageOutputs);
+
 		Sort();
 		Context->IncreaseStagedOutputReserve(Pairs.Num());
 		for (int i = 0; i < Pairs.Num(); i++) { Pairs[i]->StageOutput(); }

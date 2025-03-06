@@ -21,7 +21,7 @@
 
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPropertiesSamplerConfigBase
+struct FPCGExPropertiesSamplerConfigBase
 {
 	GENERATED_BODY()
 
@@ -39,7 +39,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExPropertiesSamplerConfigBase
  * 
  */
 UCLASS(MinimalAPI)
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSampleProperties : public UPCGExNeighborSampleOperation
+class UPCGExNeighborSampleProperties : public UPCGExNeighborSampleOperation
 {
 	GENERATED_BODY()
 
@@ -50,31 +50,12 @@ public:
 
 	virtual void PrepareForCluster(FPCGExContext* InContext, TSharedRef<PCGExCluster::FCluster> InCluster, TSharedRef<PCGExData::FFacade> InVtxDataFacade, TSharedRef<PCGExData::FFacade> InEdgeDataFacade) override;
 
-	FORCEINLINE virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const override
-	{
-		FPCGPoint& A = VtxDataFacade->Source->GetMutablePoint(TargetNode.PointIndex);
-		PropertiesBlender->PrepareBlending(A, VtxDataFacade->Source->GetInPoint(TargetNode.PointIndex));
-	}
+	virtual void PrepareNode(const PCGExCluster::FNode& TargetNode) const override;
 
-	FORCEINLINE virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override
-	{
-		FPCGPoint& A = VtxDataFacade->Source->GetMutablePoint(TargetNode.PointIndex);
-		const FPCGPoint& B = VtxDataFacade->Source->GetInPoint(Cluster->GetNode(Lk)->PointIndex);
-		PropertiesBlender->Blend(A, B, A, Weight);
-	}
+	virtual void SampleNeighborNode(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override;
+	virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override;
 
-	FORCEINLINE virtual void SampleNeighborEdge(const PCGExCluster::FNode& TargetNode, const PCGExGraph::FLink Lk, const double Weight) override
-	{
-		FPCGPoint& A = VtxDataFacade->Source->GetMutablePoint(TargetNode.PointIndex);
-		const FPCGPoint& B = VtxDataFacade->Source->GetInPoint(Cluster->GetEdge(Lk)->PointIndex);
-		PropertiesBlender->Blend(A, B, A, Weight);
-	}
-
-	FORCEINLINE virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight) override
-	{
-		FPCGPoint& A = VtxDataFacade->Source->GetMutablePoint(TargetNode.PointIndex);
-		PropertiesBlender->CompleteBlending(A, Count, TotalWeight);
-	}
+	virtual void FinalizeNode(const PCGExCluster::FNode& TargetNode, const int32 Count, const double TotalWeight) override;
 
 	virtual void Cleanup() override;
 
@@ -84,7 +65,7 @@ protected:
 
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplerFactoryProperties : public UPCGExNeighborSamplerFactoryData
+class UPCGExNeighborSamplerFactoryProperties : public UPCGExNeighborSamplerFactoryData
 {
 	GENERATED_BODY()
 
@@ -94,7 +75,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|NeighborSample")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExNeighborSamplePropertiesSettings : public UPCGExNeighborSampleProviderSettings
+class UPCGExNeighborSamplePropertiesSettings : public UPCGExNeighborSampleProviderSettings
 {
 	GENERATED_BODY()
 

@@ -14,6 +14,11 @@ TMap<FName, int32> UPCGExGlobalSettings::InPinInfosMap;
 TMap<FName, int32> UPCGExGlobalSettings::OutPinInfosMap;
 bool UPCGExGlobalSettings::bGeneratedPinMap = false; // Initialize to a default value
 
+FLinearColor UPCGExGlobalSettings::WantsColor(const FLinearColor InColor) const
+{
+	return bUseNativeColorsIfPossible ? FLinearColor::White : InColor;
+}
+
 bool UPCGExGlobalSettings::GetPinExtraIcon(const UPCGPin* InPin, FName& OutExtraIcon, FText& OutTooltip, bool bIsOutPin) const
 {
 #if WITH_EDITOR
@@ -72,6 +77,9 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_EMPLACE_PIN_OUT(OUT_Filter, "PCGEx Filter");
 	PCGEX_MAP_PIN_OUT("Filter")
 
+	PCGEX_EMPLACE_PIN_OUT(OUT_CFilter, "PCGEx Collection Filter");
+	PCGEX_MAP_PIN_OUT("C-Filter")
+
 	PCGEX_EMPLACE_PIN_OUT(OUT_FilterEdges, "PCGEx Edge Filter");
 	PCGEX_MAP_PIN_OUT("Edge Filter")
 
@@ -89,6 +97,7 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 
 	PCGEX_EMPLACE_PIN_OUT(OUT_Sorting, "PCGEx Sort Rule");
 	PCGEX_MAP_PIN_OUT("SortRule")
+	PCGEX_MAP_PIN_OUT("SortingRule")
 
 	PCGEX_EMPLACE_PIN_OUT(OUT_Tex, "PCGEx Texture Params");
 	PCGEX_MAP_PIN_OUT("TextureParam")
@@ -111,6 +120,9 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_EMPLACE_PIN_OUT(OUT_Tensor, "PCGEx Tensor");
 	PCGEX_MAP_PIN_OUT("Tensor")
 
+	PCGEX_EMPLACE_PIN_OUT(OUT_Picker, "PCGEx Picker");
+	PCGEX_MAP_PIN_OUT("Picker")
+
 #undef PCGEX_EMPLACE_PIN_OUT
 #undef PCGEX_MAP_PIN_OUT
 #pragma endregion
@@ -124,7 +136,6 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_EMPLACE_PIN_IN(IN_Filters, "Expects PCGEx Filters, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("Filters")
 	PCGEX_MAP_PIN_IN("Point Filters")
-	PCGEX_MAP_PIN_IN("Break Conditions")
 	PCGEX_MAP_PIN_IN("Conditions Filters")
 	PCGEX_MAP_PIN_IN("Keep Conditions")
 	PCGEX_MAP_PIN_IN("Skip Conditions")
@@ -138,7 +149,7 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_MAP_PIN_IN("Split Conditions")
 	PCGEX_MAP_PIN_IN("Stop Conditions")
 	PCGEX_MAP_PIN_IN("Conditions")
-	PCGEX_MAP_PIN_IN("Flip Orientation Conditions")
+	PCGEX_MAP_PIN_IN("Flip Conditions")
 
 	PCGEX_EMPLACE_PIN_IN(OUT_FilterEdges, "Expects PCGEx Filers or Edge Filters, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("Edge Filters")
@@ -147,6 +158,7 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_EMPLACE_PIN_IN(OUT_FilterNode, "Expects PCGEx Filters or Vtx Filter, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("Vtx Filters")
 	PCGEX_MAP_PIN_IN("NodeFilters")
+	PCGEX_MAP_PIN_IN("Break Conditions")
 
 	PCGEX_EMPLACE_PIN_IN(OUT_NodeFlag, "Expects PCGEx Vtx Node Flags, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("Flags")
@@ -162,6 +174,7 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_MAP_PIN_IN("SortingRules")
 	PCGEX_MAP_PIN_IN("SortRule")
 	PCGEX_MAP_PIN_IN("SortRules")
+	PCGEX_MAP_PIN_IN("Direction Sorting")
 
 	PCGEX_EMPLACE_PIN_IN(IN_Tex, "Expects PCGEx Texture Params, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("TextureParams")
@@ -184,6 +197,9 @@ void UPCGExGlobalSettings::GeneratePinInfos()
 	PCGEX_EMPLACE_PIN_IN(OUT_Tensor, "Expects PCGEx Tensors, supports multiple inputs.");
 	PCGEX_MAP_PIN_IN("Tensors")
 	PCGEX_MAP_PIN_IN("Parent Tensor")
+
+	PCGEX_EMPLACE_PIN_IN(OUT_Picker, "PCGEx Pickers, supports multiple inputs.");
+	PCGEX_MAP_PIN_IN("Pickers")
 
 	PinIndex = InPinInfos.Emplace(FName("PCGEx.Pin.IN_Vtx"), TEXT("Point collection formatted for use as cluster vtx."));
 	PCGEX_MAP_PIN_IN("Vtx")

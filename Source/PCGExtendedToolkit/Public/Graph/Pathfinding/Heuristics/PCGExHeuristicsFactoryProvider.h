@@ -19,7 +19,8 @@ void UPCGExHeuristicsFactory##_TYPE::RegisterAssetDependencies(FPCGExContext* In
 #define PCGEX_FORWARD_HEURISTIC_FACTORY \
 	NewFactory->WeightFactor = Config.WeightFactor; \
 	NewFactory->Config = Config; \
-	NewFactory->Config.Init();
+	NewFactory->Config.Init(); \
+	NewFactory->ConfigBase = NewFactory->Config; 
 
 #define PCGEX_FORWARD_HEURISTIC_CONFIG \
 	NewOperation->WeightFactor = Config.WeightFactor; \
@@ -34,7 +35,7 @@ void UPCGExHeuristicsFactory##_TYPE::RegisterAssetDependencies(FPCGExContext* In
 class UPCGExHeuristicOperation;
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigBase
+struct PCGEXTENDEDTOOLKIT_API FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -95,18 +96,23 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigBase
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryData : public UPCGExFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExHeuristicsFactoryData : public UPCGExFactoryData
 {
 	GENERATED_BODY()
 
 public:
+	FPCGExHeuristicConfigBase ConfigBase;
+	
 	virtual PCGExFactories::EType GetFactoryType() const override { return PCGExFactories::EType::Heuristics; }
+
+	virtual bool RegisterConsumableAttributesWithData(FPCGExContext* InContext, const UPCGData* InData) const override;
+	
 	virtual UPCGExHeuristicOperation* CreateOperation(FPCGExContext* InContext) const;
 	double WeightFactor = 1;
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryProviderSettings : public UPCGExFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExHeuristicsFactoryProviderSettings : public UPCGExFactoryProviderSettings
 {
 	GENERATED_BODY()
 

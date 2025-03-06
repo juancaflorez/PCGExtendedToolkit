@@ -7,6 +7,7 @@
 #include "PCGExPointsProcessor.h"
 #include "Data/Blending/PCGExMetadataBlender.h"
 
+
 #define LOCTEXT_NAMESPACE "PCGExSampleNearestBoundsElement"
 #define PCGEX_NAMESPACE SampleNearestBounds
 
@@ -73,8 +74,6 @@ TArray<FPCGPinProperties> UPCGExSampleNearestBoundsSettings::InputPinProperties(
 	return PinProperties;
 }
 
-PCGExData::EIOInit UPCGExSampleNearestBoundsSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
-
 void FPCGExSampleNearestBoundsContext::RegisterAssetDependencies()
 {
 	PCGEX_SETTINGS_LOCAL(SampleNearestBounds)
@@ -90,6 +89,9 @@ bool FPCGExSampleNearestBoundsElement::Boot(FPCGExContext* InContext) const
 	if (!FPCGExPointsProcessorElement::Boot(InContext)) { return false; }
 
 	PCGEX_CONTEXT_AND_SETTINGS(SampleNearestBounds)
+
+	PCGEX_FWD(ApplySampling)
+	Context->ApplySampling.Init();
 
 	Context->BoundsFacade = PCGExData::TryGetSingleFacade(Context, PCGEx::SourceBoundsLabel, true);
 	if (!Context->BoundsFacade) { return false; }
@@ -189,18 +191,20 @@ namespace PCGExSampleNearestBounds
 		PCGEX_OUTPUT_VALUE(Success, Index, false)
 		PCGEX_OUTPUT_VALUE(Transform, Index, Point.Transform)
 		PCGEX_OUTPUT_VALUE(LookAtTransform, Index, Point.Transform)
-		PCGEX_OUTPUT_VALUE(Distance, Index, FailSafeDist)
-		PCGEX_OUTPUT_VALUE(SignedDistance, Index, FailSafeDist)
+		PCGEX_OUTPUT_VALUE(Distance, Index, FailSafeDist * Settings->DistanceScale)
+		PCGEX_OUTPUT_VALUE(SignedDistance, Index, FailSafeDist * Settings->SignedDistanceScale)
 		PCGEX_OUTPUT_VALUE(ComponentWiseDistance, Index, FVector(FailSafeDist))
 		PCGEX_OUTPUT_VALUE(NumSamples, Index, 0)
 		PCGEX_OUTPUT_VALUE(SampledIndex, Index, -1)
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSampleNearestBounds::Process);
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		SampleState.SetNumUninitialized(PointDataFacade->GetNum());
 
@@ -311,8 +315,8 @@ namespace PCGExSampleNearestBounds
 			const FTransform TargetTransform = Target.Transform;
 			const FQuat TargetRotation = TargetTransform.GetRotation();
 
-			WeightedTransform = PCGExMath::WeightedAdd(WeightedTransform, TargetTransform, Weight);
-			if (Settings->LookAtUpSelection == EPCGExSampleSource::Target) { PCGExMath::WeightedAdd(WeightedUp, (LookAtUpGetter ? LookAtUpGetter->Read(InSample.Index) : SafeUpVector), Weight); }
+			WeightedTransform = PCGExBlend::WeightedAdd(WeightedTransform, TargetTransform, Weight);
+			if (Settings->LookAtUpSelection == EPCGExSampleSource::Target) { PCGExBlend::WeightedAdd(WeightedUp, (LookAtUpGetter ? LookAtUpGetter->Read(InSample.Index) : SafeUpVector), Weight); }
 
 
 			WeightedSignAxis += PCGExMath::GetDirection(TargetRotation, Settings->SignAxis) * Weight;
@@ -364,7 +368,7 @@ namespace PCGExSampleNearestBounds
 		{
 			WeightedUp /= TotalWeight;
 
-			WeightedTransform = PCGExMath::Div(WeightedTransform, TotalWeight);
+			WeightedTransform = PCGExBlend::Div(WeightedTransform, TotalWeight);
 		}
 
 		WeightedUp.Normalize();
@@ -373,12 +377,15 @@ namespace PCGExSampleNearestBounds
 		FVector LookAt = CWDistance.GetSafeNormal();
 		const double WeightedDistance = FVector::Dist(Origin, WeightedTransform.GetLocation());
 
+		FTransform LookAtTransform = PCGExMath::MakeLookAtTransform(LookAt, WeightedUp, Settings->LookAtAxisAlign);
+		if (Context->ApplySampling.WantsApply()) { Context->ApplySampling.Apply(Point, WeightedTransform, LookAtTransform); }
+
 		SampleState[Index] = Stats.IsValid();
 		PCGEX_OUTPUT_VALUE(Success, Index, Stats.IsValid())
 		PCGEX_OUTPUT_VALUE(Transform, Index, WeightedTransform)
-		PCGEX_OUTPUT_VALUE(LookAtTransform, Index, PCGExMath::MakeLookAtTransform(LookAt, WeightedUp, Settings->LookAtAxisAlign))
-		PCGEX_OUTPUT_VALUE(Distance, Index, WeightedDistance)
-		PCGEX_OUTPUT_VALUE(SignedDistance, Index, FMath::Sign(WeightedSignAxis.Dot(LookAt)) * WeightedDistance)
+		PCGEX_OUTPUT_VALUE(LookAtTransform, Index, LookAtTransform)
+		PCGEX_OUTPUT_VALUE(Distance, Index, WeightedDistance * Settings->DistanceScale)
+		PCGEX_OUTPUT_VALUE(SignedDistance, Index, FMath::Sign(WeightedSignAxis.Dot(LookAt)) * WeightedDistance * Settings->SignedDistanceScale)
 		PCGEX_OUTPUT_VALUE(ComponentWiseDistance, Index, Settings->bAbsoluteComponentWiseDistance ? PCGExMath::Abs(CWDistance) : CWDistance)
 		PCGEX_OUTPUT_VALUE(Angle, Index, PCGExSampling::GetAngle(Settings->AngleRange, WeightedAngleAxis, LookAt))
 		PCGEX_OUTPUT_VALUE(NumSamples, Index, TotalSamples)

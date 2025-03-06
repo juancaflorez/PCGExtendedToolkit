@@ -14,36 +14,36 @@
 #include "PCGExAssetCollection.generated.h"
 
 #define PCGEX_ASSET_COLLECTION_GET_ENTRY(_TYPE, _ENTRY_TYPE)\
-FORCEINLINE virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost) override {\
+virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost) override {\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryAtTpl(OutTypedEntry, Entries, Index, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost) override {\
+virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost) override {\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryTpl(OutTypedEntry, Entries, Index, Seed, PickMode, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) override {\
+virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) override {\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryRandomTpl(OutTypedEntry, Entries, Seed, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) override {\
+virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) override {\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryWeightedRandomTpl(OutTypedEntry, Entries, Seed, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
+virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryAtTpl(OutTypedEntry, Entries, Index, TagInheritance, OutTags, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
+virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryTpl(OutTypedEntry, Entries, Index, Seed, PickMode, TagInheritance, OutTags, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
+virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryRandomTpl(OutTypedEntry, Entries, Seed, TagInheritance, OutTags, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }\
-FORCEINLINE virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
+virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) override{\
 const _ENTRY_TYPE* OutTypedEntry = static_cast<const _ENTRY_TYPE*>(OutEntry); if(GetEntryWeightedRandomTpl(OutTypedEntry, Entries, Seed, TagInheritance, OutTags, OutHost)){ OutEntry = static_cast<const FPCGExAssetCollectionEntry*>(OutTypedEntry);  return true;} return false; }
 
 #define PCGEX_ASSET_COLLECTION_GET_ENTRY_TYPED(_TYPE, _ENTRY_TYPE)\
-FORCEINLINE bool GetEntryAt(const _ENTRY_TYPE*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost) { return GetEntryAtTpl(OutEntry, Entries, Index, OutHost); }\
-FORCEINLINE bool GetEntry(const _ENTRY_TYPE*& OutEntry, const int32 Index, int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost) { return GetEntryTpl(OutEntry, Entries, Index, Seed, PickMode, OutHost); }\
-FORCEINLINE bool GetEntryRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) { return GetEntryRandomTpl(OutEntry, Entries, Seed, OutHost); }\
-FORCEINLINE bool GetEntryWeightedRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) { return GetEntryWeightedRandomTpl(OutEntry, Entries, Seed, OutHost); }\
-FORCEINLINE bool GetEntryAt(const _ENTRY_TYPE*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryAtTpl(OutEntry, Entries, Index, TagInheritance, OutTags, OutHost); }\
-FORCEINLINE bool GetEntry(const _ENTRY_TYPE*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryTpl(OutEntry, Entries, Index, Seed, PickMode, TagInheritance, OutTags, OutHost); }\
-FORCEINLINE bool GetEntryRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryRandomTpl(OutEntry, Entries, Seed, TagInheritance, OutTags, OutHost); }\
-FORCEINLINE bool GetEntryWeightedRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryWeightedRandomTpl(OutEntry, Entries, Seed, TagInheritance, OutTags, OutHost); }
+bool GetEntryAt(const _ENTRY_TYPE*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost) { return GetEntryAtTpl(OutEntry, Entries, Index, OutHost); }\
+bool GetEntry(const _ENTRY_TYPE*& OutEntry, const int32 Index, int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost) { return GetEntryTpl(OutEntry, Entries, Index, Seed, PickMode, OutHost); }\
+bool GetEntryRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) { return GetEntryRandomTpl(OutEntry, Entries, Seed, OutHost); }\
+bool GetEntryWeightedRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost) { return GetEntryWeightedRandomTpl(OutEntry, Entries, Seed, OutHost); }\
+bool GetEntryAt(const _ENTRY_TYPE*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryAtTpl(OutEntry, Entries, Index, TagInheritance, OutTags, OutHost); }\
+bool GetEntry(const _ENTRY_TYPE*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryTpl(OutEntry, Entries, Index, Seed, PickMode, TagInheritance, OutTags, OutHost); }\
+bool GetEntryRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryRandomTpl(OutEntry, Entries, Seed, TagInheritance, OutTags, OutHost); }\
+bool GetEntryWeightedRandom(const _ENTRY_TYPE*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost) { return GetEntryWeightedRandomTpl(OutEntry, Entries, Seed, TagInheritance, OutTags, OutHost); }
 
 #define PCGEX_ASSET_COLLECTION_BOILERPLATE_BASE(_TYPE, _ENTRY_TYPE)\
-FORCEINLINE virtual bool IsValidIndex(const int32 InIndex) const { return Entries.IsValidIndex(InIndex); }\
-FORCEINLINE virtual int32 NumEntries() const override {return Entries.Num(); }\
+virtual bool IsValidIndex(const int32 InIndex) const { return Entries.IsValidIndex(InIndex); }\
+virtual int32 NumEntries() const override {return Entries.Num(); }\
 PCGEX_ASSET_COLLECTION_GET_ENTRY_TYPED(_TYPE, _ENTRY_TYPE)\
 PCGEX_ASSET_COLLECTION_GET_ENTRY(_TYPE, _ENTRY_TYPE)\
 virtual bool BuildFromAttributeSet(FPCGExContext* InContext, const UPCGParamData* InAttributeSet, const FPCGExAssetAttributeSetDetails& Details, const bool bBuildStaging) override \
@@ -166,7 +166,7 @@ namespace PCGExAssetCollection
 }
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetDistributionIndexDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetDistributionIndexDetails
 {
 	GENERATED_BODY()
 
@@ -197,13 +197,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetDistributionIndexDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetTaggingDetails : public FPCGExComponentTaggingDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetTaggingDetails : public FPCGExComponentTaggingDetails
 {
 	GENERATED_BODY()
 
-	FPCGExAssetTaggingDetails()
-	{
-	}
+	FPCGExAssetTaggingDetails() = default;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_NotOverridable, Bitmask, BitmaskEnum="/Script/PCGExtendedToolkit.EPCGExAssetTagInheritance"))
 	uint8 GrabTags = static_cast<uint8>(EPCGExAssetTagInheritance::Asset);
@@ -212,13 +210,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetTaggingDetails : public FPCGExCompo
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetDistributionDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetDistributionDetails
 {
 	GENERATED_BODY()
 
-	FPCGExAssetDistributionDetails()
-	{
-	}
+	FPCGExAssetDistributionDetails() = default;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Distribution", meta=(PCG_Overridable, Bitmask, BitmaskEnum="/Script/PCGExtendedToolkit.EPCGExSeedComponents"))
 	uint8 SeedComponents = 0;
@@ -237,13 +233,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetDistributionDetails
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetAttributeSetDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetAttributeSetDetails
 {
 	GENERATED_BODY()
 
-	FPCGExAssetAttributeSetDetails()
-	{
-	}
+	FPCGExAssetAttributeSetDetails() = default;
 
 	/** Name of the attribute on the AttributeSet that contains the asset path to be staged */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
@@ -259,7 +253,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetAttributeSetDetails
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Asset Staging Data")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingData
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetStagingData
 {
 	GENERATED_BODY()
 
@@ -283,14 +277,12 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetStagingData
 };
 
 USTRUCT(BlueprintType, DisplayName="[PCGEx] Asset Collection Entry")
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionEntry
+struct PCGEXTENDEDTOOLKIT_API FPCGExAssetCollectionEntry
 {
 	GENERATED_BODY()
 	virtual ~FPCGExAssetCollectionEntry() = default;
 
-	FPCGExAssetCollectionEntry()
-	{
-	}
+	FPCGExAssetCollectionEntry() = default;
 
 	UPROPERTY(EditAnywhere, Category = Settings)
 	bool bIsSubCollection = false;
@@ -325,9 +317,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionEntry
 #endif
 
 #if WITH_EDITOR
-	virtual void EDITOR_Sanitize()
-	{
-	}
+	virtual void EDITOR_Sanitize();
 #endif
 
 	virtual bool Validate(const UPCGExAssetCollection* ParentCollection);
@@ -339,7 +329,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAssetCollectionEntry
 
 namespace PCGExAssetCollection
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FCategory : public TSharedFromThis<FCategory>
+	class PCGEXTENDEDTOOLKIT_API FCategory : public TSharedFromThis<FCategory>
 	{
 	public:
 		FName Name = NAME_None;
@@ -360,75 +350,23 @@ namespace PCGExAssetCollection
 
 		~FCategory() = default;
 
-		FORCEINLINE int32 GetPick(const int32 Index, const EPCGExIndexPickMode PickMode) const
-		{
-			switch (PickMode)
-			{
-			default:
-			case EPCGExIndexPickMode::Ascending:
-				return GetPickAscending(Index);
-			case EPCGExIndexPickMode::Descending:
-				return GetPickDescending(Index);
-			case EPCGExIndexPickMode::WeightAscending:
-				return GetPickWeightAscending(Index);
-			case EPCGExIndexPickMode::WeightDescending:
-				return GetPickWeightDescending(Index);
-			}
-		}
+		int32 GetPick(const int32 Index, const EPCGExIndexPickMode PickMode) const;
 
-		FORCEINLINE int32 GetPickAscending(const int32 Index) const
-		{
-			return Indices.IsValidIndex(Index) ? Indices[Index] : -1;
-		}
+		int32 GetPickAscending(const int32 Index) const;
+		int32 GetPickDescending(const int32 Index) const;
+		int32 GetPickWeightAscending(const int32 Index) const;
+		int32 GetPickWeightDescending(const int32 Index) const;
+		int32 GetPickRandom(const int32 Seed) const;
+		int32 GetPickRandomWeighted(const int32 Seed) const;
 
-		FORCEINLINE int32 GetPickDescending(const int32 Index) const
-		{
-			return Indices.IsValidIndex(Index) ? Indices[(Indices.Num() - 1) - Index] : -1;
-		}
-
-		FORCEINLINE int32 GetPickWeightAscending(const int32 Index) const
-		{
-			return Order.IsValidIndex(Index) ? Indices[Order[Index]] : -1;
-		}
-
-		FORCEINLINE int32 GetPickWeightDescending(const int32 Index) const
-		{
-			return Order.IsValidIndex(Index) ? Indices[Order[(Order.Num() - 1) - Index]] : -1;
-		}
-
-		FORCEINLINE int32 GetPickRandom(const int32 Seed) const
-		{
-			return Indices[Order[FRandomStream(Seed).RandRange(0, Order.Num() - 1)]];
-		}
-
-		FORCEINLINE int32 GetPickRandomWeighted(const int32 Seed) const
-		{
-			const int32 Threshold = FRandomStream(Seed).RandRange(0, WeightSum - 1);
-			int32 Pick = 0;
-			while (Pick < Weights.Num() && Weights[Pick] < Threshold) { Pick++; }
-			return Indices[Order[Pick]];
-		}
-
-
-		void Reserve(const int32 Num)
-		{
-			Indices.Reserve(Num);
-			Weights.Reserve(Num);
-			Order.Reserve(Num);
-		}
-
-		void Shrink()
-		{
-			Indices.Shrink();
-			Weights.Shrink();
-			Order.Shrink();
-		}
+		void Reserve(const int32 Num);
+		void Shrink();
 
 		void RegisterEntry(const int32 Index, const FPCGExAssetCollectionEntry* InEntry);
 		void Compile();
 	};
 
-	struct /*PCGEXTENDEDTOOLKIT_API*/ FCache
+	struct PCGEXTENDEDTOOLKIT_API FCache
 	{
 		int32 WeightSum = 0;
 		TSharedPtr<FCategory> Main;
@@ -451,77 +389,16 @@ namespace PCGExAssetCollection
 #pragma region Staging bounds update
 
 
-	static void GetBoundingBoxBySpawning(const TSoftClassPtr<AActor>& InActorClass, FVector& Origin, FVector& BoxExtent, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true)
-	{
-#if WITH_EDITOR
-		UWorld* World = GWorld;
-		if (!World)
-		{
-			UE_LOG(LogTemp, Error, TEXT("No world to compute actor bounds!"));
-			return;
-		}
+	void GetBoundingBoxBySpawning(const TSoftClassPtr<AActor>& InActorClass, FVector& Origin, FVector& BoxExtent, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true);
 
-		if (IsInGameThread())
-		{
-			UClass* ActorClass = InActorClass.LoadSynchronous();
-			if (!ActorClass) { return; }
-
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.bNoFail = true;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-			AActor* TempActor = World->SpawnActor<AActor>(ActorClass, FTransform(), SpawnParams);
-			if (!TempActor)
-			{
-				UE_LOG(LogTemp, Error, TEXT("Failed to create temp actor!"));
-				return;
-			}
-
-			// Compute the bounds
-			TempActor->GetActorBounds(bOnlyCollidingComponents, Origin, BoxExtent, bIncludeFromChildActors);
-
-			// Hide the actor to ensure it doesn't affect gameplay or rendering
-			TempActor->SetActorHiddenInGame(true);
-			TempActor->SetActorEnableCollision(false);
-
-			// Destroy the temporary actor
-			TempActor->Destroy();
-		}
-		else
-		{
-			// If this throw, it's because a collection has been initialized outside of game thread, which is bad.
-			UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning executed outside of game thread."));
-		}
-#else
-		UE_LOG(LogTemp, Error, TEXT("GetBoundingBoxBySpawning called in non-editor context."));
-#endif
-	}
-
-	static void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const TSoftClassPtr<AActor>& InActor, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true)
-	{
-		FVector Origin = FVector::ZeroVector;
-		FVector Extents = FVector::ZeroVector;
-		GetBoundingBoxBySpawning(InActor, Origin, Extents, bOnlyCollidingComponents, bIncludeFromChildActors);
-
-		InStaging.Bounds = FBoxCenterAndExtent(Origin, Extents).GetBox();
-	}
-
-	static void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const UStaticMesh* InMesh)
-	{
-		if (!InMesh)
-		{
-			InStaging.Bounds = FBox(ForceInit);
-			return;
-		}
-
-		InStaging.Bounds = InMesh->GetBoundingBox();
-	}
+	void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const TSoftClassPtr<AActor>& InActor, const bool bOnlyCollidingComponents = true, const bool bIncludeFromChildActors = true);
+	void UpdateStagingBounds(FPCGExAssetStagingData& InStaging, const UStaticMesh* InMesh);
 
 #pragma endregion
 }
 
 UCLASS(Abstract, BlueprintType, DisplayName="[PCGEx] Asset Collection")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAssetCollection : public UDataAsset
+class PCGEXTENDEDTOOLKIT_API UPCGExAssetCollection : public UDataAsset
 {
 	mutable FRWLock CacheLock;
 
@@ -562,9 +439,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Sort (Asc)", ShortToolTip="Sort collection by weights in ascending order.", DisplayOrder=10))
 	void EDITOR_SortByWeightAscending();
 
-	virtual void EDITOR_SortByWeightAscendingTyped()
-	{
-	}
+	virtual void EDITOR_SortByWeightAscendingTyped();
 
 	template <typename T>
 	void EDITOR_SortByWeightAscendingInternal(TArray<T>& Entries)
@@ -576,9 +451,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Sort (Desc)", ShortToolTip="Sort collection by weights in descending order.", DisplayOrder=11))
 	void EDITOR_SortByWeightDescending();
 
-	virtual void EDITOR_SortByWeightDescendingTyped()
-	{
-	}
+	virtual void EDITOR_SortByWeightDescendingTyped();
 
 	template <typename T>
 	void EDITOR_SortByWeightDescendingInternal(TArray<T>& Entries)
@@ -590,9 +463,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Index to Weight (Asc)", ShortToolTip="Sort collection by weights in descending order.", DisplayOrder=20))
 	void EDITOR_SetWeightIndex();
 
-	virtual void EDITOR_SetWeightIndexTyped()
-	{
-	}
+	virtual void EDITOR_SetWeightIndexTyped();
 
 	template <typename T>
 	void EDITOR_SetWeightIndexInternal(TArray<T>& Entries)
@@ -604,9 +475,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Pad Weights", ShortToolTip="Add 1 to all weights so it's easier to weight down some assets", DisplayOrder=21))
 	void EDITOR_PadWeight();
 
-	virtual void EDITOR_PadWeightTyped()
-	{
-	}
+	virtual void EDITOR_PadWeightTyped();
 
 	template <typename T>
 	void EDITOR_PadWeightInternal(TArray<T>& Entries)
@@ -618,9 +487,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Weight = 100", ShortToolTip="Reset all weights to 100", DisplayOrder=21))
 	void EDITOR_WeightOne();
 
-	virtual void EDITOR_WeightOneTyped()
-	{
-	}
+	virtual void EDITOR_WeightOneTyped();
 
 	template <typename T>
 	void EDITOR_WeightOneInternal(TArray<T>& Entries)
@@ -632,9 +499,7 @@ public:
 	UFUNCTION(CallInEditor, Category = Utils, meta=(DisplayName="Randomize Weights", ShortToolTip="Assign random weights to items", DisplayOrder=21))
 	void EDITOR_WeightRandom();
 
-	virtual void EDITOR_WeightRandomTyped()
-	{
-	}
+	virtual void EDITOR_WeightRandomTyped();
 
 	template <typename T>
 	void EDITOR_WeightRandomInternal(TArray<T>& Entries)
@@ -669,32 +534,32 @@ public:
 
 	virtual void BuildCache();
 
-	FORCEINLINE virtual bool IsValidIndex(const int32 InIndex) const { return false; }
-	FORCEINLINE virtual int32 NumEntries() const { return 0; }
+	virtual bool IsValidIndex(const int32 InIndex) const { return false; }
+	virtual int32 NumEntries() const { return 0; }
 
-	FORCEINLINE virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryAt, false)
 
-	FORCEINLINE virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntry, false)
 
-	FORCEINLINE virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryRandom, false)
 
-	FORCEINLINE virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryWeightedRandom, false)
 
 
-	FORCEINLINE virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryAt(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryAt, false)
 
-	FORCEINLINE virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntry(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Index, const int32 Seed, const EPCGExIndexPickMode PickMode, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntry, false)
 
-	FORCEINLINE virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryRandom, false)
 
-	FORCEINLINE virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
+	virtual bool GetEntryWeightedRandom(const FPCGExAssetCollectionEntry*& OutEntry, const int32 Seed, uint8 TagInheritance, TSet<FName>& OutTags, const UPCGExAssetCollection*& OutHost)
 	PCGEX_NOT_IMPLEMENTED_RET(GetEntryWeightedRandom, false)
 
 	virtual bool BuildFromAttributeSet(
@@ -717,7 +582,7 @@ protected:
 #pragma region GetEntry
 
 	template <typename T>
-	FORCEINLINE bool GetEntryAtTpl(
+	bool GetEntryAtTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Index,
@@ -731,7 +596,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryTpl(
+	bool GetEntryTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Index,
@@ -754,7 +619,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryRandomTpl(
+	bool GetEntryRandomTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Seed,
@@ -771,7 +636,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryWeightedRandomTpl(
+	bool GetEntryWeightedRandomTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Seed,
@@ -792,7 +657,7 @@ protected:
 #pragma region GetEntryWithTags
 
 	template <typename T>
-	FORCEINLINE bool GetEntryAtTpl(
+	bool GetEntryAtTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Index,
@@ -813,7 +678,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryTpl(
+	bool GetEntryTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Index,
@@ -839,7 +704,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryRandomTpl(
+	bool GetEntryRandomTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Seed,
@@ -861,7 +726,7 @@ protected:
 	}
 
 	template <typename T>
-	FORCEINLINE bool GetEntryWeightedRandomTpl(
+	bool GetEntryWeightedRandomTpl(
 		const T*& OutEntry,
 		const TArray<T>& InEntries,
 		const int32 Seed,
@@ -1074,18 +939,13 @@ protected:
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRoamingAssetCollectionDetails : public FPCGExAssetAttributeSetDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExRoamingAssetCollectionDetails : public FPCGExAssetAttributeSetDetails
 {
 	GENERATED_BODY()
 
-	FPCGExRoamingAssetCollectionDetails()
-	{
-	}
+	FPCGExRoamingAssetCollectionDetails() = default;
 
-	explicit FPCGExRoamingAssetCollectionDetails(const TSubclassOf<UPCGExAssetCollection>& InAssetCollectionType):
-		bSupportCustomType(false), AssetCollectionType(InAssetCollectionType)
-	{
-	}
+	explicit FPCGExRoamingAssetCollectionDetails(const TSubclassOf<UPCGExAssetCollection>& InAssetCollectionType);
 
 	UPROPERTY()
 	bool bSupportCustomType = true;
@@ -1104,7 +964,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExRoamingAssetCollectionDetails : public F
 namespace PCGExAssetCollection
 {
 	template <typename C = UPCGExAssetCollection, typename A = FPCGExAssetCollectionEntry>
-	struct /*PCGEXTENDEDTOOLKIT_API*/ TDistributionHelper
+	struct PCGEXTENDEDTOOLKIT_API TDistributionHelper
 	{
 		C* Collection = nullptr;
 		FPCGExAssetDistributionDetails Details;

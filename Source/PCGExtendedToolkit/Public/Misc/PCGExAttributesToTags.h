@@ -36,7 +36,7 @@ enum class EPCGExCollectionEntrySelection : uint8
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExAttributesToTagsSettings : public UPCGExPointsProcessorSettings
+class UPCGExAttributesToTagsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -44,7 +44,8 @@ public:
 	//~Begin UPCGSettings
 #if WITH_EDITOR
 	PCGEX_NODE_INFOS(AttributesToTags, "Attributes to Tags", "Use point attributes or set to tag the data.");
-	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite; }
+	virtual EPCGSettingsType GetType() const override { return EPCGSettingsType::Metadata; }
+	virtual FLinearColor GetNodeTitleColor() const override { return GetDefault<UPCGExGlobalSettings>()->WantsColor(GetDefault<UPCGExGlobalSettings>()->NodeColorMiscWrite); }
 #endif
 
 protected:
@@ -53,11 +54,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Action. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings)
 	EPCGExAttributeToTagsAction Action = EPCGExAttributeToTagsAction::AddTags;
@@ -83,14 +80,14 @@ public:
 	bool bQuietTooManyCollectionsWarning = false;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributesToTagsContext final : FPCGExPointsProcessorContext
+struct FPCGExAttributesToTagsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExAttributesToTagsElement;
 	TArray<TSharedPtr<PCGExData::FFacade>> SourceDataFacades;
 	TArray<FPCGExAttributeToTagDetails> Details;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExAttributesToTagsElement final : public FPCGExPointsProcessorElement
+class FPCGExAttributesToTagsElement final : public FPCGExPointsProcessorElement
 {
 public:
 	virtual FPCGContext* Initialize(
@@ -119,7 +116,7 @@ namespace PCGExAttributesToTags
 		{
 		}
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void Output() override;
 	};
 }

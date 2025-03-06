@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "PCGExMacros.h"
 #include "PCGEx.h"
+#include "PCGExH.h"
 #include "PCGExMath.h"
 #include "PCGExActorSelector.h"
 
@@ -39,7 +40,7 @@ enum class EPCGExSubdivideMode : uint8
 
 namespace PCGExDetails
 {
-	class /*PCGEXTENDEDTOOLKIT_API*/ FDistances : public TSharedFromThis<FDistances>
+	class PCGEXTENDEDTOOLKIT_API FDistances : public TSharedFromThis<FDistances>
 	{
 	public:
 		virtual ~FDistances() = default;
@@ -55,17 +56,17 @@ namespace PCGExDetails
 		{
 		}
 
-		FORCEINLINE virtual FVector GetSourceCenter(const FPCGPoint& OriginPoint, const FVector& OriginLocation, const FVector& ToCenter) const = 0;
-		FORCEINLINE virtual FVector GetTargetCenter(const FPCGPoint& OriginPoint, const FVector& OriginLocation, const FVector& ToCenter) const = 0;
-		FORCEINLINE virtual void GetCenters(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, FVector& OutSource, FVector& OutTarget) const = 0;
-		FORCEINLINE virtual double GetDistSquared(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint) const = 0;
-		FORCEINLINE virtual double GetDist(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint) const = 0;
-		FORCEINLINE virtual double GetDistSquared(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, bool& bOverlap) const = 0;
-		FORCEINLINE virtual double GetDist(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, bool& bOverlap) const = 0;
+		virtual FVector GetSourceCenter(const FPCGPoint& OriginPoint, const FVector& OriginLocation, const FVector& ToCenter) const = 0;
+		virtual FVector GetTargetCenter(const FPCGPoint& OriginPoint, const FVector& OriginLocation, const FVector& ToCenter) const = 0;
+		virtual void GetCenters(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, FVector& OutSource, FVector& OutTarget) const = 0;
+		virtual double GetDistSquared(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint) const = 0;
+		virtual double GetDist(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint) const = 0;
+		virtual double GetDistSquared(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, bool& bOverlap) const = 0;
+		virtual double GetDist(const FPCGPoint& SourcePoint, const FPCGPoint& TargetPoint, bool& bOverlap) const = 0;
 	};
 
 	template <EPCGExDistance Source, EPCGExDistance Target>
-	class /*PCGEXTENDEDTOOLKIT_API*/ TDistances final : public FDistances
+	class PCGEXTENDEDTOOLKIT_API TDistances final : public FDistances
 	{
 	public:
 		TDistances()
@@ -131,46 +132,18 @@ namespace PCGExDetails
 		}
 	};
 
-
-	static TSharedPtr<FDistances> MakeDistances(
+	PCGEXTENDEDTOOLKIT_API
+	TSharedPtr<FDistances> MakeDistances(
 		const EPCGExDistance Source = EPCGExDistance::Center,
 		const EPCGExDistance Target = EPCGExDistance::Center,
-		const bool bOverlapIsZero = false)
-	{
-		if (Source == EPCGExDistance::None || Target == EPCGExDistance::None)
-		{
-			return MakeShared<TDistances<EPCGExDistance::None, EPCGExDistance::None>>();
-		}
-		if (Source == EPCGExDistance::Center)
-		{
-			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::Center>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::Center, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
-		}
-		else if (Source == EPCGExDistance::SphereBounds)
-		{
-			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::Center>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::SphereBounds, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
-		}
-		else if (Source == EPCGExDistance::BoxBounds)
-		{
-			if (Target == EPCGExDistance::Center) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::Center>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::SphereBounds) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::SphereBounds>>(bOverlapIsZero); }
-			if (Target == EPCGExDistance::BoxBounds) { return MakeShared<TDistances<EPCGExDistance::BoxBounds, EPCGExDistance::BoxBounds>>(bOverlapIsZero); }
-		}
+		const bool bOverlapIsZero = false);
 
-		return nullptr;
-	}
-
-	static TSharedPtr<FDistances> MakeNoneDistances()
-	{
-		return MakeShared<TDistances<EPCGExDistance::None, EPCGExDistance::None>>();
-	}
+	PCGEXTENDEDTOOLKIT_API
+	TSharedPtr<FDistances> MakeNoneDistances();
 }
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDistanceDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExDistanceDetails
 {
 	GENERATED_BODY()
 
@@ -192,11 +165,11 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExDistanceDetails
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bOverlapIsZero = true;
 
-	TSharedPtr<PCGExDetails::FDistances> MakeDistances() const { return PCGExDetails::MakeDistances(Source, Target); }
+	TSharedPtr<PCGExDetails::FDistances> MakeDistances() const;
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseDetailsBase
+struct PCGEXTENDEDTOOLKIT_API FPCGExFuseDetailsBase
 {
 	GENERATED_BODY()
 
@@ -248,7 +221,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseDetailsBase
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExSourceFuseDetails : public FPCGExFuseDetailsBase
+struct PCGEXTENDEDTOOLKIT_API FPCGExSourceFuseDetails : public FPCGExFuseDetailsBase
 {
 	GENERATED_BODY()
 
@@ -280,7 +253,7 @@ enum class EPCGExFuseMethod : uint8
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseDetails : public FPCGExSourceFuseDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExFuseDetails : public FPCGExSourceFuseDetails
 {
 	GENERATED_BODY()
 
@@ -321,24 +294,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseDetails : public FPCGExSourceFuseDet
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable, DisplayName="Stabilize Insertion Order"))
 	bool bInlineInsertion = false;
 
-	void Init()
-	{
-		if (FuseMethod == EPCGExFuseMethod::Voxel)
-		{
-			Tolerances *= 2;
-			Tolerance *= 2;
-
-			if (bComponentWiseTolerance) { CWTolerance = FVector(1 / Tolerances.X, 1 / Tolerances.Y, 1 / Tolerances.Z); }
-			else { CWTolerance = FVector(1 / Tolerance); }
-		}
-		else
-		{
-			if (bComponentWiseTolerance) { CWTolerance = Tolerances; }
-			else { CWTolerance = FVector(Tolerance); }
-		}
-
-		DistanceDetails = PCGExDetails::MakeDistances(SourceDistance, TargetDistance);
-	}
+	void Init();
 
 	bool DoInlineInsertion() const { return bInlineInsertion; }
 
@@ -369,7 +325,7 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExFuseDetails : public FPCGExSourceFuseDet
 };
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExCollisionDetails
+struct PCGEXTENDEDTOOLKIT_API FPCGExCollisionDetails
 {
 	GENERATED_BODY()
 

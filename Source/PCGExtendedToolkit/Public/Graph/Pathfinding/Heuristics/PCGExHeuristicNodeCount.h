@@ -12,7 +12,7 @@
 #include "PCGExHeuristicNodeCount.generated.h"
 
 USTRUCT(BlueprintType)
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigLeastNodes : public FPCGExHeuristicConfigBase
+struct FPCGExHeuristicConfigLeastNodes : public FPCGExHeuristicConfigBase
 {
 	GENERATED_BODY()
 
@@ -26,35 +26,29 @@ struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExHeuristicConfigLeastNodes : public FPCGE
  * 
  */
 UCLASS(MinimalAPI, DisplayName = "Least Nodes")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicNodeCount : public UPCGExHeuristicDistance
+class UPCGExHeuristicNodeCount : public UPCGExHeuristicDistance
 {
 	GENERATED_BODY()
 
 public:
-	FORCEINLINE virtual double GetGlobalScore(
+	virtual double GetGlobalScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& Seed,
-		const PCGExCluster::FNode& Goal) const override
-	{
-		return GetScoreInternal(0.5);
-	}
+		const PCGExCluster::FNode& Goal) const override;
 
-	FORCEINLINE virtual double GetEdgeScore(
+	virtual double GetEdgeScore(
 		const PCGExCluster::FNode& From,
 		const PCGExCluster::FNode& To,
 		const PCGExGraph::FEdge& Edge,
 		const PCGExCluster::FNode& Seed,
 		const PCGExCluster::FNode& Goal,
-		const TSharedPtr<PCGEx::FHashLookup> TravelStack = nullptr) const override
-	{
-		return GetScoreInternal(0.5);
-	}
+		const TSharedPtr<PCGEx::FHashLookup> TravelStack = nullptr) const override;
 };
 
 ////
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsFactoryLeastNodes : public UPCGExHeuristicsFactoryData
+class UPCGExHeuristicsFactoryLeastNodes : public UPCGExHeuristicsFactoryData
 {
 	GENERATED_BODY()
 
@@ -67,7 +61,7 @@ public:
 };
 
 UCLASS(MinimalAPI, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExHeuristicsLeastNodesProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
+class UPCGExHeuristicsLeastNodesProviderSettings : public UPCGExHeuristicsFactoryProviderSettings
 {
 	GENERATED_BODY()
 

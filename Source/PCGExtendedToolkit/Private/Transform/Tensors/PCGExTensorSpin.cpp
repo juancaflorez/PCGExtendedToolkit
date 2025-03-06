@@ -12,7 +12,7 @@ bool UPCGExTensorSpin::Init(FPCGExContext* InContext, const UPCGExTensorFactoryD
 	return true;
 }
 
-PCGExTensor::FTensorSample UPCGExTensorSpin::Sample(const FTransform& InProbe) const
+PCGExTensor::FTensorSample UPCGExTensorSpin::Sample(const int32 InSeedIndex, const FTransform& InProbe) const
 {
 	const FVector& InPosition = InProbe.GetLocation();
 	const FBoxCenterAndExtent BCAE = FBoxCenterAndExtent(InPosition, FVector::One());
@@ -55,7 +55,7 @@ bool UPCGExTensorSpinFactory::InitInternalFacade(FPCGExContext* InContext)
 		AxisBuffer = InputDataFacade->GetBroadcaster<FVector>(Config.AxisAttribute);
 		if (!AxisBuffer)
 		{
-			PCGE_LOG_C(Error, GraphAndLog, InContext, FText::Format(FTEXT("Invalid Direction attribute: \"{0}\"."), FText::FromName(Config.AxisAttribute.GetName())));
+			PCGEX_LOG_INVALID_SELECTOR_C(InContext, "Axis", Config.AxisAttribute)
 			return false;
 		}
 	}

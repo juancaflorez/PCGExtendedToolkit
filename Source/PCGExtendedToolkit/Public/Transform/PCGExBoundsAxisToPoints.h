@@ -10,6 +10,7 @@
 #include "PCGExTransform.h"
 #include "Data/PCGExDataForward.h"
 
+
 #include "PCGExBoundsAxisToPoints.generated.h"
 
 class FPCGExComputeIOBounds;
@@ -46,7 +47,7 @@ enum class EPCGExAxisConstraintSorting : uint8
 };
 
 UCLASS(BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Misc")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExBoundsAxisToPointsSettings : public UPCGExPointsProcessorSettings
+class UPCGExBoundsAxisToPointsSettings : public UPCGExPointsProcessorSettings
 {
 	GENERATED_BODY()
 
@@ -61,11 +62,7 @@ protected:
 	virtual FPCGElementPtr CreateElement() const override;
 	//~End UPCGSettings
 
-	//~Begin UPCGExPointsProcessorSettings
 public:
-	virtual PCGExData::EIOInit GetMainOutputInitMode() const override;
-	//~End UPCGExPointsProcessorSettings
-
 	/** Generates a point collections per generated point */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta=(PCG_Overridable))
 	bool bGeneratePerPointData = false;
@@ -126,12 +123,12 @@ private:
 	friend class FPCGExBoundsAxisToPointsElement;
 };
 
-struct /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsAxisToPointsContext final : FPCGExPointsProcessorContext
+struct FPCGExBoundsAxisToPointsContext final : FPCGExPointsProcessorContext
 {
 	friend class FPCGExBoundsAxisToPointsElement;
 };
 
-class /*PCGEXTENDEDTOOLKIT_API*/ FPCGExBoundsAxisToPointsElement final : public FPCGExPointsProcessorElement
+class FPCGExBoundsAxisToPointsElement final : public FPCGExPointsProcessorElement
 {
 	virtual FPCGContext* Initialize(
 		const FPCGDataCollection& InputData,
@@ -166,7 +163,7 @@ namespace PCGExBoundsAxisToPoints
 
 		TArray<TSharedPtr<PCGExData::FPointIO>> NewOutputs;
 
-		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager) override;
+		virtual bool Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager) override;
 		virtual void ProcessSinglePoint(const int32 Index, FPCGPoint& Point, const PCGExMT::FScope& Scope) override;
 		virtual void CompleteWork() override;
 	};

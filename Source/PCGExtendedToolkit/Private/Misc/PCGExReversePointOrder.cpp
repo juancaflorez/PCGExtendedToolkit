@@ -9,8 +9,6 @@
 #define LOCTEXT_NAMESPACE "PCGExReversePointOrderElement"
 #define PCGEX_NAMESPACE ReversePointOrder
 
-PCGExData::EIOInit UPCGExReversePointOrderSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::None; }
-
 TArray<FPCGPinProperties> UPCGExReversePointOrderSettings::InputPinProperties() const
 {
 	TArray<FPCGPinProperties> PinProperties = Super::InputPinProperties();
@@ -99,7 +97,7 @@ namespace PCGExReversePointOrder
 		}
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExWriteIndex::Process);
 
@@ -191,7 +189,7 @@ namespace PCGExReversePointOrder
 					{
 						for (int i = Scope.Start; i < Scope.End; i++)
 						{
-							const RawT FirstValue = FirstWriter->Read(i);
+							const RawT FirstValue = FirstWriter->GetConst(i);
 							FirstWriter->GetMutable(i) = PCGExMath::DblMult(SecondWriter->GetConst(i), -1);
 							SecondWriter->GetMutable(i) = PCGExMath::DblMult(FirstValue, -1);
 						}
@@ -200,7 +198,7 @@ namespace PCGExReversePointOrder
 					{
 						for (int i = Scope.Start; i < Scope.End; i++)
 						{
-							const RawT FirstValue = FirstWriter->Read(i);
+							const RawT FirstValue = FirstWriter->GetConst(i);
 							FirstWriter->GetMutable(i) = SecondWriter->GetConst(i);
 							SecondWriter->GetMutable(i) = FirstValue;
 						}

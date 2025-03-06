@@ -16,7 +16,7 @@
 class UPCGExTensorOperation;
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Data")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSplineFactoryData : public UPCGExTensorFactoryData
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorSplineFactoryData : public UPCGExTensorFactoryData
 {
 	GENERATED_BODY()
 
@@ -31,7 +31,7 @@ protected:
 
 	EPCGExSplineSamplingIncludeMode SampleInputs = EPCGExSplineSamplingIncludeMode::All;
 
-	virtual bool GetRequiresPreparation(FPCGExContext* InContext) override { return true; }
+	virtual bool WantsPreparation(FPCGExContext* InContext) override { return true; }
 	virtual bool InitInternalData(FPCGExContext* InContext) override;
 	virtual bool InitInternalFacade(FPCGExContext* InContext);
 
@@ -39,7 +39,7 @@ protected:
 };
 
 UCLASS(Abstract, BlueprintType, ClassGroup = (Procedural), Category="PCGEx|Graph|Params")
-class /*PCGEXTENDEDTOOLKIT_API*/ UPCGExTensorSplineFactoryProviderSettings : public UPCGExTensorFactoryProviderSettings
+class PCGEXTENDEDTOOLKIT_API UPCGExTensorSplineFactoryProviderSettings : public UPCGExTensorFactoryProviderSettings
 {
 	GENERATED_BODY()
 

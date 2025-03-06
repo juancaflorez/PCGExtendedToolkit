@@ -3,6 +3,7 @@
 
 #include "Sampling/PCGExSampleSurfaceGuided.h"
 
+
 #include "Kismet/GameplayStatics.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Sampling/PCGExTexParamFactoryProvider.h"
@@ -24,8 +25,6 @@ TArray<FPCGPinProperties> UPCGExSampleSurfaceGuidedSettings::InputPinProperties(
 	if (bWriteRenderMat && bExtractTextureParameters) { PCGEX_PIN_FACTORIES(PCGExTexture::SourceTexLabel, "External texture params definitions.", Required, {}) }
 	return PinProperties;
 }
-
-PCGExData::EIOInit UPCGExSampleSurfaceGuidedSettings::GetMainOutputInitMode() const { return PCGExData::EIOInit::Duplicate; }
 
 PCGEX_INITIALIZE_ELEMENT(SampleSurfaceGuided)
 
@@ -108,7 +107,7 @@ namespace PCGExSampleSurfaceGuided
 	{
 	}
 
-	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager> InAsyncManager)
+	bool FProcessor::Process(const TSharedPtr<PCGExMT::FTaskManager>& InAsyncManager)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PCGExSampleSurfaceGuided::Process);
 
@@ -118,6 +117,8 @@ namespace PCGExSampleSurfaceGuided
 		PointDataFacade->bSupportsScopedGet = Context->bScopedAttributeGet;
 
 		if (!FPointsProcessor::Process(InAsyncManager)) { return false; }
+
+		PCGEX_INIT_IO(PointDataFacade->Source, PCGExData::EIOInit::Duplicate)
 
 		SampleState.SetNumUninitialized(PointDataFacade->GetNum());
 
